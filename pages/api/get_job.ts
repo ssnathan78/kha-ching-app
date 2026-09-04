@@ -1,6 +1,22 @@
+import logger from "../../lib/logger"
 import { tradingQueue } from "../../lib/queue"
 import withSession from "../../lib/session"
-import logger from "../../lib/logger"
+
+function publicJobView(job: {
+  id?: string
+  name?: string
+  opts?: { delay?: number }
+  timestamp?: number
+  failedReason?: string
+}) {
+  return {
+    id: job.id,
+    name: job.name,
+    timestamp: job.timestamp,
+    delay: job.opts?.delay,
+    failedReason: job.failedReason,
+  }
+}
 
 export default withSession(async (req, res) => {
   const user = req.session.get("user")
@@ -11,7 +27,7 @@ export default withSession(async (req, res) => {
 
   const { id: jobId } = req.query
   try {
-    const jobRes = await tradingQueue.getJob(jobId)
+    const jobRes = await tradingQueue.getJob(jobId as string)
     if (!jobRes) {
       return res.status(200).json({
         error: "job not found",
@@ -20,7 +36,7 @@ export default withSession(async (req, res) => {
 
     const jobState = await jobRes.getState()
     res.json({
-      job: jobRes,
+      job: publicJobView(jobRes),
       current_state: jobState,
     })
   } catch (e) {

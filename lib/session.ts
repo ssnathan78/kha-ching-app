@@ -1,22 +1,61 @@
-// this file is a wrapper with defaults to be used in both API routes and `getServerSideProps` functions
-
-import { withIronSession } from "next-iron-session"
-// NB: not the best place to require these
-// ideally these should live in their own file that gets included as a middleware
+import { getIronSession, type SessionOptions } from "iron-session"
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
+import type { SignalXUser } from "../types/misc"
 import "./queue-processor"
 import "./exit-strategies"
 import "./watchers"
 import { secondsTill7 } from "./utils"
 
-export default function withSession(handler) {
-  return withIronSession(handler, {
-    password: process.env.SECRET_COOKIE_PASSWORD!,
-    cookieName: "khaching/kite/session",
+export const SESSION_COOKIE_NAME = "khaching/kite/session"
+
+type SessionPayload = {
+  user?: SignalXUser
+}
+
+export function getSessionOptions(): SessionOptions {
+  const password = process.env.SECRET_COOKIE_PASSWORD
+  if (!password || password.length < 32) {
+    throw new Error("SECRET_COOKIE_PASSWORD must be set and at least 32 characters")
+  }
+
+  return {
+    password,
+    cookieName: SESSION_COOKIE_NAME,
     ttl: secondsTill7(),
     cookieOptions: {
-      // the next line allows to use the session in non-https environments like
-      // Next.js dev mode (http://localhost:3000)
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      httpOnly: true,
     },
-  })
+  }
+}
+
+export type CompatSession = {
+  get: (key: "user") => SignalXUser | undefined
+  set: (key: "user", value: SignalXUser) => void
+  save: () => Promise<void>
+  destroy: () => Promise<void>
+}
+
+function wrapSession(
+  session: Awaited<ReturnType<typeof getIronSession<SessionPayload>>>
+): CompatSession {
+  return {
+    get: key => session[key],
+    set: (key, value) => {
+      session[key] = value
+    },
+    save: () => session.save(),
+    destroy: async () => {
+      session.destroy()
+    },
+  }
+}
+
+export default function withSession(handler: NextApiHandler) {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    const iron = await getIronSession<SessionPayload>(req, res, getSessionOptions())
+    ;(req as NextApiRequest & { session: CompatSession }).session = wrapSession(iron)
+    return handler(req, res)
+  }
 }

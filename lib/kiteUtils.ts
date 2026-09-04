@@ -26,6 +26,7 @@ import { allSettled } from "./es6-promise"
 import { jobExecutions } from "./schema"
 import type { KiteOrder } from "../types/kite"
 import type { SignalXUser } from "../types/misc"
+import { aggregateFillsBySymbol } from "./pnl"
 import { millisecondsTill7, closest, delay, finiteStateChecker, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry, isMockOrder, ms } from "./utils"
 
 dayjs.extend(isSameOrBefore)
@@ -1164,31 +1165,7 @@ export async function getCompletedOrdersbyTag(
       return []
     }
 
-    // Group by trading symbol and aggregate points and quantity
-    const pendingOrders = completedOrders.reduce(
-      (prev: Record<string, { points: number; quantity: number }>, curr: any) => {
-        if (!prev[curr.tradingsymbol]) {
-          prev[curr.tradingsymbol] = {
-            points: curr.transaction_type === "SELL" ? curr.average_price : -1 * curr.average_price,
-            quantity: curr.transaction_type === "SELL" ? -1 * curr.quantity : curr.quantity,
-          }
-        } else {
-          prev[curr.tradingsymbol].points +=
-            curr.transaction_type === "SELL" ? curr.average_price : -1 * curr.average_price
-          prev[curr.tradingsymbol].quantity +=
-            curr.transaction_type === "SELL" ? -1 * curr.quantity : curr.quantity
-        }
-        return prev
-      },
-      {}
-    )
-
-    // Convert to array format
-    const completeOrdersByTag: COMPLETED_BY_TAG[] = Object.keys(pendingOrders).map(key => ({
-      tradingsymbol: key,
-      quantity: pendingOrders[key].quantity,
-      points: pendingOrders[key].points,
-    }))
+    const completeOrdersByTag: COMPLETED_BY_TAG[] = aggregateFillsBySymbol(completedOrders)
 
     logger.info(
       `[getCompletedOrdersbyTag] Found ${completeOrdersByTag.length} trading symbols with completed orders`
@@ -1196,11 +1173,7 @@ export async function getCompletedOrdersbyTag(
 
     return completeOrdersByTag
   } catch (error) {
-    logger.error(`[getCompletedOrdersbyTag] Error fetching completed orders:`, {
-      error,
-      accessToken: (kite as any).access_token,
-      apiKey: process.env.KITE_API_KEY,
-    })
+    logger.error("[getCompletedOrdersbyTag] Error fetching completed orders:", error)
     throw error
   }
 }

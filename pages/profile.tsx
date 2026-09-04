@@ -11,8 +11,17 @@ const Profile = () => {
 
   return (
     <Layout>
-      <h1>Your Zerodha profile:</h1>
-      <pre>{JSON.stringify(user.session, null, 2)}</pre>
+      <h1>Zerodha profile</h1>
+      <dl>
+        <dt>User ID</dt>
+        <dd>{user.user_id}</dd>
+        <dt>Name</dt>
+        <dd>{user.user_name}</dd>
+        <dt>Email</dt>
+        <dd>{user.email}</dd>
+        <dt>Broker</dt>
+        <dd>{user.broker}</dd>
+      </dl>
     </Layout>
   )
 }

@@ -1,18 +1,10 @@
-//import { AxiosResponse } from 'axios'
 import { KiteConnect, type SessionData } from "kiteconnect"
-import {
-  addToAncillaryQueue,
-  cleanupQueues,
-  addToCoSquareOff,
-  addToChaseQueue,
-} from "../../lib/queue"
-
-import withSession from "../../lib/session"
-import { logDeep, storeAccessTokenRemotely } from "../../lib/utils"
+import { checksameToken, storeAccessToken } from "../../lib/drizzleDbUtils"
 import { getIndexInstruments } from "../../lib/kiteUtils"
-import { storeAccessToken, checksameToken } from "../../lib/drizzleDbUtils"
-import { SignalXUser } from "../../types/misc"
 import logger from "../../lib/logger"
+import { addToAncillaryQueue, addToChaseQueue, addToCoSquareOff } from "../../lib/queue"
+import withSession from "../../lib/session"
+import type { SignalXUser } from "../../types/misc"
 
 const apiKey = process.env.KITE_API_KEY!
 const kiteSecret = process.env.KITE_API_SECRET!
@@ -41,22 +33,13 @@ export default withSession(async (req, res) => {
 
     const existingAccessToken = await checksameToken(user.session.access_token!)
     if (!existingAccessToken) {
-      // first login, or revoked login
-      // cleanup queue in both cases
-      logger.info("[redirect_url_kite_logger] cleaning up queues...")
-      // cleanupQueues().catch(e => {
-      //   console.log(e)
-      // })
-      await cleanupQueues()
+      logger.info("[redirect_url_kite_logger] first token of the day — scheduling ancillary jobs")
       addToAncillaryQueue(user)
       addToCoSquareOff(user)
       await addToChaseQueue(user)
-      // register chase queue repeatable jobs
-      //storeAccessTokenRemotely(user.session.access_token!)
       await storeAccessToken(user.session.access_token!)
     }
 
-    // then redirect
     res.redirect("/dashboard")
   } catch (error: any) {
     const fetchResponse = error?.response

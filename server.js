@@ -1,11 +1,11 @@
 const express = require("express")
 const next = require("next")
-const { ironSession } = require("next-iron-session")
 const { createBullBoard } = require("@bull-board/api")
 const { BullMQAdapter } = require("@bull-board/api/bullMQAdapter")
 const { ExpressAdapter } = require("@bull-board/express")
 const { Queue } = require("bullmq")
 const IORedis = require("ioredis")
+const { sessionMiddleware } = require("./lib/sessionExpress")
 
 const dev = process.env.NODE_ENV !== "production"
 const PORT = parseInt(process.env.PORT || "3000", 10)
@@ -13,22 +13,12 @@ const PORT = parseInt(process.env.PORT || "3000", 10)
 const app = next({ dev })
 const handle = app.getRequestHandler()
 
-// NB: must match lib/session.ts (cookieName/password). Kept in sync manually because
-// server.js runs as plain Node (no TS transform) and can't import that file directly.
-const sessionMiddleware = ironSession({
-  password: process.env.SECRET_COOKIE_PASSWORD,
-  cookieName: "khaching/kite/session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-  },
-})
-
-function requireLoggedInUser(req, res, next) {
+function requireLoggedInUser(req, res, nextFn) {
   const user = req.session.get("user")
   if (!user) {
     return res.status(401).send("Unauthorized")
   }
-  return next()
+  return nextFn()
 }
 
 async function setupBullBoard(server) {
@@ -75,7 +65,16 @@ app.prepare().then(async () => {
 
   server.all("/{*path}", (req, res) => handle(req, res))
 
-  server.listen(PORT, "0.0.0.0", () => {
+  const httpServer = server.listen(PORT, "0.0.0.0", () => {
     console.log(`> Ready on http://localhost:${PORT}`)
   })
+
+  const shutdown = signal => {
+    console.log(`[server] ${signal} received, shutting down`)
+    httpServer.close(() => process.exit(0))
+    setTimeout(() => process.exit(1), 10000)
+  }
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"))
+  process.on("SIGINT", () => shutdown("SIGINT"))
 })

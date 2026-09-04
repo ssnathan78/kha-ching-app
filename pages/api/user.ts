@@ -1,12 +1,12 @@
 import { KiteConnect } from "kiteconnect"
 
 import withSession from "../../lib/session"
-import { SignalXUser } from "../../types/misc"
+import type { SignalXUser } from "../../types/misc"
 
 const apiKey = process.env.KITE_API_KEY
 
 export default withSession(async (req, res) => {
-  const user: SignalXUser = req.session.get("user")
+  const user: SignalXUser | undefined = req.session.get("user")
 
   if (user) {
     if (!apiKey) {
@@ -18,16 +18,19 @@ export default withSession(async (req, res) => {
     })
 
     try {
-      // see if we're able to fetch profile with the access token
-      // in case access token is expired, then log out the user
       await kc.getProfile()
 
       res.json({
-        ...user,
         isLoggedIn: true,
+        user_id: user.session?.user_id,
+        user_name: user.session?.user_name,
+        email: user.session?.email,
+        user_shortname: user.session?.user_shortname,
+        avatar_url: user.session?.avatar_url,
+        broker: user.session?.broker,
       })
-    } catch (e) {
-      req.session.destroy()
+    } catch (_e) {
+      await req.session.destroy()
       res.json({
         isLoggedIn: false,
       })
