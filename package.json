@@ -35,7 +35,7 @@
     "@types/styled-jsx": "^3.4.4",
     "axios": "^0.21.1",
     "bullmq": "^5.73.3",
-    "date-fns": "^2.19.0",
+    "date-fns": "^4.4.0",
     "dayjs": "^1.10.4",
     "dotenv": "^10.0.0",
     "drizzle-orm": "^0.45.2",
