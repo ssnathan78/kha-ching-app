@@ -23,12 +23,17 @@
 # debug
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
+yarn-error.log
 
 # logs
 /logs
 
-# local env files
+# database dumps
+/backups
+
+
+# local env files — never commit secrets
+.env
 .env.local
 .env.development.local
 .env.test
@@ -46,5 +51,3 @@ bt_results
 __tests/unit/backtests
 dos*.csv
 oss*.csv
-__tests__/
-**/__tests__/
