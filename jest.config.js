@@ -3,13 +3,11 @@ const nextJest = require("next/jest")
 const createJestConfig = nextJest({ dir: "./" })
 
 module.exports = createJestConfig({
-  globalSetup: "<rootDir>/__tests__/setupEnv.ts",
   setupFiles: ["<rootDir>/__tests__/loadEnv.js"],
   moduleFileExtensions: ["js", "ts"],
   testPathIgnorePatterns: ["<rootDir>/.next/", "<rootDir>/node_modules/"],
-  collectCoverage: true,
-  coveragePathIgnorePatterns: ["/node_modules/", "enzyme.js", "/.next/"],
-  coverageReporters: ["json", "lcov", "text", "text-summary"],
+  collectCoverage: false,
+  coveragePathIgnorePatterns: ["/node_modules/", "/.next/"],
   collectCoverageFrom: ["pages/**/*.{js,ts}", "lib/**/*.{js,ts}"],
   moduleNameMapper: {
     "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$":

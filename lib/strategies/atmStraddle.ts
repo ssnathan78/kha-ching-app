@@ -24,6 +24,7 @@ import {
 import logger from "../logger"
 import { EXIT_TRADING_Q_NAME } from "../queue"
 import { remoteOrderSuccessEnsurer } from "../kiteUtils"
+import { orderQuantity } from "../pnl"
 import {
   attemptBrokerOrders,
   delay,
@@ -177,7 +178,7 @@ export const createOrder = ({
   const kite = syncGetKiteInstance(user)
   return {
     tradingsymbol: symbol,
-    quantity: lotSize * lots,
+    quantity: orderQuantity(lots, lotSize),
     exchange: kite.EXCHANGE_NFO,
     transaction_type: transactionType ?? kite.TRANSACTION_TYPE_SELL,
     order_type: kite.ORDER_TYPE_MARKET,

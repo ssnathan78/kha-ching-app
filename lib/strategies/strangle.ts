@@ -220,7 +220,7 @@ async function atmStrangle(args: ATM_STRANGLE_TRADE) {
       _nextTradingQueue = EXIT_TRADING_Q_NAME,
       optionPrice,
     } = args
-    const { lotSize, nfoSymbol, strikeStepSize, exchange, underlyingSymbol } =
+    const { nfoSymbol, strikeStepSize, exchange, underlyingSymbol } =
       INSTRUMENT_DETAILS[instrument]
 
     const sourceData = await getIndexInstruments()
@@ -256,6 +256,15 @@ async function atmStrangle(args: ATM_STRANGLE_TRADE) {
     if (!isMarketOpen()) {
       throw new Error("Market is closed now")
     }
+
+    const peInstrument = (await getExpiryTradingSymbol({
+      nfoSymbol,
+      strike: peStrike,
+      instrumentType: "PE",
+      expiry: expiryType,
+    })) as TradingSymbolInterface | null
+    const lotSize = Number(peInstrument?.lot_size) || INSTRUMENT_DETAILS[instrument].lotSize
+
     let allOrdersLocal: KiteOrder[] = []
     let hedgeOrdersLocal: KiteOrder[] = []
     let allOrders: KiteOrder[] = []

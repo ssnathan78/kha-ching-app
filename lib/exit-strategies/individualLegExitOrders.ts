@@ -1,5 +1,4 @@
 import type { KiteOrder } from "../../types/kite"
-import { combinedOrders } from "../../types/misc"
 import { SL_ORDER_TYPE } from "../../types/plans"
 import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
 
@@ -7,44 +6,10 @@ type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
 import { STATUS_TRIGGER_PENDING } from "../constants"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
-import { addToNextQueue, TARGETPNL_Q_NAME } from "../queue"
-import orderResponse from "../strategies/mockData/orderResponse"
 import { remoteOrderSuccessEnsurer } from "../kiteUtils"
-import {
-  attemptBrokerOrders,
-  isUntestedFeaturesEnabled,
-  logDeep,
-  round,
-} from "../utils"
+import { convertSlmToSll } from "../slOrders"
+import { attemptBrokerOrders, round } from "../utils"
 import { doDeletePendingOrders, doSquareOffPositions } from "./autoSquareOff"
-
-export const convertSlmToSll = (
-  slmOrder: KiteOrder,
-  slLimitPricePercent: number,
-  kite: any
-): KiteOrder => {
-  const sllOrder = { ...slmOrder }
-  const absoluteLimitPriceDelta = ((slLimitPricePercent ?? 0) / 100) * sllOrder.trigger_price!
-  let absoluteLimitPrice
-  if (sllOrder.transaction_type === kite.TRANSACTION_TYPE_SELL) {
-    absoluteLimitPrice = sllOrder.trigger_price! - absoluteLimitPriceDelta
-  } else {
-    absoluteLimitPrice = sllOrder.trigger_price! + absoluteLimitPriceDelta
-  }
-
-  sllOrder.order_type = kite.ORDER_TYPE_SL
-  sllOrder.price = round(absoluteLimitPrice)
-
-  if (sllOrder.price === sllOrder.trigger_price) {
-    // keep a min delta of 0.1 from trigger_price
-    sllOrder.price =
-      sllOrder.transaction_type === kite.TRANSACTION_TYPE_BUY
-        ? sllOrder.price + 0.1
-        : sllOrder.price - 0.1
-  }
-
-  return sllOrder
-}
 
 async function individualLegExitOrders({
   _kite,

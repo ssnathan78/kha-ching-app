@@ -124,7 +124,8 @@ const WrapperComponent = props => {
               </ActionButtonOrLoader>
             </Grid>
           ) : null}
-          {["active", "completed"].includes(jobDetails?.current_state) && !pnlData?.pnl ? (
+          {["active", "completed"].includes(jobDetails?.current_state) &&
+          typeof pnlData?.pnl !== "number" ? (
             <Grid item>
               <ActionButtonOrLoader>
                 {({ setLoading }) => (
@@ -168,7 +169,9 @@ const WrapperComponent = props => {
               Live status —{" "}
               {jobDetails?.current_state?.toUpperCase() || jobDetails?.error || "Loading..."}
             </Typography>
-            {pnlData?.pnl ? <PnLComponent pnl={pnlData.pnl} /> : null}
+            {typeof pnlData?.pnl === "number" ? (
+              <PnLComponent pnl={pnlData.pnl} points={pnlData.points} />
+            ) : null}
           </Box>
         </div>
       ) : null}
@@ -182,7 +185,13 @@ const TradesForDay = () => {
   const { data: trades, error } = useSWR("/api/trades_day", {
     refreshInterval: 10000,
   })
-  if (!trades?.length || error) {
+  if (error) {
+    return (
+      <Typography color="error">Could not load today&apos;s trades. Retry shortly.</Typography>
+    )
+  }
+
+  if (!trades?.length) {
     return (
       <Typography variant="">
         You don&apos;t have any trades scheduled today. Run from{" "}

@@ -1,10 +1,8 @@
-import dayjs from "dayjs"
-import withSession from "../../lib/session"
+import { syncGetKiteInstance } from "../../lib/kiteUtils"
 import logger from "../../lib/logger"
-import { syncGetKiteInstance, getCompletedOrdersbyTag } from "../../lib/kiteUtils"
+import { rupeePnl, strategyPointsFromFills } from "../../lib/pnl"
+import withSession from "../../lib/session"
 import { withRemoteRetry } from "../../lib/utils"
-import advancedFormat from "dayjs/plugin/advancedFormat"
-dayjs.extend(advancedFormat)
 
 export default withSession(async (req, res) => {
   const user = req.session.get("user")
@@ -20,13 +18,6 @@ export default withSession(async (req, res) => {
       return res.status(400).json({ error: "expected orderTag in query" })
     }
 
-    const day330 = dayjs().set("hour", 15).set("minutes", 30).set("seconds", 0).format()
-
-    if (dayjs().isBefore(dayjs(day330))) {
-      return res.json({ error: "PnL not ready yet!" })
-    }
-
-    // Calculate PnL from Kite orders
     const kite = syncGetKiteInstance(user)
     const allOrders = await withRemoteRetry(() => kite.getOrders())
     const taggedOrders = allOrders.filter(
@@ -34,24 +25,12 @@ export default withSession(async (req, res) => {
     )
 
     if (taggedOrders.length === 0) {
-      return res.json({ error: "No completed orders found for tag" })
+      return res.json({ error: "No completed orders found for tag", pnl: null, points: null })
     }
 
-    // Calculate PnL: sum of all (quantity * average_price) for sells - buys
-    let buyTotal = 0
-    let sellTotal = 0
-
-    for (const order of taggedOrders) {
-      const value = (order.quantity || 0) * (order.average_price || 0)
-      if (order.transaction_type === "BUY") {
-        buyTotal += value
-      } else if (order.transaction_type === "SELL") {
-        sellTotal += value
-      }
-    }
-
-    const pnl = sellTotal - buyTotal
-    res.json({ pnl: pnl })
+    const pnl = rupeePnl(taggedOrders)
+    const points = strategyPointsFromFills(taggedOrders)
+    res.json({ pnl, points, currency: "INR" })
   } catch (e) {
     logger.error("[api/pnl] error", e)
     res.status(500).json({ error: e.message })
