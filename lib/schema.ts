@@ -11,6 +11,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm/sql"
 
@@ -100,7 +101,10 @@ export const jobExecutions = pgTable("job_executions", {
   lastTrailingSlSetAt: timestamp("last_trailing_sl_set_at", { withTimezone: true }),
   lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }),
-})
+}, (table) => [
+  index("idx_job_executions_created_at").on(table.createdAt),
+  index("idx_job_executions_order_tag").on(table.orderTag),
+])
 
 export const tradePlans = pgTable("trade_plans", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -196,4 +200,8 @@ export const transactions = pgTable("transactions", {
   variety: text("variety"),
   orderType: text("order_type"),
   product: text("product"),
-})
+}, (table) => [
+  uniqueIndex("transactions_order_id_uidx").on(table.orderId),
+  index("idx_transactions_tag").on(table.tag),
+  index("idx_transactions_created_at").on(table.createdAt),
+])

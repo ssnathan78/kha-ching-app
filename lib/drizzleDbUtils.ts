@@ -141,7 +141,7 @@ export async function insertMultipleTransactions(
     const result = await db
       .insert(transactions)
       .values(values)
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: transactions.orderId })
       .returning({ id: transactions.id })
 
     const inserted = result.length
