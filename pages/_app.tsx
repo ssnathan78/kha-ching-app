@@ -35,10 +35,10 @@ function MyApp({ Component, pageProps }) {
         />
         <meta
           name="description"
-          content="SignalX is an open source algo trading toolkit for Indian stock markets"
+          content="Kha-Ching is a personal algorithmic trading app for Indian stock markets"
         />
         <meta name="keywords" content="algo trading, systematic trading, automation, strategies" />
-        <title>SignalX | Open source Algo trading toolkit</title>
+        <title>Kha-Ching</title>
 
         <link rel="manifest" href="/manifest.json" />
         <link href="/icons/favicon-16x16.png" rel="icon" type="image/png" sizes="16x16" />

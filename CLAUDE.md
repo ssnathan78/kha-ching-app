@@ -1,6 +1,6 @@
-# kha-ching (SignalX)
+# kha-ching
 
-Algorithmic trading toolkit for systematic intraday trading on Indian stock markets via Zerodha's Kite Connect API.
+Personal algorithmic trading app for Indian markets via Zerodha Kite Connect.
 
 ## Tech Stack
 
@@ -9,7 +9,7 @@ Algorithmic trading toolkit for systematic intraday trading on Indian stock mark
 - **Database:** PostgreSQL via Drizzle ORM (`lib/drizzle.ts`, `lib/schema.ts`)
 - **Queue:** BullMQ 5 with IORedis (`lib/queue.ts`, `lib/queue-processor/`)
 - **Broker:** Zerodha Kite Connect (`lib/kiteUtils.ts`, `lib/broker.js`)
-- **Auth:** next-iron-session (encrypted cookies)
+- **Auth:** iron-session (encrypted cookies)
 - **Observability:** OpenTelemetry → Grafana Cloud (`otel.js`)
 - **Server:** Express (`server.js`) with Bull Board at `/queues`
 - **Package manager:** Yarn 4 (use `yarn`, not `npm`)
@@ -19,7 +19,7 @@ Algorithmic trading toolkit for systematic intraday trading on Indian stock mark
 ```bash
 yarn dev           # Dev server (with OTEL instrumentation)
 yarn build         # Production build
-yarn start         # Production server (sets TZ=Asia/Kolkata, runs bootup health check)
+yarn start         # Production server (set TZ=Asia/Kolkata in the process environment)
 yarn lint          # Biome linter
 yarn format        # Biome formatter
 yarn test          # All tests (Jest)

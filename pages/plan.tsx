@@ -27,10 +27,7 @@ import { DailyPlansConfig, DailyPlansDayKey } from "../types/misc"
 import { ATM_STRADDLE_CONFIG, ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../types/plans"
 
 /**
- *
- * remote storage
- *
- * https://api.signalx.trade/key_16_digit_api_key/dayOfWeek
+ * Weekly plans are stored in Postgres (`trade_plans`).
  */
 
 interface StrategySelection {

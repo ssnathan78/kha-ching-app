@@ -8,7 +8,7 @@ export default function Home() {
     <div className={styles.container}>
       <main className={styles.main}>
         {/* eslint-disable */}
-        <img src="/logo.png" width="300" alt="SignalX" />
+        <img src="/logo.png" width="300" alt="Kha-Ching" />
 
         <p className={styles.description}>
           <a href="/api/login">Continue with Kite</a>

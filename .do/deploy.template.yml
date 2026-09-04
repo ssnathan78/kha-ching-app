@@ -1,35 +1,19 @@
 spec:
   name: kha-ching
+  # Not used in production. See docs/DEPLOYMENT.md
   services:
   - name: web
     github:
-      repo: anil1kuppa/kha-ching
+      repo: ssnathan78/kha-ching-app
       branch: master
       deploy_on_push: false
-    build_command: pnpm install && pnpm build
-    run_command: pnpm start
+    build_command: yarn install --immutable && yarn build
+    run_command: yarn start
+    http_port: 3000
     envs:
-    - key: KITE_API_KEY
-      value: "Your Kite API key"
-    - key: KITE_API_SECRET
-      value: "Your Kite Secret key"
-    - key: SECRET_COOKIE_PASSWORD
-      value: "A long 32 digit password"
-    - key: REDIS_URL
-      value: "Your Redis connection string"
-    - key: NEXT_PUBLIC_DEFAULT_LOTS
-      value: "4"
-    - key: NEXT_PUBLIC_DEFAULT_SKEW_PERCENT
-      value: "10"
-    - key: NEXT_PUBLIC_DEFAULT_SLM_PERCENT
-      value: "30"
-    - key: NEXT_PUBLIC_DEFAULT_SQUARE_OFF_TIME
-      value: "15:20"
-    - key: ORCL_HOST_URL
-      value: "Your ORCL host key"
-    - key: NEXT_PUBLIC_APP_URL
-      value: ${APP_URL}
-    - key: NEXT_PUBLIC_GIT_HASH
-      value: ${_self.COMMIT_HASH}
+    - key: NODE_ENV
+      value: production
     - key: MOCK_ORDERS
       value: "false"
+    - key: TZ
+      value: Asia/Kolkata

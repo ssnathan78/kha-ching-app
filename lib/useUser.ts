@@ -1,10 +1,10 @@
 import Router from "next/router"
 import { useEffect } from "react"
 import useSWR from "swr"
-import type { SignalXUser } from "../types/misc"
+import type { PublicUser } from "../types/misc"
 
 export default function useUser({ redirectTo = "", redirectIfFound = false } = {}): {
-  user: SignalXUser
+  user: PublicUser
   mutateUser
 } {
   const { data: user, mutate: mutateUser } = useSWR("/api/user")

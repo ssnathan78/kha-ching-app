@@ -1,7 +1,6 @@
 import React from "react"
 
 import useUser from "../lib/useUser"
-import Footer from "./Footer"
 import Layout from "./Layout"
 
 const StratLayout = ({ children }) => {
@@ -11,12 +10,7 @@ const StratLayout = ({ children }) => {
     return <Layout>loading...</Layout>
   }
 
-  return (
-    <Layout>
-      {children}
-      <Footer />
-    </Layout>
-  )
+  return <Layout>{children}</Layout>
 }
 
 export default StratLayout

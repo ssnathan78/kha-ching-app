@@ -291,8 +291,8 @@ export const USER_OVERRIDE = {
 }
 
 export const ERROR_STRINGS = {
-  PAID_FEATURE: "Invalid SignalX Club or Premium subscription",
-  PAID_STRATEGY: "Invalid SignalX Club or Premium subscription",
+  PAID_FEATURE: "Feature not enabled",
+  PAID_STRATEGY: "Strategy not enabled",
 }
 
 export const SUBSCRIPTION_TYPE = {

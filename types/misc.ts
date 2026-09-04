@@ -25,6 +25,16 @@ export interface combinedOrders {
   tag: string
 }
 
+export interface PublicUser {
+  isLoggedIn: boolean
+  user_id?: string
+  user_name?: string
+  email?: string
+  user_shortname?: string
+  avatar_url?: string
+  broker?: string
+}
+
 export interface SignalXUser {
   session: SessionData
   isLoggedIn: boolean

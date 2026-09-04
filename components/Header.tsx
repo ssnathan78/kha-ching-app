@@ -1,46 +1,13 @@
-/* eslint-disable jsx-a11y/accessible-emoji */
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import React, { useEffect, useState } from "react"
+import React from "react"
 
 import fetchJson from "../lib/fetchJson"
 import useUser from "../lib/useUser"
 
-const APP_GIT_HASH = process.env.NEXT_PUBLIC_GIT_HASH
-
 const Header = () => {
   const { user, mutateUser } = useUser()
-  const [recentGitHash, setRecentGitHash] = useState(null)
-  const [isUpdateAvailable, setIsUpdateAvailable] = useState(false)
-
-  useEffect(() => {
-    async function fn() {
-      const url = "https://api.github.com/repos/aakashlpin/kha-ching/commits?per_page=1"
-      try {
-        const [commit] = await fetchJson(url)
-        const { sha } = commit
-        setRecentGitHash(sha)
-      } catch (e) {
-        console.log(`fetchJson on ${url} failed`, e)
-      }
-    }
-
-    fn()
-  }, [])
-
-  useEffect(() => {
-    function fn() {
-      if (!recentGitHash) {
-        return
-      }
-
-      setIsUpdateAvailable(recentGitHash !== APP_GIT_HASH)
-    }
-
-    fn()
-  }, [recentGitHash])
-
   const router = useRouter()
   return (
     <header style={{ marginBottom: 24 }}>
@@ -53,7 +20,9 @@ const Header = () => {
             <Link href="/plan">Trade Plan</Link>
           </li>
           <li>
-            <a href="/queues" target="_blank" rel="noreferrer">Queues</a>
+            <a href="/queues" target="_blank" rel="noreferrer">
+              Queues
+            </a>
           </li>
           {!user?.isLoggedIn && (
             <li>
@@ -64,13 +33,8 @@ const Header = () => {
             <>
               <li>
                 <Link href="/profile">
-                  {user?.session?.avatar_url && (
-                    <img
-                      alt={user.session.user_shortname}
-                      src={user.session.avatar_url}
-                      width={20}
-                      height={20}
-                    />
+                  {user?.avatar_url && (
+                    <img alt={user.user_shortname || "profile"} src={user.avatar_url} width={20} height={20} />
                   )}
                   Profile
                 </Link>
@@ -89,13 +53,6 @@ const Header = () => {
               </li>
             </>
           )}
-          {isUpdateAvailable ? (
-            <li>
-              <a href="https://cloud.digitalocean.com/apps" title="App update available">
-                <NotificationsActiveIcon color="inherit" />
-              </a>
-            </li>
-          ) : null}
         </ul>
       </nav>
       <style jsx>
