@@ -187,7 +187,9 @@ export default withSession(async (req, res) => {
       const results = await db
         .select()
         .from(jobExecutions)
-        .where(sql`date(${jobExecutions.createdAt}) = current_date`)
+        .where(
+          sql`(${jobExecutions.createdAt} AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date`
+        )
         .orderBy(desc(jobExecutions.createdAt))
       return res.json(results)
     } catch (e) {
