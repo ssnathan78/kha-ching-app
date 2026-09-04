@@ -20,7 +20,7 @@
  */
 
 import type { KiteOrder } from "../../types/kite"
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
 import { STATUS_TRIGGER_PENDING } from "../constants"
 import { syncGetKiteInstance } from "../kiteUtils"
@@ -50,7 +50,7 @@ const slmWatcher = async ({
   _queueJobData,
 }: {
   slmOrderId: string
-  user: SignalXUser
+  user: KiteUser
   originalTriggerPrice: number
   _queueJobData: { initialJobData: SUPPORTED_TRADE_CONFIG }
 }) => {

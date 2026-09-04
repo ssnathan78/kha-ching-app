@@ -1,6 +1,6 @@
 import dayjs, { type Dayjs } from "dayjs"
 import type { KiteOrder } from "../../types/kite"
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 import type { ATM_STRANGLE_TRADE } from "../../types/trade"
 import {
   type EXPIRY_TYPE,
@@ -59,7 +59,7 @@ const getStrangleStrikes = async ({
   expiryType,
   price = 20,
 }: {
-  user?: SignalXUser
+  user?: KiteUser
   atmStrike: number
   instrument: INSTRUMENTS
   inverted?: boolean

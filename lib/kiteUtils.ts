@@ -25,7 +25,7 @@ import { db } from "./drizzle"
 import { allSettled } from "./es6-promise"
 import { jobExecutions } from "./schema"
 import type { KiteOrder } from "../types/kite"
-import type { SignalXUser } from "../types/misc"
+import type { KiteUser } from "../types/misc"
 import { aggregateFillsBySymbol } from "./pnl"
 import { millisecondsTill7, closest, delay, finiteStateChecker, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry, isMockOrder, ms } from "./utils"
 
@@ -507,7 +507,7 @@ export async function getSkew(kite, instrument1, instrument2, exchange) {
 }
 
 /**
- * Look up the nearest (current) weekly expiry trading symbol for a given strike.
+ * Look up the nearest expiry trading symbol for a given strike.
  * When no instrumentType is provided, returns a StrikeInterface with PE_STRING, CE_STRING,
  * and LOT_SIZE. With an instrumentType, returns the matching Instrument directly.
  *
@@ -550,7 +550,7 @@ export const getCurrentExpiryTradingSymbol = async ({
 }
 
 /**
- * Look up the next weekly expiry trading symbol for a given strike (second-nearest expiry).
+ * Look up the next expiry trading symbol for a given strike (second-nearest expiry).
  * When no instrumentType is provided, returns a StrikeInterface with PE_STRING, CE_STRING,
  * and LOT_SIZE. With an instrumentType, returns the matching Instrument directly.
  *
@@ -749,7 +749,7 @@ interface TRADING_SYMBOL_BY_OPTION_PRICE_TYPE {
   price: number
   instrumentType?: string
   pivotStrike: number
-  user: SignalXUser
+  user: KiteUser
   greaterThanEqualToPrice?: boolean
   expiry?: EXPIRY_TYPE
 }
@@ -906,7 +906,7 @@ export const remoteOrderSuccessEnsurer = async (args: {
   retryAttempts?: number
   orderStatusCheckTimeout?: number
   remoteRetryTimeout?: number
-  user: SignalXUser
+  user: KiteUser
   attemptCount?: number
 }): Promise<{
   successful: boolean

@@ -2,7 +2,7 @@
 
 Personal algorithmic trading app for Indian index options and a Nifty futures chase strategy, via Zerodha Kite Connect.
 
-This repository is independent. It is not SignalX and does not depend on other GitHub forks for updates.
+This repository is standalone.
 
 ## Features
 
@@ -30,11 +30,14 @@ yarn drizzle:push   # or yarn migrate after generating SQL
 yarn dev            # MOCK_ORDERS=true in .env
 ```
 
-Optional local Postgres/Redis:
+Optional local Postgres/Redis + app:
 
 ```bash
-COMPOSE_PROFILES=local docker compose up postgres redis
+docker compose up --build
 ```
+
+See [docs/LOCAL.md](docs/LOCAL.md) for Kite redirect URLs and mock-mode Docker testing.
+
 
 ```bash
 yarn unit-test
@@ -47,6 +50,7 @@ Health: `GET /api/health` (Postgres + Redis).
 
 ## Documentation
 
+- [Local Docker + Kite redirect](docs/LOCAL.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Deployment](docs/DEPLOYMENT.md)

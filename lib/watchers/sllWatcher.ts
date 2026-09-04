@@ -8,12 +8,12 @@
  * not from the moment the order went in Open state (via the API)
  */
 
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { finiteStateChecker, ms, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry } from "../utils"
 
-const sllWatcher = async ({ sllOrderId, user }: { sllOrderId: string; user: SignalXUser }) => {
+const sllWatcher = async ({ sllOrderId, user }: { sllOrderId: string; user: KiteUser }) => {
   try {
     const kite = syncGetKiteInstance(user)
     const orderHistory = (await withRemoteRetry(() => kite.getOrderHistory(sllOrderId))).reverse()

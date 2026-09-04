@@ -1,6 +1,6 @@
 import { getIronSession, type SessionOptions } from "iron-session"
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
-import type { SignalXUser } from "../types/misc"
+import type { KiteUser } from "../types/misc"
 import "./queue-processor"
 import "./exit-strategies"
 import "./watchers"
@@ -9,7 +9,7 @@ import { secondsTill7 } from "./utils"
 export const SESSION_COOKIE_NAME = "khaching/kite/session"
 
 type SessionPayload = {
-  user?: SignalXUser
+  user?: KiteUser
 }
 
 export function getSessionOptions(): SessionOptions {
@@ -31,8 +31,8 @@ export function getSessionOptions(): SessionOptions {
 }
 
 export type CompatSession = {
-  get: (key: "user") => SignalXUser | undefined
-  set: (key: "user", value: SignalXUser) => void
+  get: (key: "user") => KiteUser | undefined
+  set: (key: "user", value: KiteUser) => void
   save: () => Promise<void>
   destroy: () => Promise<void>
 }

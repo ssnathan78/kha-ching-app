@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect } from "react"
 import {
   FormControl,
   FormControlLabel,
@@ -8,18 +8,31 @@ import {
   Radio,
   Grid,
 } from "@mui/material"
-import { EXPIRY_TYPE, EXPIRY_TYPE_HUMAN } from "../../lib/constants"
+import {
+  EXPIRY_TYPE,
+  EXPIRY_TYPE_HUMAN,
+  expiryTypesForInstrument,
+  INSTRUMENTS,
+} from "../../lib/constants"
 
 const ExpiryTypeComponent = ({ state, onChange }) => {
-  const expiryTypes = [EXPIRY_TYPE.CURRENT, EXPIRY_TYPE.NEXT, EXPIRY_TYPE.MONTHLY]
+  const instrument = state.instrument as INSTRUMENTS | undefined
+  const expiryTypes = expiryTypesForInstrument(instrument)
+
+  useEffect(() => {
+    if (state.expiryType && !expiryTypes.includes(state.expiryType)) {
+      onChange({ expiryType: EXPIRY_TYPE.CURRENT })
+    }
+  }, [instrument, state.expiryType])
+
   return (
     <Grid item xs={12}>
       <FormControl component="fieldset">
-        <FormLabel component="legend">Option Expiry</FormLabel>
+        <FormLabel component="legend">Option expiry</FormLabel>
         <RadioGroup
           aria-label="expiryTypes"
           name="expiryType"
-          value={state.expiryType}
+          value={expiryTypes.includes(state.expiryType) ? state.expiryType : EXPIRY_TYPE.CURRENT}
           onChange={e => onChange({ expiryType: e.target.value as EXPIRY_TYPE })}
           row
         >
@@ -32,6 +45,11 @@ const ExpiryTypeComponent = ({ state, onChange }) => {
             />
           ))}
         </RadioGroup>
+        {instrument && !expiryTypes.includes(EXPIRY_TYPE.MONTHLY) ? (
+          <Typography variant="caption" color="textSecondary">
+            Weekly contracts are not listed for this index (monthly expiries only).
+          </Typography>
+        ) : null}
       </FormControl>
     </Grid>
   )

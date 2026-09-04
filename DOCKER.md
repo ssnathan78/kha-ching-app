@@ -1,12 +1,12 @@
 # Docker
 
-`docker-compose.yml` runs the app. Postgres and Redis start only with profile `local`:
+Postgres, Redis, and the app start together:
 
 ```bash
-COMPOSE_PROFILES=local docker compose up postgres redis
-docker compose up app
+cp .env.example .env   # add Kite keys
+docker compose up --build
 ```
 
-Point `DATABASE_URL` / `REDIS_URL` at `localhost` (or `host.docker.internal` from the app container).
+The app container uses `DATABASE_URL`/`REDIS_URL` pointing at the `postgres` and `redis` services. `MOCK_ORDERS=true` and `NODE_ENV=development` are set in compose so login works over HTTP and orders are not sent to the exchange.
 
-Health: `GET /api/health`.
+See `docs/LOCAL.md`.

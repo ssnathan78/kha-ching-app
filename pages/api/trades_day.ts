@@ -13,7 +13,7 @@ import logger from "../../lib/logger"
 import withSession from "../../lib/session"
 import { isMarketOpen, isMockOrder } from "../../lib/utils"
 import { SUPPORTED_TRADE_CONFIG } from "../../types/trade"
-import { SignalXUser } from "../../types/misc"
+import { KiteUser } from "../../types/misc"
 
 const TIMESTAMP_FIELDS = [
   "runAt",
@@ -43,7 +43,7 @@ async function createJob({
   user,
 }: {
   jobData: SUPPORTED_TRADE_CONFIG
-  user: SignalXUser
+  user: KiteUser
 }) {
   const { runAt, runNow, strategy } = jobData
 

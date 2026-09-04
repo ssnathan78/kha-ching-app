@@ -4,7 +4,7 @@ import { getIndexInstruments } from "../../lib/kiteUtils"
 import logger from "../../lib/logger"
 import { addToAncillaryQueue, addToChaseQueue, addToCoSquareOff } from "../../lib/queue"
 import withSession from "../../lib/session"
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 
 const apiKey = process.env.KITE_API_KEY!
 const kiteSecret = process.env.KITE_API_SECRET!
@@ -23,7 +23,7 @@ export default withSession(async (req, res) => {
 
   try {
     const sessionData: SessionData = await kc.generateSession(requestToken, kiteSecret)
-    const user: SignalXUser = { isLoggedIn: true, session: sessionData }
+    const user: KiteUser = { isLoggedIn: true, session: sessionData }
     req.session.set("user", user)
     await req.session.save()
 

@@ -1,10 +1,10 @@
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { withRemoteRetry } from "../utils"
 
-async function orderbookSyncByTag({ orderTag, user }: { orderTag: string; user: SignalXUser }) {
+async function orderbookSyncByTag({ orderTag, user }: { orderTag: string; user: KiteUser }) {
   try {
     const kite = syncGetKiteInstance(user)
     const allOrders = await withRemoteRetry(() => kite.getOrders())

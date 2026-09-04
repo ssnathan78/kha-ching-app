@@ -12,7 +12,7 @@ export interface DailyPlansDisplayValue {
 
 export type DailyPlansConfig = Record<DailyPlansDayKey, DailyPlansDisplayValue>
 
-export interface SignalXOrder extends Order {
+export interface AppOrder extends Order {
   humanTradingSymbol: string
 }
 
@@ -35,7 +35,7 @@ export interface PublicUser {
   broker?: string
 }
 
-export interface SignalXUser {
+export interface KiteUser {
   session: SessionData
   isLoggedIn: boolean
 }

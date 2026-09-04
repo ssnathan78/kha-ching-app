@@ -1,6 +1,6 @@
 # Kha-Ching modernization report
 
-Independent personal trading app (`ssnathan78/kha-ching-app`). Not SignalX. Droplet stays the production host.
+Independent personal trading app (`ssnathan78/kha-ching-app`). Droplet stays the production host.
 
 ## Executive summary
 
@@ -27,7 +27,7 @@ Hardened the existing Next.js + Postgres + Redis + BullMQ monolith: secrets out 
 - `/api/user` no longer returns `access_token` / full session. Use `user_id`, `user_name`, `email`, `avatar_url`.
 - `/api/get_job` no longer returns Bull job `data.user`.
 - Cookie library change: re-login once.
-- Fork UI (SignalX footer, subscription, upstream GitHub poll) removed.
+- Fork UI (footer, subscription, upstream GitHub poll) removed.
 
 ## MANUAL PRODUCTION ACTION REQUIRED
 

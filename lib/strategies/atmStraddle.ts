@@ -1,7 +1,7 @@
 import dayjs, { type ConfigType } from "dayjs"
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore"
 import type { KiteOrder } from "../../types/kite"
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 import type { ATM_STRADDLE_TRADE } from "../../types/trade"
 import {
   EXPIRY_TYPE,
@@ -170,7 +170,7 @@ export const createOrder = ({
   symbol: string
   lots: number
   lotSize: number
-  user: SignalXUser
+  user: KiteUser
   orderTag: string
   transactionType?: "BUY" | "SELL"
   productType: PRODUCT_TYPE

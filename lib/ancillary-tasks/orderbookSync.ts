@@ -1,11 +1,11 @@
-import type { SignalXUser } from "../../types/misc"
+import type { KiteUser } from "../../types/misc"
 import type { KiteOrder } from "../../types/kite"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { withRemoteRetry } from "../utils"
 import { insertMultipleTransactions } from "../drizzleDbUtils"
 
-async function orderbookSync({ user }: { user: SignalXUser }): Promise<any> {
+async function orderbookSync({ user }: { user: KiteUser }): Promise<any> {
   try {
     const kite = syncGetKiteInstance(user)
     const allOrders = await withRemoteRetry(() => kite.getOrders())

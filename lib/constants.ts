@@ -29,6 +29,8 @@ export interface INSTRUMENT_PROPERTIES {
   exchange: string
   strikeStepSize: number
   freezeQty: number
+  /** NSE weekly options exist only for Nifty 50 (since Nov 2024). */
+  hasWeeklyExpiry: boolean
 }
 
 export interface COMPLETED_BY_TAG {
@@ -39,31 +41,34 @@ export interface COMPLETED_BY_TAG {
 
 export const INSTRUMENT_DETAILS: Record<INSTRUMENTS, INSTRUMENT_PROPERTIES> = {
   [INSTRUMENTS.NIFTY]: {
-    lotSize: 25,
+    lotSize: 65,
     displayName: "NIFTY",
     underlyingSymbol: "NIFTY 50",
     nfoSymbol: "NIFTY",
     exchange: "NSE",
     strikeStepSize: 50,
     freezeQty: 1800,
+    hasWeeklyExpiry: true,
   },
   [INSTRUMENTS.BANKNIFTY]: {
-    lotSize: 15,
+    lotSize: 30,
     displayName: "BANKNIFTY",
     underlyingSymbol: "NIFTY BANK",
     nfoSymbol: "BANKNIFTY",
     exchange: "NSE",
     strikeStepSize: 100,
     freezeQty: 900,
+    hasWeeklyExpiry: false,
   },
   [INSTRUMENTS.FINNIFTY]: {
-    lotSize: 25,
+    lotSize: 60,
     displayName: "FINNIFTY",
     underlyingSymbol: "NIFTY FIN SERVICE",
     nfoSymbol: "FINNIFTY",
     exchange: "NSE",
-    strikeStepSize: 100,
+    strikeStepSize: 50,
     freezeQty: 1800,
+    hasWeeklyExpiry: false,
   },
 }
 
@@ -103,9 +108,16 @@ export enum EXPIRY_TYPE {
 }
 
 export const EXPIRY_TYPE_HUMAN = {
-  [EXPIRY_TYPE.CURRENT]: "Current weekly",
-  [EXPIRY_TYPE.NEXT]: "Next weekly",
-  [EXPIRY_TYPE.MONTHLY]: "Current Monthly",
+  [EXPIRY_TYPE.CURRENT]: "Current expiry",
+  [EXPIRY_TYPE.NEXT]: "Next expiry",
+  [EXPIRY_TYPE.MONTHLY]: "Monthly expiry",
+}
+
+export function expiryTypesForInstrument(instrument?: INSTRUMENTS): EXPIRY_TYPE[] {
+  if (instrument && INSTRUMENT_DETAILS[instrument]?.hasWeeklyExpiry) {
+    return [EXPIRY_TYPE.CURRENT, EXPIRY_TYPE.NEXT, EXPIRY_TYPE.MONTHLY]
+  }
+  return [EXPIRY_TYPE.CURRENT, EXPIRY_TYPE.NEXT]
 }
 
 export enum STRANGLE_ENTRY_STRATEGIES {

@@ -1,5 +1,5 @@
 import type { ANCILLARY_TASKS } from "../lib/constants"
-import type { DBMeta, SignalXUser } from "./misc"
+import type { DBMeta, KiteUser } from "./misc"
 import type { ATM_STRADDLE_CONFIG, ATM_STRANGLE_CONFIG, SUBSCRIBE_CHASE_CONFIG } from "./plans"
 
 export interface TradeMeta extends DBMeta {
@@ -13,7 +13,7 @@ export interface TradeMeta extends DBMeta {
   autoSquareOffProps?: { time: string; deletePendingOrders: boolean }
   expiresAt?: string
   _kite?: unknown // this is only used in jest for unit tests
-  user?: SignalXUser // this is only available once job has been created on server
+  user?: KiteUser // this is only available once job has been created on server
   orderTag?: string // this is only available once job has been created on server
   _nextTradingQueue?: string
   ancillaryTask?: ANCILLARY_TASKS
