@@ -1,0 +1,14 @@
+name: kha-ching
+# Not used in production. Droplet + server.js — see docs/DEPLOYMENT.md
+services:
+- name: kha-ching
+  github:
+    repo: ssnathan78/kha-ching-app
+    branch: master
+  build_command: yarn install --immutable && yarn build
+  run_command: yarn start
+  envs:
+  - key: NODE_ENV
+    value: production
+  http_port: 3000
+  source_dir: ./

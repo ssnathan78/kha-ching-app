@@ -1,0 +1,47 @@
+import type { STRATEGIES } from "../lib/constants"
+import type { Order, SessionData } from "kiteconnect"
+import type { AvailablePlansConfig } from "./plans"
+
+export type DailyPlansDayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday"
+
+export interface DailyPlansDisplayValue {
+  heading: string
+  selectedStrategy: STRATEGIES | ""
+  strategies: Record<string, AvailablePlansConfig>
+}
+
+export type DailyPlansConfig = Record<DailyPlansDayKey, DailyPlansDisplayValue>
+
+export interface AppOrder extends Order {
+  humanTradingSymbol: string
+}
+
+export interface combinedOrders {
+  tradingsymbol: string
+  order_id?: string
+  average_price?: number
+  transaction_type: "BUY" | "SELL"
+  status?: "COMPLETE" | "REJECTED" | "CANCELLED" | "OPEN" | "TRIGGER PENDING"
+  tag: string
+}
+
+export interface PublicUser {
+  isLoggedIn: boolean
+  user_id?: string
+  user_name?: string
+  email?: string
+  user_shortname?: string
+  avatar_url?: string
+  broker?: string
+}
+
+export interface KiteUser {
+  session: SessionData
+  isLoggedIn: boolean
+}
+
+export interface DBMeta {
+  id?: string
+  created?: string
+  lastModified?: string
+}

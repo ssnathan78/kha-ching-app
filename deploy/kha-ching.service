@@ -1,0 +1,16 @@
+[Unit]
+Description=Kha-Ching trading app
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kha-ching-app
+Environment=NODE_ENV=production
+Environment=TZ=Asia/Kolkata
+EnvironmentFile=/opt/kha-ching-app/.env
+ExecStart=/usr/bin/yarn start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+spec:
+  name: kha-ching
+  # Not used in production. See docs/DEPLOYMENT.md
+  services:
+  - name: web
+    github:
+      repo: ssnathan78/kha-ching-app
+      branch: master
+      deploy_on_push: false
+    build_command: yarn install --immutable && yarn build
+    run_command: yarn start
+    http_port: 3000
+    envs:
+    - key: NODE_ENV
+      value: production
+    - key: MOCK_ORDERS
+      value: "false"
+    - key: TZ
+      value: Asia/Kolkata

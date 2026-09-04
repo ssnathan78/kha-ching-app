@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.env
+.env.local
+coverage
+backups
+*.log
+yarn-error.log

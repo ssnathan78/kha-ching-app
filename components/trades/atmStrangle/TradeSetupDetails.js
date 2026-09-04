@@ -1,0 +1,49 @@
+import dayjs from "dayjs"
+import React from "react"
+
+import {
+  EXIT_STRATEGIES,
+  EXIT_STRATEGIES_DETAILS,
+  STRANGLE_ENTRY_STRATEGIES,
+  STRATEGIES_DETAILS,
+} from "../../../lib/constants"
+import commonDetailsRows from "../../lib/commonDetailsRows"
+import OrdersTable from "../../lib/ordersTable"
+
+const Details = args => {
+  const {
+    lots,
+    instrument,
+    inverted,
+    entryStrategy,
+    strategy,
+    percentfromAtm,
+    distanceFromAtm,
+    optionPrice,
+  } = args
+
+  return (
+    <OrdersTable
+      rows={[
+        [{ value: "Strategy" }, { value: strategy }],
+        [{ value: "Instrument" }, { value: instrument }],
+        [{ value: "Lots" }, { value: lots }],
+        [{ value: "Strangle Type" }, { value: inverted ? "Inverted" : "Regular" }],
+        [
+          { value: "Entry strategy" },
+          {
+            value: STRATEGIES_DETAILS.ATM_STRANGLE.ENTRY_STRATEGY_DETAILS[entryStrategy].label,
+          },
+        ],
+        entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM
+          ? [{ value: "Percent from ATM" }, { value: percentfromAtm }]
+          : entryStrategy === STRANGLE_ENTRY_STRATEGIES.ENTRY_PRICE
+            ? [{ value: "Option Price" }, { value: optionPrice }]
+            : [{ value: "Distance from ATM" }, { value: distanceFromAtm }],
+        ...commonDetailsRows(args),
+      ]}
+    />
+  )
+}
+
+export default Details

@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Kha-Ching: yarn dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "yarn dev"
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach Node (9229)",
+      "skipFiles": ["${workspaceFolder}/node_modules/**/*.js", "<node_internals>/**"],
+      "port": 9229
+    }
+  ]
+}
