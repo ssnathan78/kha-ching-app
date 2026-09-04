@@ -32,7 +32,7 @@
     "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
     "@opentelemetry/sdk-logs": "^0.218.0",
     "@opentelemetry/sdk-node": "^0.218.0",
-    "@opentelemetry/winston-transport": "^0.28.0",
+    "@opentelemetry/winston-transport": "^0.32.0",
     "@types/styled-jsx": "^3.4.4",
     "axios": "1.7.9",
     "bullmq": "^5.73.3",
