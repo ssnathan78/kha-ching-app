@@ -35,6 +35,7 @@ export {
   DEFAULT_RISK_SETTINGS,
   evaluateOrder,
   inferOrderRole,
+  isPaperStrategy,
   limitsFor,
   RISK_STRATEGY_KEYS,
   RiskRejectedError,

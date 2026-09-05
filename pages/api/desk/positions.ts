@@ -8,7 +8,10 @@ export default withSession(async (req, res) => {
   if (!user) return res.status(401).end()
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" })
   try {
-    return res.json({ positions: await listPositions() })
+    const book = req.query.book
+    return res.json({
+      positions: await listPositions(book === "PAPER" || book === "LIVE" ? book : "ALL"),
+    })
   } catch (e) {
     return sendApiError(res, e, logger, "desk/positions")
   }

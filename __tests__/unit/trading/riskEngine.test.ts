@@ -2,6 +2,7 @@ import {
   DEFAULT_RISK_SETTINGS,
   evaluateOrder,
   inferOrderRole,
+  isPaperStrategy,
   type RiskContext,
   type RiskIntent,
 } from "../../../lib/trading/riskEngine"
@@ -27,6 +28,7 @@ function ctx(overrides: Partial<RiskContext> = {}): RiskContext {
     settings: { ...DEFAULT_RISK_SETTINGS },
     now: new Date("2026-09-05T10:00:01+05:30"),
     isMock: true,
+    isPaper: false,
     marketOpen: true,
     jobAborted: false,
     openPositionCount: 0,
@@ -64,6 +66,29 @@ describe("evaluateOrder", () => {
     expect(evaluateOrder(intent({ quantity: 0 }), ctx()).ok).toBe(false)
     expect(evaluateOrder(intent({ quantity: 1.5 }), ctx()).ok).toBe(false)
     expect(evaluateOrder(intent({ quantity: -65 }), ctx()).ok).toBe(false)
+  })
+
+  it("allows a paper strategy without Desk allowLiveOrders", () => {
+    const paper = evaluateOrder(intent(), ctx({ isMock: false, isPaper: true }))
+    expect(paper).toEqual({ ok: true })
+  })
+
+  it("treats unknown and default strategies as paper", () => {
+    expect(isPaperStrategy(DEFAULT_RISK_SETTINGS, "ATM_STRADDLE")).toBe(true)
+    expect(isPaperStrategy(DEFAULT_RISK_SETTINGS, "BRAND_NEW")).toBe(true)
+    expect(isPaperStrategy(DEFAULT_RISK_SETTINGS, null)).toBe(true)
+    const live = {
+      ...DEFAULT_RISK_SETTINGS,
+      strategies: {
+        ...DEFAULT_RISK_SETTINGS.strategies,
+        ATM_STRADDLE: {
+          ...DEFAULT_RISK_SETTINGS.strategies.ATM_STRADDLE,
+          executionMode: "LIVE" as const,
+        },
+      },
+    }
+    expect(isPaperStrategy(live, "ATM_STRADDLE")).toBe(false)
+    expect(isPaperStrategy(live, "ATM_STRANGLE")).toBe(true)
   })
 
   it("blocks live orders unless Desk allowLiveOrders is on", () => {

@@ -3,10 +3,14 @@ export type OrderRole = "ENTRY" | "EXIT" | "SL" | "FLATTEN"
 export const RISK_STRATEGY_KEYS = ["ATM_STRADDLE", "ATM_STRANGLE", "SUBSCRIBE_CHASE"] as const
 export type RiskStrategyKey = (typeof RISK_STRATEGY_KEYS)[number]
 
+export type ExecutionMode = "PAPER" | "LIVE"
+
 export type StrategyRiskLimits = {
   enabled: boolean
   halted: boolean
   haltReason: string | null
+  /** PAPER uses live quotes and writes the ledger; it never calls Kite placeOrder. */
+  executionMode: ExecutionMode
   maxLots: number
   maxDailyLossInr: number
   maxDrawdownPct: number
@@ -17,6 +21,7 @@ export const DEFAULT_STRATEGY_LIMITS: StrategyRiskLimits = {
   enabled: true,
   halted: false,
   haltReason: null,
+  executionMode: "PAPER",
   maxLots: 20,
   maxDailyLossInr: 50_000,
   maxDrawdownPct: 0.15,
@@ -68,6 +73,11 @@ export function limitsFor(settings: RiskSettings, strategy?: string | null): Str
   return { ...DEFAULT_STRATEGY_LIMITS }
 }
 
+/** Unknown or unset strategies default to PAPER so a new book cannot punch Kite. */
+export function isPaperStrategy(settings: RiskSettings, strategy?: string | null): boolean {
+  return limitsFor(settings, strategy).executionMode !== "LIVE"
+}
+
 export type RiskIntent = {
   role: OrderRole
   tradingsymbol: string
@@ -88,6 +98,7 @@ export type RiskContext = {
   settings: RiskSettings
   now: Date
   isMock: boolean
+  isPaper: boolean
   marketOpen: boolean
   jobAborted: boolean
   openPositionCount: number
@@ -139,10 +150,10 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
     return fail("INVALID_QTY", "Order quantity must be a positive integer")
   }
 
-  if (!ctx.isMock && !settings.allowLiveOrders) {
+  if (!ctx.isMock && !ctx.isPaper && !settings.allowLiveOrders) {
     return fail(
       "LIVE_BLOCKED",
-      "Live orders are off. Enable “Allow live orders” on Desk → Risk, and run without MOCK_ORDERS in .env."
+      "Live broker orders are off. Set this strategy to Live on Desk → Risk, enable “Allow live orders”, and run without MOCK_ORDERS."
     )
   }
 

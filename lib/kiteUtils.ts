@@ -5,7 +5,7 @@
 
 import dayjs from "dayjs"
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore"
-import { eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import type { Connect, Exchanges, Instrument, MarginOrder, Order, Variety } from "kiteconnect"
 import { type HistoricalData, KiteConnect } from "kiteconnect"
 import memoizer from "memoizee"
@@ -25,15 +25,16 @@ import { calculate40EMA } from "./ema"
 import { allSettled } from "./es6-promise"
 import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
-import { jobExecutions } from "./schema"
+import { jobExecutions, orders as ledgerOrders } from "./schema"
 import {
   applyBrokerOrderSnapshot,
+  getOpenPositions,
   markOrderSubmitted,
-  markOrderUnknown,
   safeRecordOrderFromKiteProps,
 } from "./trading/ledger"
-import { inferOrderRole } from "./trading/riskEngine"
+import { inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
 import { assertOrderAllowed } from "./trading/riskGate"
+import { getRiskSettings } from "./trading/riskSettings"
 import {
   closest,
   delay,
@@ -255,10 +256,17 @@ export function syncGetKiteInstance(user): KiteConnectInstance {
  */
 export type RiskAwarePlaceOrder = PlaceOrderParams & {
   purpose?: string
+  strategy?: string
+  ltp?: number
 }
 
 function stripRiskMeta(order: RiskAwarePlaceOrder): PlaceOrderParams {
-  const { purpose: _purpose, ...rest } = order as RiskAwarePlaceOrder & Record<string, unknown>
+  const {
+    purpose: _purpose,
+    strategy: _strategy,
+    ltp: _ltp,
+    ...rest
+  } = order as RiskAwarePlaceOrder & Record<string, unknown>
   return rest as PlaceOrderParams
 }
 
@@ -268,7 +276,13 @@ export async function placeOrder(
   order: RiskAwarePlaceOrder
 ): Promise<any> {
   const purpose = (order as RiskAwarePlaceOrder).purpose
+  const strategy = (order as RiskAwarePlaceOrder).strategy
   const kiteOrder = stripRiskMeta(order)
+  const riskSettings = await getRiskSettings()
+  const paperStrategy = isPaperStrategy(riskSettings, strategy)
+  const processMock = isMockOrder()
+  const paperExecution = processMock || paperStrategy
+  const provenance = processMock ? "MOCK" : paperStrategy ? "PAPER" : "LIVE"
   await assertOrderAllowed({
     tradingsymbol: kiteOrder.tradingsymbol,
     exchange: kiteOrder.exchange,
@@ -280,6 +294,7 @@ export async function placeOrder(
     trigger_price: kiteOrder.trigger_price,
     tag: kiteOrder.tag,
     purpose,
+    strategy,
     role: inferOrderRole({ purpose, orderType: kiteOrder.order_type }),
   })
 
@@ -299,18 +314,42 @@ export async function placeOrder(
     purpose ? { purpose: purpose as any } : undefined
   )
   try {
-    if (isMockOrder()) {
-      const mockId = ledgerOrderId ? `mock:${ledgerOrderId}` : `mock:${Date.now()}`
+    if (paperExecution) {
+      const mockId = ledgerOrderId ? `paper:${ledgerOrderId}` : `paper:${Date.now()}`
       await markOrderSubmitted({
         orderId: ledgerOrderId,
         brokerOrderId: mockId,
         status: "SUBMITTED",
-        provenance: "MOCK",
+        provenance,
       })
-      logger.info("[placeOrder] MOCK_ORDERS=true — not calling Kite", {
+      const fillPrice =
+        Number(order.ltp) || Number(kiteOrder.price) || Number(kiteOrder.trigger_price) || 0
+      if (ledgerOrderId && kiteOrder.tradingsymbol && kiteOrder.quantity) {
+        await applyBrokerOrderSnapshot(
+          {
+            order_id: mockId,
+            status: "COMPLETE",
+            tradingsymbol: kiteOrder.tradingsymbol,
+            exchange: kiteOrder.exchange,
+            transaction_type: kiteOrder.transaction_type,
+            order_type: kiteOrder.order_type,
+            product: kiteOrder.product,
+            quantity: kiteOrder.quantity,
+            filled_quantity: kiteOrder.quantity,
+            pending_quantity: 0,
+            average_price: fillPrice,
+            price: kiteOrder.price,
+            tag: kiteOrder.tag,
+          },
+          { internalOrderId: ledgerOrderId, provenance, purpose: purpose as any }
+        )
+      }
+      logger.info("[placeOrder] paper execution — not calling Kite", {
         tradingsymbol: kiteOrder.tradingsymbol,
         quantity: kiteOrder.quantity,
         purpose,
+        strategy,
+        provenance,
       })
       return { order_id: mockId }
     }
@@ -424,7 +463,7 @@ export const getSortedMatchingIntrumentsData = async ({
     .filter(
       item =>
         (nfoSymbol ? item.name === nfoSymbol : true) &&
-        (strike ? item.strike == strike : true) && // eslint-disable-line
+        (strike ? item.strike === strike : true) &&
         (tradingsymbol ? item.tradingsymbol === tradingsymbol : true) &&
         (instrumentType ? item.instrument_type === instrumentType : true)
     )
@@ -995,11 +1034,15 @@ export const remoteOrderSuccessEnsurer = async (args: {
   }
 
   const dbTradeRows = await db
-    .select({ userOverride: jobExecutions.userOverride })
+    .select({
+      userOverride: jobExecutions.userOverride,
+      strategy: jobExecutions.strategy,
+    })
     .from(jobExecutions)
     .where(eq(jobExecutions.orderTag, orderProps.tag!))
 
   const userOverride = dbTradeRows[0]?.userOverride
+  const jobStrategy = dbTradeRows[0]?.strategy
   if (userOverride === USER_OVERRIDE.ABORT) {
     logger.error("🔴 [remoteOrderSuccessEnsurer] user override ABORT. Terminating!")
     throw Error(USER_OVERRIDE.ABORT)
@@ -1016,6 +1059,7 @@ export const remoteOrderSuccessEnsurer = async (args: {
     trigger_price: orderProps.trigger_price,
     tag: orderProps.tag,
     purpose: (orderProps as { purpose?: string }).purpose,
+    strategy: jobStrategy,
   })
 
   const kite = (_kite ?? syncGetKiteInstance(user)) as any
@@ -1052,24 +1096,37 @@ export const remoteOrderSuccessEnsurer = async (args: {
   }
 
   try {
-    const mockOrders = isMockOrder()
-    if (mockOrders) {
-      logger.info("mock order", orderProps)
+    const riskSettings = await getRiskSettings()
+    const paperExecution = isMockOrder() || isPaperStrategy(riskSettings, jobStrategy)
+    if (paperExecution) {
+      logger.info("paper/mock order", { tag: orderProps.tag, strategy: jobStrategy })
     }
-    logger.info(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
-    const ledgerOrderId = mockOrders
-      ? await safeRecordOrderFromKiteProps(orderProps, { provenance: "MOCK" })
-      : null
-    const orderAckResponse = mockOrders
-      ? { order_id: ledgerOrderId ? `mock:${ledgerOrderId}` : "" }
-      : await placeOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
-    if (mockOrders && ledgerOrderId) {
-      await markOrderSubmitted({
-        orderId: ledgerOrderId,
-        brokerOrderId: orderAckResponse.order_id,
-        status: "SUBMITTED",
-        provenance: "MOCK",
-      })
+    const orderAckResponse = await placeOrder(kite, kite.VARIETY_REGULAR, {
+      ...(orderProps as PlaceOrderParams),
+      strategy: jobStrategy,
+      purpose: (orderProps as { purpose?: string }).purpose,
+    } as RiskAwarePlaceOrder)
+    if (paperExecution) {
+      const fillPrice = Number(orderProps.price) || Number(orderProps.trigger_price) || 0
+      return {
+        successful: true,
+        response: [
+          {
+            order_id: orderAckResponse.order_id,
+            status: "COMPLETE",
+            tradingsymbol: orderProps.tradingsymbol,
+            exchange: orderProps.exchange,
+            transaction_type: orderProps.transaction_type,
+            order_type: orderProps.order_type,
+            product: orderProps.product,
+            quantity: orderProps.quantity,
+            filled_quantity: orderProps.quantity,
+            pending_quantity: 0,
+            average_price: fillPrice,
+            tag: orderProps.tag,
+          } as KiteOrder,
+        ],
+      }
     }
     const { order_id: ackOrderId } = orderAckResponse
     const { promise: isOrderInUltimateStatePr, cancel: cancelOrderStateCheck } = orderStateChecker(
@@ -1083,14 +1140,11 @@ export const remoteOrderSuccessEnsurer = async (args: {
         orderStatusCheckTimeout,
         cancelOrderStateCheck
       )
-      await applyBrokerOrderSnapshot(ultimateStateOrder as KiteOrder, {
-        internalOrderId: ledgerOrderId,
-      })
+      await applyBrokerOrderSnapshot(ultimateStateOrder as KiteOrder)
       return { successful: true, response: [ultimateStateOrder] }
     } catch (e) {
       logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
       if (e instanceof RemoteRetryTimeoutError) {
-        if (ledgerOrderId) await markOrderUnknown(ledgerOrderId, "order state timeout")
         return { successful: false, response: [orderAckResponse] }
       }
       if (e?.message === kite.STATUS_REJECTED) {
@@ -1239,12 +1293,36 @@ export async function getCompletedOrdersbyTag(
   try {
     logger.info(`[getCompletedOrdersbyTag] Fetching completed orders for tag: ${orderTag}`)
 
-    const orders = await kite.getOrders()
+    const kiteOrders = await kite.getOrders()
 
     // Filter for COMPLETE orders with the given tag
-    const completedOrders = orders.filter(
+    let completedOrders = kiteOrders.filter(
       (order: any) => order.status === "COMPLETE" && order.tag === orderTag
     )
+
+    if (completedOrders.length === 0) {
+      const ledger = await db
+        .select()
+        .from(ledgerOrders)
+        .where(
+          and(
+            eq(ledgerOrders.orderTag, orderTag),
+            inArray(ledgerOrders.status, ["FILLED", "SUBMITTED"])
+          )
+        )
+      completedOrders = ledger
+        .filter(row => row.filledQty > 0)
+        .map(row => ({
+          tradingsymbol: row.tradingsymbol,
+          exchange: row.exchange,
+          product: row.product,
+          quantity: row.side === "SELL" ? -row.filledQty : row.filledQty,
+          transaction_type: row.side,
+          status: "COMPLETE",
+          tag: row.orderTag,
+          order_id: row.brokerOrderId,
+        }))
+    }
 
     if (completedOrders.length === 0) {
       logger.info(`[getCompletedOrdersbyTag] No completed orders found for tag: ${orderTag}`)
@@ -1293,9 +1371,13 @@ export async function cancelOrder(
 /**
  * Place a regular order on Kite using an access token directly.
  */
-export async function placeKiteOrder(accessToken: string, params: PlaceOrderParams): Promise<any> {
+export async function placeKiteOrder(
+  accessToken: string,
+  params: RiskAwarePlaceOrder
+): Promise<any> {
   const kite = getKiteInstance(accessToken)
-  return placeOrder(kite, kite.VARIETY_REGULAR, params)
+  const strategy = params.strategy || (params.tag === "chase" ? "SUBSCRIBE_CHASE" : params.strategy)
+  return placeOrder(kite, kite.VARIETY_REGULAR, { ...params, strategy })
 }
 
 /**
@@ -1311,10 +1393,18 @@ export async function placeSL(
 ): Promise<void> {
   const kite = getKiteInstance(accessToken)
 
-  const positions = (await kite.getPositions()) as any
-  const position = positions.net?.find(
+  const kitePositions = (await kite.getPositions()) as any
+  let position = kitePositions.net?.find(
     (p: any) => p.tradingsymbol === tradingsymbol && p.quantity !== 0
   )
+  if (!position) {
+    const ledger = (await getOpenPositions()).find(
+      p => p.tradingsymbol === tradingsymbol && p.quantity !== 0
+    )
+    if (ledger) {
+      position = { tradingsymbol, quantity: ledger.quantity, product: ledger.product }
+    }
+  }
   if (!position) {
     logger.warn(`[placeSL] No open position found for ${tradingsymbol}`)
     return
@@ -1372,7 +1462,9 @@ export async function placeSL(
       price: ltp,
       tag: "chase",
       purpose: "FLATTEN",
-    } as PlaceOrderParams)
+      strategy: "SUBSCRIBE_CHASE",
+      ltp,
+    } as RiskAwarePlaceOrder)
   } else {
     await placeOrder(kite, kite.VARIETY_REGULAR, {
       tradingsymbol,
@@ -1385,7 +1477,9 @@ export async function placeSL(
       trigger_price: stoploss,
       price,
       purpose: "SL",
-    } as PlaceOrderParams)
+      strategy: "SUBSCRIBE_CHASE",
+      ltp,
+    } as RiskAwarePlaceOrder)
   }
   logger.info(`[placeSL] Placed SL order for ${tradingsymbol} at ${stoploss}`)
 }
@@ -1430,7 +1524,15 @@ export async function getMultipleInstrumentPrices(
  * @returns Net quantity (positive for long, negative for short, 0 if no position).
  */
 export async function getNetPositionQty(kite: any, tradingsymbol: string): Promise<number> {
-  const positions = await kite.getPositions()
-  const net = (positions.net as any[]).find((p: any) => p.tradingsymbol === tradingsymbol)
-  return net?.quantity ?? 0
+  try {
+    const positions = await kite.getPositions()
+    const net = (positions.net as any[]).find((p: any) => p.tradingsymbol === tradingsymbol)
+    if (net?.quantity) return net.quantity
+  } catch (e) {
+    logger.warn("[getNetPositionQty] kite positions unavailable", e)
+  }
+  const ledger = (await getOpenPositions()).filter(
+    p => p.tradingsymbol === tradingsymbol && p.quantity !== 0
+  )
+  return ledger.reduce((sum, p) => sum + p.quantity, 0)
 }

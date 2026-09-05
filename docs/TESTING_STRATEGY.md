@@ -85,7 +85,7 @@ yarn api-test           # Postgres + Redis
 yarn test               # unit + int + api (same as CI minus lint/build/e2e)
 ```
 
-**`.env` and Docker hostnames:** If your `.env` uses docker-internal URLs (`@db:`, `@postgres:`, or `redis://redis:`), that is fine for the **app container**. Host-side tests load `.env` via `__tests__/loadEnv.js`, which **rewrites** those hostnames to `localhost` / `127.0.0.1` with compose credentials (`postgres:postgres`). You do not need a separate test `.env` for the common compose layout.
+**`.env` and Docker hostnames:** If your `.env` uses docker-internal URLs (`@db:`, `@postgres:`, or `redis://redis:`), that is fine for the **app container**. Host-side tests load `.env` via `__tests__/loadEnv.js`, which **rewrites** those hostnames to `localhost` / `127.0.0.1` with compose credentials (`postgres:postgres`). Inside a container (`/.dockerenv`), the rewrite is skipped so Jest still talks to `postgres` / `redis`. You do not need a separate test `.env` for the common compose layout.
 
 If you use custom credentials or ports, set explicit URLs before running tests:
 
@@ -103,7 +103,7 @@ export REDIS_URL="redis://127.0.0.1:6379"
 yarn api-test
 ```
 
-Symptom: `getaddrinfo ENOTFOUND db` means Jest is still using a container hostname on the host — check `loadEnv.js` mapping or override `DATABASE_URL` as above.
+Symptom: `getaddrinfo ENOTFOUND db` on **Jest** means `loadEnv.js` did not rewrite the hostname — override `DATABASE_URL` as above. The same hostname on **`yarn migrate`** used to fail the same way; `scripts/migrate.mjs` now rewrites `db` / `postgres` to `localhost` so host-side migrate can reach the published Compose port.
 
 ### 4. Build and E2E (Playwright)
 

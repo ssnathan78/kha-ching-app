@@ -10,7 +10,7 @@ import {
 import { backfillFromTransactions } from "./migrateHistory"
 import { moneyFromUnknown, moneyMaterialDiff, moneyToString } from "./money"
 import { markPositions, snapshotPortfolio } from "./portfolio"
-import { DEFAULT_ACCOUNT_ID, type ReconKind } from "./types"
+import { DEFAULT_ACCOUNT_ID, isSyntheticProvenance, type ReconKind } from "./types"
 
 export type BrokerSnapshot = {
   orders?: Array<Record<string, unknown>>
@@ -111,7 +111,9 @@ export async function reconcileWithBroker(
       })
     }
 
-    const openInternal = await getOpenOrders()
+    const openInternal = (await getOpenOrders()).filter(
+      order => !isSyntheticProvenance(order.provenance)
+    )
     const brokerIds = new Set(
       broker.orders.map(o => String((o as { order_id?: string }).order_id || "")).filter(Boolean)
     )
@@ -148,6 +150,7 @@ export async function reconcileWithBroker(
     const internal = await db.select().from(positions)
     const agg = new Map<string, { qty: number; cost: bigint; absQty: number }>()
     for (const pos of internal) {
+      if (isSyntheticProvenance(pos.provenance)) continue
       const key = `${pos.exchange}|${pos.tradingsymbol}|${pos.product || ""}`
       const cur = agg.get(key) ?? { qty: 0, cost: 0n, absQty: 0 }
       cur.qty += pos.quantity

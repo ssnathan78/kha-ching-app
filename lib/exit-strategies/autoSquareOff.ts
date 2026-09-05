@@ -17,7 +17,10 @@ import {
 } from "../kiteUtils"
 import logger from "../logger"
 import { jobExecutions } from "../schema"
-import { withRemoteRetry } from "../utils"
+import { getOpenPositions } from "../trading/ledger"
+import { isPaperStrategy } from "../trading/riskEngine"
+import { getRiskSettings } from "../trading/riskSettings"
+import { isMockOrder, withRemoteRetry } from "../utils"
 
 export async function doDeletePendingOrders(orders: KiteOrder[], kite: any) {
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
@@ -50,8 +53,29 @@ export async function doSquareOffPositions(
   kite: any,
   initialJobData: Partial<SUPPORTED_TRADE_CONFIG>
 ) {
-  const openPositions = await withRemoteRetry(() => kite.getPositions())
-  const { net } = openPositions
+  const strategy = (initialJobData as { strategy?: string }).strategy
+  const settings = await getRiskSettings()
+  const paper = isMockOrder() || isPaperStrategy(settings, strategy)
+  let net: Array<{ tradingsymbol: string; exchange: string; product: string; quantity: number }> =
+    []
+  if (!paper) {
+    try {
+      const openPositions = await withRemoteRetry(() => kite.getPositions())
+      net = openPositions.net || []
+    } catch (e) {
+      logger.warn("[doSquareOffPositions] kite positions unavailable", e)
+    }
+  }
+  if (!net.length) {
+    net = (await getOpenPositions())
+      .filter(p => p.quantity !== 0 && (!strategy || p.strategy === strategy))
+      .map(p => ({
+        tradingsymbol: p.tradingsymbol,
+        exchange: p.exchange,
+        product: p.product || "",
+        quantity: p.quantity,
+      }))
+  }
   //orders would always have +ve value and filter based on transaction_type
   const openPositionsForOrders = orders
     .filter(o => o)
@@ -63,9 +87,9 @@ export async function doSquareOffPositions(
           openPosition.product === order.product &&
           (openPosition.quantity < 0
             ? // openPosition is short order
-              order.transaction_type == "SELL"
+              order.transaction_type === "SELL"
             : // long order
-              order.transaction_type == "BUY")
+              order.transaction_type === "BUY")
       )
 
       if (!position) {
@@ -78,7 +102,7 @@ export async function doSquareOffPositions(
         quantity: position.quantity < 0 ? absquantity * -1 : absquantity,
       }
     })
-    .filter(o => o)
+    .filter((row): row is NonNullable<typeof row> => row != null)
 
   const remoteRes = await Promise.all(
     openPositionsForOrders.map(async order => {
@@ -91,6 +115,8 @@ export async function doSquareOffPositions(
         order_type: kite.ORDER_TYPE_MARKET,
         product: order.product,
         tag: initialJobData.orderTag,
+        purpose: "FLATTEN",
+        strategy,
       }
       // console.log('square off position...', exitOrder)
       return remoteOrderSuccessEnsurer({
@@ -118,8 +144,31 @@ export async function doSquareOffPositions(
 
 //Squares off the order after checking if the position is open
 async function squareOffOrder(order: KiteOrder, kite: any) {
-  const openPositions = await withRemoteRetry(() => kite.getPositions())
-  const { net } = openPositions
+  const tagRows = order.tag
+    ? await db
+        .select({ strategy: jobExecutions.strategy })
+        .from(jobExecutions)
+        .where(eq(jobExecutions.orderTag, order.tag))
+    : []
+  const strategy = tagRows[0]?.strategy
+  let net: Array<{ tradingsymbol: string; exchange: string; product: string; quantity: number }> =
+    []
+  try {
+    const openPositions = await withRemoteRetry(() => kite.getPositions())
+    net = openPositions.net || []
+  } catch (e) {
+    logger.warn("[squareOffOrder] kite positions unavailable", e)
+  }
+  if (!net.length) {
+    net = (await getOpenPositions())
+      .filter(p => p.quantity !== 0)
+      .map(p => ({
+        tradingsymbol: p.tradingsymbol,
+        exchange: p.exchange,
+        product: p.product || "",
+        quantity: p.quantity,
+      }))
+  }
   const openPositionsforOrders = net.filter(
     position =>
       position.tradingsymbol === order.tradingsymbol &&
@@ -127,12 +176,12 @@ async function squareOffOrder(order: KiteOrder, kite: any) {
       position.product === order.product &&
       (position.quantity < 0
         ? // openPosition is short order
-          order.transaction_type == "SELL"
+          order.transaction_type === "SELL"
         : // long order
-          order.transaction_type == "BUY")
+          order.transaction_type === "BUY")
   )
 
-  if (openPositionsforOrders.length == 0) {
+  if (openPositionsforOrders.length === 0) {
     return Promise.resolve("No open positions.")
   }
 
@@ -148,6 +197,7 @@ async function squareOffOrder(order: KiteOrder, kite: any) {
     product: order.product,
     tag: order.tag,
     purpose: "FLATTEN",
+    strategy,
   }
   logger.info(`Placing order ${exitOrder.tradingsymbol} and quantity - ${exitOrder.quantity}`)
   await withRemoteRetry(() => placeOrder(kite, kite.VARIETY_REGULAR, exitOrder as PlaceOrderParams))
@@ -169,7 +219,7 @@ export async function squareOffTag(
     return "Not squaring off"
   }
   const orderSummarybyTag = (await getCompletedOrdersbyTag(orderTag, kite)).filter(
-    summary => summary.quantity != 0
+    summary => summary.quantity !== 0
   )
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
   // orderSummarybyTag.filter(summary=>(summary.quantity!=0))

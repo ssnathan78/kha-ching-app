@@ -20,11 +20,11 @@ Flatten / SL / EXIT roles **skip** halt, trading-disabled, daily-loss, drawdown,
 
 | | |
 |--|--|
-| Protects | Accidental real-money orders |
-| Enforced | `MOCK_ORDERS=true` short-circuits `placeOrder`. Live is Desk “Allow live orders” plus `MOCK_ORDERS=false`. |
+| Protects | Accidental real-money orders; new strategies in production with live quotes |
+| Enforced | Triple gate: process `MOCK_ORDERS=false` **and** Desk `allowLiveOrders` **and** per-strategy `executionMode=LIVE`. Unknown strategies default PAPER. Paper still uses live LTP and writes the ledger (`provenance` PAPER or MOCK). |
 | Trigger | `LIVE_BLOCKED` |
-| Config | `.env` + desk setting (default `allowLiveOrders=false`) |
-| Tests | `riskEngine.test.ts` live-gate cases |
+| Config | `.env` + Desk → Risk execution select (default PAPER) + `allowLiveOrders=false` |
+| Tests | `riskEngine.test.ts` live-gate and `isPaperStrategy` cases |
 
 ## Desk halt / kill switch
 

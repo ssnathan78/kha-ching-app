@@ -70,6 +70,7 @@ flowchart TB
 2. **SameSite=Lax** — sufficient for same-origin app; logout/revoke restricted to POST.
 3. **In-memory rate limits** — per-process; use reverse-proxy limits for multi-instance production.
 4. **Docker dev Postgres/Redis host ports** — convenience only; do not publish 5432/6379 on production VPS (see [DEPLOYMENT.md](DEPLOYMENT.md)).
+5. **Paper vs live** — a strategy is live only if `MOCK_ORDERS=false`, Desk “Allow live orders”, and that strategy’s `executionMode=LIVE`. New/unknown strategies stay PAPER. Reconcile ignores PAPER/MOCK rows when comparing to Kite.
 
 ## Verification
 

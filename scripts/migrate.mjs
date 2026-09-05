@@ -1,14 +1,33 @@
 import "dotenv/config"
+import { existsSync } from "node:fs"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
-import { dirname, resolve } from "path"
 import pg from "pg"
-import { fileURLToPath } from "url"
 
 const { Pool } = pg
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const url = process.env.DATABASE_URL?.trim()
+/** Same host remap as `__tests__/loadEnv.js` so Windows `yarn migrate` hits Compose. */
+const COMPOSE_HOST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/trading_db"
+
+function hostReachableDatabaseUrl(raw) {
+  if (!raw) return raw
+  if (existsSync("/.dockerenv")) return raw
+  if (raw.includes("@db:") || raw.includes("@postgres:")) return COMPOSE_HOST_DATABASE_URL
+  try {
+    const parsed = new URL(raw)
+    if (parsed.hostname === "db" || parsed.hostname === "postgres") {
+      return COMPOSE_HOST_DATABASE_URL
+    }
+  } catch {
+    // keep original
+  }
+  return raw
+}
+
+const url = hostReachableDatabaseUrl(process.env.DATABASE_URL?.trim())
 if (!url) {
   console.error("DATABASE_URL is not set")
   process.exit(1)

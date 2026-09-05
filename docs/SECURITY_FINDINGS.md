@@ -19,6 +19,7 @@ Tracked findings from the security hardening pass. Threat model: [SECURITY_REVIE
 | SEC-13 | Low | Logout APIs | Any HTTP method | POST-only on `/api/logout` and `/api/revoke_session` | **Fixed** |
 | SEC-14 | Low | CI | No dependency audit | `yarn npm audit` in `.github/workflows/ci.yml` | **Fixed** |
 | SEC-15 | Info | Docker Compose | Postgres/Redis on host ports | Documented in [DEPLOYMENT.md](DEPLOYMENT.md) | **Documented** |
+| SEC-16 | Medium | `scripts/rewrite-prod-env.py` | Rewrite dropped `HEALTH_CHECK_TOKEN` / `BIND_HOST` | Preserve those keys when present | **Fixed** |
 
 ## Accepted by design
 

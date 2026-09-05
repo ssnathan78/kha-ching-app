@@ -70,3 +70,7 @@ Never place a new order as part of reconciliation.
 `MOCK_ORDERS=true` still writes ledger rows (intent + submitted). Broker
 fetches are skipped. Reconciliation then only applies local unapplied fills
 and historical `transactions`. This keeps the desk inspectable in local HTTP.
+
+Paper-strategy rows (`provenance` PAPER or MOCK) are excluded from Kite
+quantity/order compares so a paper book cannot look like a missing broker
+position. Live/RECONCILED/MIGRATED rows are still compared.

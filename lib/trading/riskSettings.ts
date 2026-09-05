@@ -26,6 +26,7 @@ function mergeStrategyLimits(raw: unknown): Record<RiskStrategyKey, StrategyRisk
       enabled: row.enabled ?? DEFAULT_STRATEGY_LIMITS.enabled,
       halted: row.halted ?? DEFAULT_STRATEGY_LIMITS.halted,
       haltReason: row.haltReason ?? null,
+      executionMode: row.executionMode === "LIVE" ? "LIVE" : "PAPER",
       maxLots: Number.isFinite(Number(row.maxLots))
         ? Number(row.maxLots)
         : DEFAULT_STRATEGY_LIMITS.maxLots,

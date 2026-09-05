@@ -78,7 +78,21 @@ export type PositionEventKind =
   | "REVERSED"
   | "MARKED"
 
-export type Provenance = "LIVE" | "MIGRATED" | "RECONCILED" | "MOCK"
+export type Provenance = "LIVE" | "MIGRATED" | "RECONCILED" | "MOCK" | "PAPER"
+
+export type TradeBookFilter = "ALL" | "PAPER" | "LIVE"
+
+export function isSyntheticProvenance(provenance: string | null | undefined): boolean {
+  return provenance === "PAPER" || provenance === "MOCK"
+}
+
+export function provenanceInBook(
+  provenance: string | null | undefined,
+  book: Exclude<TradeBookFilter, "ALL">
+): boolean {
+  if (book === "PAPER") return provenance === "PAPER" || provenance === "MOCK"
+  return provenance === "LIVE" || provenance === "RECONCILED" || provenance === "MIGRATED"
+}
 
 export type FeeType = "BROKERAGE" | "EXCHANGE" | "STT" | "GST" | "STAMP" | "OTHER"
 

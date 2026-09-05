@@ -64,6 +64,13 @@
       "when": 1756980000008,
       "tag": "0007_risk_per_strategy_and_chase_instruments",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1756980000009,
+      "tag": "0008_position_provenance",
+      "breakpoints": true
     }
   ]
 }

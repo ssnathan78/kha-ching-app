@@ -3,8 +3,12 @@ import {
   Box,
   Button,
   Checkbox,
+  FormControl,
   FormControlLabel,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   TextField,
   Typography,
@@ -189,6 +193,39 @@ export default function RiskControls({
                 }
                 label="Strategy enabled"
               />
+              <FormControl size="small" sx={{ maxWidth: 360 }}>
+                <InputLabel id={`exec-${key}`}>Execution</InputLabel>
+                <Select
+                  labelId={`exec-${key}`}
+                  label="Execution"
+                  value={row.executionMode ?? "PAPER"}
+                  onChange={e =>
+                    setSettings({
+                      ...settings,
+                      strategies: {
+                        ...settings.strategies,
+                        [key]: {
+                          ...row,
+                          executionMode: e.target.value === "LIVE" ? "LIVE" : "PAPER",
+                        },
+                      },
+                    })
+                  }
+                >
+                  <MenuItem value="PAPER">Paper — live quotes, no Kite order</MenuItem>
+                  <MenuItem value="LIVE">Live — send to broker</MenuItem>
+                </Select>
+              </FormControl>
+              {row.executionMode === "LIVE" ? (
+                <Alert severity="warning">
+                  Live also needs MOCK_ORDERS=false in the process and “Allow live orders” above.
+                </Alert>
+              ) : (
+                <Typography color="text.secondary" variant="body2">
+                  Paper fills the ledger at the order price / LTP. Positions and trade history keep
+                  provenance PAPER (or MOCK if the whole process is MOCK_ORDERS=true).
+                </Typography>
+              )}
               <FormControlLabel
                 control={
                   <Checkbox

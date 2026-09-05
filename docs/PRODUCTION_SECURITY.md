@@ -73,7 +73,7 @@ Local Docker uses `SESSION_COOKIE_SECURE=false` on purpose ([LOCAL.md](./LOCAL.m
 |---|---|
 | `NODE_ENV` | `production` |
 | `ALLOWED_KITE_USER_ID` | Required; blocks other Kite accounts |
-| `MOCK_ORDERS` | `true` unless you intend live orders **and** Desk → Risk “Allow live orders” |
+| `MOCK_ORDERS` | `true` unless you intend live orders **and** Desk → Risk “Allow live orders” **and** that strategy is Live |
 | Rate limit | In-process on sensitive routes (`lib/rateLimit.js`) |
 | `/queues` | Session-gated on `server.js` |
 | `/api/health` | Optional bearer / `x-health-token` |

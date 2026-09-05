@@ -5,7 +5,6 @@ import {
   DEFAULT_STRATEGY_LIMITS,
   RISK_STRATEGY_KEYS,
   type RiskSettings,
-  type RiskStrategyKey,
   type StrategyRiskLimits,
 } from "../../../lib/trading/riskEngine"
 import {
@@ -37,6 +36,7 @@ function sanitizeStrategyLimits(raw: unknown): RiskSettings["strategies"] | unde
       halted: typeof row.halted === "boolean" ? row.halted : DEFAULT_STRATEGY_LIMITS.halted,
       haltReason:
         typeof row.haltReason === "string" || row.haltReason === null ? row.haltReason : null,
+      executionMode: row.executionMode === "LIVE" ? "LIVE" : "PAPER",
       maxLots: Number.isFinite(Number(row.maxLots))
         ? Number(row.maxLots)
         : DEFAULT_STRATEGY_LIMITS.maxLots,

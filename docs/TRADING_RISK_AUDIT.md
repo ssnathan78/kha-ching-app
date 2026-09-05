@@ -105,7 +105,7 @@ Adversarial “make it lose fast without a software bug”: short a 20-lot strad
 | R1 | Critical | No independent pre-trade risk layer | **Fixed** — `evaluateOrder` in `placeOrder` |
 | R2 | Critical | `placeOrder` always called Kite; `MOCK_ORDERS` only in ensurer | **Fixed** — mock short-circuit in `placeOrder` |
 | R3 | Critical | Chase SL breach did not flatten | **Fixed** — MARKET flatten then status update |
-| R4 | High | Live vs paper only one env flag | **Fixed** — `MOCK_ORDERS` (process) + Desk `allowLiveOrders` |
+| R4 | High | Live vs paper only one env flag | **Updated** — process `MOCK_ORDERS` + desk `allowLiveOrders` + per-strategy `executionMode` (default PAPER) |
 | R5 | High | Unbounded straddle skew recursion | **Fixed** — 250 attempt cap + market hours |
 | R6 | High | Strangle default NO_SL | **Fixed** for new defaults; NO_SL now requires ASO |
 | R7 | High | Rollback defaults false (naked leftover) | **Fixed** for new defaults |
@@ -118,6 +118,10 @@ Adversarial “make it lose fast without a software bug”: short a 20-lot strad
 | R14 | Med | Chase `placeKiteOrder` skips freeze-qty split / ensurer | Residual — Chase size should stay under freeze |
 | R15 | Low | Fees/STT not in risk notional | Residual — notional uses premium/LTP only |
 | R16 | Low | No order-book depth / liquidity check | Residual — personal size assumed small vs Nifty fut/opt |
+| R17 | High | Paper ensurer skipped `placeOrder` then polled Kite for `paper:` ids | **Fixed** — paper returns a synthetic COMPLETE from `placeOrder` |
+| R18 | High | Exits without `strategy` defaulted PAPER (live flatten/SL would not hit Kite) | **Fixed** — Chase tag / job strategy inferred; `placeSL`/`placeKiteOrder` set `SUBSCRIBE_CHASE` |
+| R19 | Med | Recon compared paper ledger qty to Kite | **Fixed** — PAPER/MOCK excluded from broker compare |
+| R20 | Med | Portfolio chips / daily_sessions mix paper + live | Residual — Desk tabs filter; header totals do not |
 
 ## 5. Portfolio risks
 
@@ -145,7 +149,7 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 
 1. A gap through every stop on short options or Chase futures.
 2. Kite accepting an order that this process never saw (manual app / another session) until recon.
-3. Operator sets `MOCK_ORDERS=false` and enables Desk “Allow live orders” on a funded account.
+3. Operator sets `MOCK_ORDERS=false`, enables Desk “Allow live orders”, **and** flips a strategy to Live on a funded account.
 4. Redis/DB outage after an order is live — flatten may fail; kill still tries.
 5. Point-based max-loss firing late or not at all if LTPs are stale (risk engine does not read `targetPnL`).
 6. Two things failing together: e.g. stale Kite positions API **and** a strategy that thinks it is flat.
@@ -156,13 +160,16 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 
 **What happens:** SL/exit/flatten still allowed when the desk is halted. New entries are rejected. Daily loss / drawdown halt the desk after the damage is already on the book.
 
-**What prevents catastrophe:** lot/qty/notional caps, NO_SL+ASO rule, mock/live dual gate, kill + halt, flatten-on-Chase-SL.
+**What prevents catastrophe:** lot/qty/notional caps, NO_SL+ASO rule, mock/live/paper triple gate, kill + halt, flatten-on-Chase-SL.
 
 **Can that protection fail?** Yes if Kite is down, if flatten is rejected, or if the operator raised the caps. Two-failure example: halt flag not persisted **and** workers still punching — mitigated by `placeOrder` reading `risk_settings` on every order; if that table is unreadable, settings fail closed (halted).
 
 ## 9. Recommended remaining work (not done)
 
-- Route Chase entries through `remoteOrderSuccessEnsurer` (freeze split + ABORT).
+- Paper MARKET fills still use order price / trigger / LTP-if-passed / 0. Callers should pass `ltp` on `placeOrder`.
+- Route Chase entries through `remoteOrderSuccessEnsurer` (freeze split + ABORT). Chase paper now falls back to the ledger when Kite has no position.
+- Desk portfolio chips and daily sessions still mix paper + live P&L. Trade/position/order tabs filter by book.
 - Freshness on straddle/strangle LTP at punch (risk already supports `ltp`/`ltpAt` when callers pass it).
-- Recon-driven strategy halt on persistent quantity mismatch.
+- Recon-driven strategy halt on persistent **live** quantity mismatch (paper rows are excluded from Kite compare).
 - Operator runbook for “Kite down, position open”.
+- New strategy keys must be added to `RISK_STRATEGY_KEYS` to appear on Desk → Risk; until then they still default PAPER.

@@ -426,6 +426,7 @@ export const positions = pgTable("positions", {
   lastFillAt: timestamp("last_fill_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   status: text("status").notNull().default("FLAT"),
+  provenance: text("provenance").notNull().default("LIVE"),
 })
 
 export const positionEvents = pgTable("position_events", {

@@ -3,7 +3,11 @@ import {
   Box,
   Button,
   Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Tab,
   Table,
@@ -12,6 +16,7 @@ import {
   TableHead,
   TableRow,
   Tabs,
+  TextField,
   Typography,
 } from "@mui/material"
 import { useState } from "react"
@@ -30,6 +35,27 @@ function money(value: string | number | null | undefined) {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 })
 }
 
+function istYmd(d = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d)
+}
+
+function rangeForPreset(preset: string): { from?: string; to?: string } {
+  const today = istYmd()
+  const [y, m] = today.split("-").map(Number)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  if (preset === "month") {
+    return { from: `${y}-${pad(m)}-01`, to: `${today}T23:59:59+05:30` }
+  }
+  if (preset === "quarter") {
+    const qStart = Math.floor((m - 1) / 3) * 3 + 1
+    return { from: `${y}-${pad(qStart)}-01`, to: `${today}T23:59:59+05:30` }
+  }
+  if (preset === "year") {
+    return { from: `${y}-01-01`, to: `${today}T23:59:59+05:30` }
+  }
+  return {}
+}
+
 function when(value: string | Date | null | undefined) {
   if (!value) return "—"
   return new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -42,13 +68,34 @@ export default function DeskPage() {
   const [reconMsg, setReconMsg] = useState<string | null>(null)
   const [resumeOpen, setResumeOpen] = useState(false)
   const [riskBusy, setRiskBusy] = useState(false)
+  const [tradeBook, setTradeBook] = useState<"ALL" | "PAPER" | "LIVE">("ALL")
+  const [tradePreset, setTradePreset] = useState<"all" | "month" | "quarter" | "year" | "custom">(
+    "all"
+  )
+  const [tradeFrom, setTradeFrom] = useState("")
+  const [tradeTo, setTradeTo] = useState("")
 
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR(
     user?.isLoggedIn ? "/api/desk/portfolio" : null
   )
-  const { data: positionData } = useSWR(user?.isLoggedIn ? "/api/desk/positions" : null)
-  const { data: orderData } = useSWR(user?.isLoggedIn ? "/api/desk/orders" : null)
-  const { data: tradeData } = useSWR(user?.isLoggedIn ? "/api/desk/trades" : null)
+  const bookQs = tradeBook === "ALL" ? "" : `?book=${tradeBook}`
+  const { data: positionData } = useSWR(user?.isLoggedIn ? `/api/desk/positions${bookQs}` : null)
+  const { data: orderData } = useSWR(user?.isLoggedIn ? `/api/desk/orders${bookQs}` : null)
+  const tradeRange =
+    tradePreset === "custom"
+      ? {
+          from: tradeFrom ? `${tradeFrom}T00:00:00+05:30` : undefined,
+          to: tradeTo ? `${tradeTo}T23:59:59+05:30` : undefined,
+        }
+      : rangeForPreset(tradePreset)
+  const tradeQuery = new URLSearchParams()
+  if (tradeBook !== "ALL") tradeQuery.set("book", tradeBook)
+  if (tradeRange.from) tradeQuery.set("from", tradeRange.from)
+  if (tradeRange.to) tradeQuery.set("to", tradeRange.to)
+  const tradeQs = tradeQuery.toString()
+  const { data: tradeData } = useSWR(
+    user?.isLoggedIn ? `/api/desk/trades${tradeQs ? `?${tradeQs}` : ""}` : null
+  )
   const { data: activityData } = useSWR(user?.isLoggedIn ? "/api/desk/activity" : null)
   const { data: riskData, mutate: mutateRisk } = useSWR(user?.isLoggedIn ? "/api/desk/risk" : null)
 
@@ -197,6 +244,61 @@ export default function DeskPage() {
         </Tabs>
       </Paper>
 
+      {tab === 0 || tab === 1 || tab === 2 ? (
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Book</InputLabel>
+            <Select
+              label="Book"
+              value={tradeBook}
+              onChange={e => setTradeBook(e.target.value as typeof tradeBook)}
+            >
+              <MenuItem value="ALL">All books</MenuItem>
+              <MenuItem value="PAPER">Paper / mock</MenuItem>
+              <MenuItem value="LIVE">Live / recon</MenuItem>
+            </Select>
+          </FormControl>
+          {tab === 2 ? (
+            <>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Period</InputLabel>
+                <Select
+                  label="Period"
+                  value={tradePreset}
+                  onChange={e => setTradePreset(e.target.value as typeof tradePreset)}
+                >
+                  <MenuItem value="all">All time</MenuItem>
+                  <MenuItem value="month">This month</MenuItem>
+                  <MenuItem value="quarter">This quarter</MenuItem>
+                  <MenuItem value="year">This year</MenuItem>
+                  <MenuItem value="custom">Custom</MenuItem>
+                </Select>
+              </FormControl>
+              {tradePreset === "custom" ? (
+                <>
+                  <TextField
+                    size="small"
+                    type="date"
+                    label="From"
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    value={tradeFrom}
+                    onChange={e => setTradeFrom(e.target.value)}
+                  />
+                  <TextField
+                    size="small"
+                    type="date"
+                    label="To"
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    value={tradeTo}
+                    onChange={e => setTradeTo(e.target.value)}
+                  />
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </Stack>
+      ) : null}
+
       {tab === 0 ? (
         <Paper>
           <Table size="small">
@@ -205,6 +307,7 @@ export default function DeskPage() {
                 <TableCell>Symbol</TableCell>
                 <TableCell>Product</TableCell>
                 <TableCell>Strategy</TableCell>
+                <TableCell>Book</TableCell>
                 <TableCell align="right">Qty</TableCell>
                 <TableCell align="right">Avg</TableCell>
                 <TableCell align="right">Mark</TableCell>
@@ -219,6 +322,7 @@ export default function DeskPage() {
                   <TableCell>{String(row.tradingsymbol)}</TableCell>
                   <TableCell>{String(row.product || "—")}</TableCell>
                   <TableCell>{String(row.strategy || "—")}</TableCell>
+                  <TableCell>{String(row.provenance || "—")}</TableCell>
                   <TableCell align="right">{String(row.quantity)}</TableCell>
                   <TableCell align="right">{money(row.averageEntryPrice as string)}</TableCell>
                   <TableCell align="right">{money(row.markPrice as string)}</TableCell>
@@ -249,6 +353,7 @@ export default function DeskPage() {
                 <TableCell align="right">Filled / Qty</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Purpose</TableCell>
+                <TableCell>Book</TableCell>
                 <TableCell>Tag</TableCell>
                 <TableCell>Broker id</TableCell>
               </TableRow>
@@ -265,6 +370,7 @@ export default function DeskPage() {
                   </TableCell>
                   <TableCell>{String(row.orderType || "—")}</TableCell>
                   <TableCell>{String(row.purpose)}</TableCell>
+                  <TableCell>{String(row.provenance || "—")}</TableCell>
                   <TableCell>{String(row.orderTag || "—")}</TableCell>
                   <TableCell>{String(row.brokerOrderId || "—")}</TableCell>
                 </TableRow>
@@ -284,6 +390,7 @@ export default function DeskPage() {
                 <TableCell>Symbol</TableCell>
                 <TableCell>Dir</TableCell>
                 <TableCell>Strategy</TableCell>
+                <TableCell>Book</TableCell>
                 <TableCell align="right">Entry / Exit qty</TableCell>
                 <TableCell align="right">Avg in / out</TableCell>
                 <TableCell align="right">Net P&L</TableCell>
@@ -299,6 +406,7 @@ export default function DeskPage() {
                   <TableCell>{String(row.tradingsymbol)}</TableCell>
                   <TableCell>{String(row.direction)}</TableCell>
                   <TableCell>{String(row.strategy || "—")}</TableCell>
+                  <TableCell>{String(row.provenance || "—")}</TableCell>
                   <TableCell align="right">
                     {String(row.entryQty)} / {String(row.exitQty)}
                   </TableCell>

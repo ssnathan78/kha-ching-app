@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm"
+import { and, desc, eq, gte, lte, or, type SQL } from "drizzle-orm"
 
 import { db, pool } from "../drizzle"
 import {
@@ -13,7 +13,7 @@ import {
 } from "../schema"
 import { marketValue, unrealizedPnl } from "./accounting"
 import { type Money, moneyAdd, moneyFromUnknown, moneyToString, moneyZero } from "./money"
-import { DEFAULT_ACCOUNT_ID } from "./types"
+import { DEFAULT_ACCOUNT_ID, provenanceInBook, type TradeBookFilter } from "./types"
 
 export function istSessionDate(at = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -122,19 +122,31 @@ export async function computePortfolio(marks?: Map<string, string>): Promise<Por
 /** P&L and open count for one strategy only — strategies do not share risk books. */
 export async function computeStrategyRiskBook(
   strategy: string,
-  marks?: Map<string, string>
+  marks?: Map<string, string>,
+  book: TradeBookFilter = "ALL"
 ): Promise<{ netPnl: number; drawdownPct: number; openPositionCount: number }> {
-  const view = await computePortfolio(marks)
-  const bucket = view.strategyPnl.find(row => row.strategy === strategy)
-  const realized = Number(bucket?.realized ?? 0)
-  const unrealized = Number(bucket?.unrealized ?? 0)
-  const netPnl = realized + unrealized
+  const rows = await db.select().from(positions)
+  let realized = moneyZero()
+  let unrealized = moneyZero()
+  let openPositionCount = 0
+  for (const pos of rows) {
+    if (pos.strategy !== strategy) continue
+    if (book !== "ALL" && !provenanceInBook(pos.provenance, book)) continue
+    realized = moneyAdd(realized, moneyFromUnknown(pos.realizedPnl))
+    const mark =
+      marks?.get(`${pos.exchange}:${pos.tradingsymbol}`) ??
+      pos.markPrice ??
+      pos.averageEntryPrice ??
+      "0"
+    unrealized = moneyAdd(
+      unrealized,
+      unrealizedPnl(pos.quantity, moneyFromUnknown(pos.averageEntryPrice), moneyFromUnknown(mark))
+    )
+    if (pos.quantity !== 0) openPositionCount += 1
+  }
+  const netPnl = Number(moneyToString(moneyAdd(realized, unrealized)))
   const peak = Math.max(Math.abs(netPnl), 1)
   const drawdownPct = netPnl < 0 ? Math.abs(netPnl) / peak : 0
-  const open = await db.select().from(positions)
-  const openPositionCount = open.filter(
-    pos => pos.strategy === strategy && pos.quantity !== 0
-  ).length
   return { netPnl, drawdownPct, openPositionCount }
 }
 
@@ -262,16 +274,80 @@ export async function upsertDailySession(view: PortfolioView) {
   )
 }
 
-export async function listOrders(limit = 100) {
-  return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit)
+export type { TradeBookFilter }
+
+export type TradeListQuery = {
+  limit?: number
+  book?: TradeBookFilter
+  from?: Date | string | null
+  to?: Date | string | null
 }
 
-export async function listPositions() {
-  return db.select().from(positions).orderBy(desc(positions.updatedAt))
+function orderBookClause(book?: TradeBookFilter): SQL | undefined {
+  if (book === "PAPER") {
+    return or(eq(orders.provenance, "PAPER"), eq(orders.provenance, "MOCK"))
+  }
+  if (book === "LIVE") {
+    return or(
+      eq(orders.provenance, "LIVE"),
+      eq(orders.provenance, "RECONCILED"),
+      eq(orders.provenance, "MIGRATED")
+    )
+  }
+  return undefined
 }
 
-export async function listTrades(limit = 100) {
-  return db.select().from(trades).orderBy(desc(trades.entryAt)).limit(limit)
+function positionBookClause(book?: TradeBookFilter): SQL | undefined {
+  if (book === "PAPER") {
+    return or(eq(positions.provenance, "PAPER"), eq(positions.provenance, "MOCK"))
+  }
+  if (book === "LIVE") {
+    return or(
+      eq(positions.provenance, "LIVE"),
+      eq(positions.provenance, "RECONCILED"),
+      eq(positions.provenance, "MIGRATED")
+    )
+  }
+  return undefined
+}
+
+export async function listOrders(limitOrQuery: number | TradeListQuery = 100) {
+  const opts: TradeListQuery =
+    typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
+  const limit = opts.limit ?? 200
+  const bookClause = orderBookClause(opts.book)
+  return db.select().from(orders).where(bookClause).orderBy(desc(orders.createdAt)).limit(limit)
+}
+
+export async function listPositions(book: TradeBookFilter = "ALL") {
+  const bookClause = positionBookClause(book)
+  return db.select().from(positions).where(bookClause).orderBy(desc(positions.updatedAt))
+}
+
+function tradeBookClause(book?: TradeBookFilter): SQL | undefined {
+  if (book === "PAPER") {
+    return or(eq(trades.provenance, "PAPER"), eq(trades.provenance, "MOCK"))
+  }
+  if (book === "LIVE") {
+    return or(
+      eq(trades.provenance, "LIVE"),
+      eq(trades.provenance, "RECONCILED"),
+      eq(trades.provenance, "MIGRATED")
+    )
+  }
+  return undefined
+}
+
+export async function listTrades(query: number | TradeListQuery = 100) {
+  const opts: TradeListQuery = typeof query === "number" ? { limit: query } : query
+  const limit = opts.limit ?? 200
+  const clauses: SQL[] = []
+  const bookClause = tradeBookClause(opts.book)
+  if (bookClause) clauses.push(bookClause)
+  if (opts.from) clauses.push(gte(trades.entryAt, new Date(opts.from)))
+  if (opts.to) clauses.push(lte(trades.entryAt, new Date(opts.to)))
+  const where = clauses.length ? and(...clauses) : undefined
+  return db.select().from(trades).where(where).orderBy(desc(trades.entryAt)).limit(limit)
 }
 
 export async function listDecisions(limit = 100) {

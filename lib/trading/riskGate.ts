@@ -10,12 +10,14 @@ import { computeStrategyRiskBook } from "./portfolio"
 import {
   evaluateOrder,
   inferOrderRole,
+  isPaperStrategy,
   type OrderRole,
   type RiskIntent,
   RiskRejectedError,
   type RiskSettings,
 } from "./riskEngine"
 import { getRiskSettings, haltStrategy } from "./riskSettings"
+import { isSyntheticProvenance } from "./types"
 
 export async function assertOrderAllowed(input: {
   tradingsymbol?: string
@@ -74,9 +76,9 @@ export async function assertOrderAllowed(input: {
   const nowAt = now()
   const minuteAgo = new Date(nowAt.getTime() - 60_000)
 
-  const [openOrds, recent, dup, jobRows] = await Promise.all([
+  const [openOrdsRaw, recentRaw, dupRaw, jobRows] = await Promise.all([
     db
-      .select({ id: orders.id })
+      .select({ id: orders.id, provenance: orders.provenance })
       .from(orders)
       .where(
         inArray(orders.status, [
@@ -89,12 +91,13 @@ export async function assertOrderAllowed(input: {
         ])
       ),
     db
-      .select({ n: sql<number>`count(*)::int` })
+      .select({ n: sql<number>`count(*)::int`, provenance: orders.provenance })
       .from(orders)
-      .where(gte(orders.createdAt, minuteAgo)),
+      .where(gte(orders.createdAt, minuteAgo))
+      .groupBy(orders.provenance),
     input.tag
       ? db
-          .select({ id: orders.id })
+          .select({ id: orders.id, provenance: orders.provenance })
           .from(orders)
           .where(
             and(
@@ -111,8 +114,8 @@ export async function assertOrderAllowed(input: {
               ])
             )
           )
-          .limit(1)
-      : Promise.resolve([]),
+          .limit(5)
+      : Promise.resolve([] as { id: string; provenance: string }[]),
     input.tag
       ? db
           .select({
@@ -131,23 +134,35 @@ export async function assertOrderAllowed(input: {
   if (!intent.strategy && job?.strategy) intent.strategy = job.strategy
   if (!intent.strategy && input.tag === "chase") intent.strategy = "SUBSCRIBE_CHASE"
 
+  const paper = isPaperStrategy(settings, intent.strategy)
+  const sameBook = (provenance: string | null | undefined) =>
+    paper ? isSyntheticProvenance(provenance) : !isSyntheticProvenance(provenance)
+  const openOrds = openOrdsRaw.filter(row => sameBook(row.provenance))
+  const recentOrderCount = recentRaw
+    .filter(row => sameBook(row.provenance))
+    .reduce((n, row) => n + Number(row.n ?? 0), 0)
+  const dup = dupRaw.filter(row => sameBook(row.provenance))
+
   const book = intent.strategy
-    ? await computeStrategyRiskBook(intent.strategy).catch(() => ({
-        netPnl: 0,
-        drawdownPct: 0,
-        openPositionCount: 0,
-      }))
+    ? await computeStrategyRiskBook(intent.strategy, undefined, paper ? "PAPER" : "LIVE").catch(
+        () => ({
+          netPnl: 0,
+          drawdownPct: 0,
+          openPositionCount: 0,
+        })
+      )
     : { netPnl: 0, drawdownPct: 0, openPositionCount: 0 }
 
   const decision = evaluateOrder(intent, {
     settings,
     now: nowAt,
     isMock: isMockOrder(),
+    isPaper: paper,
     marketOpen: isMarketOpen(),
     jobAborted: job?.userOverride === USER_OVERRIDE.ABORT,
     openPositionCount: book.openPositionCount,
     openOrderCount: openOrds.length,
-    recentOrderCount: Number(recent[0]?.n ?? 0),
+    recentOrderCount,
     pendingDuplicate: dup.length > 0 && role === "ENTRY",
     dailyLossInr: Number.isFinite(book.netPnl) ? book.netPnl : 0,
     drawdownPct: Number.isFinite(book.drawdownPct) ? book.drawdownPct : 0,

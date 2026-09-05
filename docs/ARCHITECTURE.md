@@ -178,7 +178,7 @@ See [TRADING_DOMAIN_MODEL.md](./TRADING_DOMAIN_MODEL.md). `transactions` remains
 | `KITE_API_KEY` / `KITE_API_SECRET` | Yes | Kite + queue suffix |
 | `SECRET_COOKIE_PASSWORD` | Yes | Session encryption |
 | `TZ` | Yes | `Asia/Kolkata` |
-| `MOCK_ORDERS` | Recommended | Default true; skips live orders |
+| `MOCK_ORDERS` | Recommended | Default true; this process never calls Kite `placeOrder`. Live also needs Desk allow-live + per-strategy Live |
 | `SESSION_COOKIE_SECURE` | Local HTTP | `false` for http:// |
 | `NEXT_PUBLIC_*` | Optional | Form defaults |
 | `SLACK_WEBHOOK_URL` | Optional | Chase alerts |

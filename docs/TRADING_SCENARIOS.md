@@ -60,7 +60,7 @@ Expected system behavior after guardrails. “Entry” means a new risk-increasi
 
 ## Normal trading
 
-Paper (`MOCK_ORDERS=true`): `placeOrder` records ledger, returns `mock:…`, does not call Kite. Live only if env + desk both allow. Skew/EMA logic unchanged.
+Process paper (`MOCK_ORDERS=true`): `placeOrder` records ledger, returns `paper:…`, does not call Kite. Per-strategy paper (prod with live quotes): same ledger path when Desk execution is Paper, even if `MOCK_ORDERS=false`. Live only if env + desk allow-live + that strategy is Live. Skew/EMA logic unchanged.
 
 ## Highly volatile market
 

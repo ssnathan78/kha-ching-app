@@ -1,6 +1,6 @@
 # Local setup (newbie guide)
 
-This is the path if you are running Kha-Ching on **your PC** with Docker Desktop. You will log in to **real Kite**, see **live prices**, but **not** send live orders (`MOCK_ORDERS=true`).
+This is the path if you are running Kha-Ching on **your PC** with Docker Desktop. You will log in to **real Kite**, see **live prices**, but **not** send live orders (`MOCK_ORDERS=true`). Production can do the same per strategy: Desk → Risk execution **Paper** uses live quotes and writes the ledger, but never calls Kite `placeOrder`.
 
 ## 0. Install Docker Desktop
 
@@ -38,7 +38,7 @@ Open `.env` in an editor. Fill:
 | `NEXT_PUBLIC_APP_URL` | `http://127.0.0.1:3000` |
 | `TZ` | `Asia/Kolkata` |
 
-Leave `DATABASE_URL` / `REDIS_URL` as in the example. **Compose overwrites them inside the app container** to `postgres` and `redis` hostnames. The values in `.env` are for running the app *on the host* without Docker.
+Leave `DATABASE_URL` / `REDIS_URL` as in the example (`localhost`). **Compose overwrites them inside the app container** to `postgres` and `redis` hostnames. If `.env` still uses `db` or `postgres` as the host, `yarn migrate` on Windows rewrites those to `localhost`. Jest does the same via `__tests__/loadEnv.js`.
 
 Never commit `.env`. It is gitignored.
 

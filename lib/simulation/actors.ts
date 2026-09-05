@@ -248,6 +248,8 @@ function maybeEnter(
       settings,
       now: new Date(ctx.nowMs),
       isMock: ctx.paperRisk,
+      // paperRisk=false means "evaluate as live" (LIVE_BLOCKED + market hours).
+      isPaper: ctx.paperRisk,
       marketOpen: isMarketOpen(),
       jobAborted: false,
       openPositionCount: [...ctx.book.positions.values()].filter(p => p.quantity !== 0).length,

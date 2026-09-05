@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto"
+import { randomUUID } from "node:crypto"
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 
 import { db, pool } from "../drizzle"
@@ -695,8 +695,8 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
     if (!pos) {
       const inserted = await client.query(
         `INSERT INTO positions (
-           account_id, job_id, strategy, exchange, tradingsymbol, instrument_token, product, status
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,'FLAT')
+           account_id, job_id, strategy, exchange, tradingsymbol, instrument_token, product, status, provenance
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,'FLAT',$8)
          RETURNING *`,
         [
           fill.account_id,
@@ -706,6 +706,7 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
           fill.tradingsymbol,
           fill.instrument_token,
           fill.product || "",
+          fill.provenance || "LIVE",
         ]
       )
       pos = inserted.rows[0]
@@ -742,7 +743,8 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
          last_fill_at = $9,
          updated_at = now(),
          status = $10,
-         strategy = COALESCE(strategy, $11)
+         strategy = COALESCE(strategy, $11),
+         provenance = COALESCE(provenance, $12)
        WHERE id = $1`,
       [
         pos.id,
@@ -756,6 +758,7 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
         fill.occurred_at,
         nextStatus,
         fill.strategy,
+        fill.provenance || "LIVE",
       ]
     )
 
