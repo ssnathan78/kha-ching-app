@@ -1,0 +1,40 @@
+---
+description: Production Droplet access is read-only by default; never trade or mutate without explicit approval.
+alwaysApply: true
+---
+
+# Production SSH and trading safety
+
+Production is a financially sensitive trading desk. Treat it as **read-only** until the operator explicitly approves a change.
+
+## How to connect
+
+Full operator guide (any tool): `docs/SSH.md`.
+
+Use the local SSH host alias only (never embed IPs, keys, or passwords in the repo or chat):
+
+```bash
+ssh -o BatchMode=yes kha-ching-prod -- <read-only-command>
+```
+
+If `kha-ching-prod` is not in `~/.ssh/config`, stop and ask the operator to add it. Do not invent HostName, User, or IdentityFile.
+
+## Never request or paste
+
+Private SSH keys, passwords, `DATABASE_URL` credentials, `SECRET_COOKIE_PASSWORD`, Kite secrets, session cookies, DigitalOcean tokens, or raw `.env` contents.
+
+For secrets, report only `NAME = configured` or `NAME = missing`.
+
+Safe to report as values: `NODE_ENV`, `MOCK_ORDERS`, `SESSION_COOKIE_SECURE`, `TZ`, `PORT`, `BIND_HOST`.
+
+## Do not run without explicit approval
+
+Restarts, `systemctl`, docker recreate, firewall changes, `yarn migrate`, SQL writes, Redis `FLUSH*`, queue wipes, killing processes, editing `.env`, or anything that can place/modify/cancel a Kite order, change Desk risk, enable live trading (`MOCK_ORDERS=false`), or flatten positions.
+
+Queue names include `KITE_API_KEY`. Do not print BullMQ queue names.
+
+## Workflow
+
+Observe → diagnose → propose → wait for approval → change → verify → document.
+
+Prefer `scripts/production-health-check.sh` and journal/docker logs for the first pass.

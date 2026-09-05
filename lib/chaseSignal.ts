@@ -1,13 +1,17 @@
 import dayjs from "dayjs"
-import logger from "./logger"
-import { toIst, postToSlack } from "./utils"
-import { getPreviousTradingDay, placeKiteOrder, getKiteInstance, cancelOrder, placeSL } from "./kiteUtils"
-import {
-  getChaseStatus,
-  updateChaseStatus,
-  getSubscribeChaseJob,
-} from "./drizzleDbUtils"
+import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "./chaseDefaults"
+import { getChaseEngineConfig, getChaseSettings } from "./chaseSettings"
 import { CHASE_STATUS } from "./constants"
+import { getChaseStatus, getSubscribeChaseJob, updateChaseStatus } from "./drizzleDbUtils"
+import {
+  cancelOrder,
+  getKiteInstance,
+  getPreviousTradingDay,
+  placeKiteOrder,
+  placeSL,
+} from "./kiteUtils"
+import logger from "./logger"
+import { postToSlack, toIst } from "./utils"
 
 export type ChaseInstrument = {
   tradingsymbol: string
@@ -30,11 +34,7 @@ export const getAcceptedPrevEma = async (
 
   const nowIst = toIst(now)
   const currentMinute = nowIst.startOf("minute")
-  const cutoff = nowIst
-    .set("hour", 10)
-    .set("minute", 15)
-    .set("second", 0)
-    .set("millisecond", 0)
+  const cutoff = nowIst.set("hour", 10).set("minute", 15).set("second", 0).set("millisecond", 0)
   const prevCreatedAt = prevRow.createdAt ? toIst(prevRow.createdAt).startOf("minute") : null
   logger.info(
     `[chaseQueue] getAcceptedPrevEma currentMinute=${currentMinute.format("HH:mm")} cutoff=${cutoff.format("HH:mm")} prevCreatedAt=${prevCreatedAt ? prevCreatedAt.format("HH:mm") : "null"}`
@@ -64,18 +64,39 @@ async function placeEntryTriggerOrder(
   triggerPrice: number,
   accessToken: string
 ): Promise<void> {
-  const subscribeChaseJob = await getSubscribeChaseJob()
-  const lots = subscribeChaseJob?.lots ?? 0
+  const settings = await getChaseSettings()
+  if (!chaseAllowsNewEntry(settings.paused)) {
+    logger.info("[generateSignal] Chase is paused — skipping new entry order")
+    return
+  }
+  const lots = settings.lots ?? 0
   if (lots <= 0) {
     logger.info("[generateSignal] not subscribed to chase — skipping entry trigger order")
     return
   }
   const quantity = lots * (instrument.lotSize ?? 1)
 
+  const { entryLimitOffset } = await getChaseEngineConfig()
   const kite = getKiteInstance(accessToken)
   const ltpData = await kite.getLTP(`NFO:${instrument.tradingsymbol}`)
   const ltp: number = (ltpData as any)[`NFO:${instrument.tradingsymbol}`]?.last_price ?? 0
   const alreadyBreached = side === "BUY" ? ltp >= triggerPrice : ltp <= triggerPrice
+
+  const { recordDecision } = await import("./trading/ledger")
+  await recordDecision({
+    strategy: "SUBSCRIBE_CHASE",
+    tradingsymbol: instrument.tradingsymbol,
+    exchange: "NFO",
+    side,
+    action: "ENTER",
+    intent: alreadyBreached ? `MARKET ${side}` : `SL ${side} @ ${triggerPrice}`,
+    reason: alreadyBreached ? "trigger already breached" : "EMA/buffer entry",
+    riskResult: "PASSED",
+    features: { ema: instrument.ema, lastClose: instrument.lastClose, triggerPrice, ltp },
+    proposedQty: quantity,
+    proposedPrice: triggerPrice,
+    idempotencyKey: `chase-enter:${instrument.tradingsymbol}:${side}:${triggerPrice}:${quantity}:${alreadyBreached ? "mkt" : "sl"}`,
+  })
 
   if (alreadyBreached) {
     logger.info(
@@ -102,7 +123,7 @@ async function placeEntryTriggerOrder(
       order_type: "SL",
       product: "NRML",
       trigger_price: triggerPrice,
-      price: side === "BUY" ? triggerPrice + 5 : triggerPrice - 5,
+      price: side === "BUY" ? triggerPrice + entryLimitOffset : triggerPrice - entryLimitOffset,
       tag: "chase",
     } as any)
   }
@@ -111,19 +132,52 @@ async function placeEntryTriggerOrder(
 export const generateSignal = async (
   instruments: ChaseInstrument[],
   todaysDate: string,
-  accessToken: string
+  accessToken: string,
+  nfoSymbol = "NIFTY"
 ): Promise<void> => {
-  const chaseStatusData = await getChaseStatus()
+  const chaseStatusData = await getChaseStatus(nfoSymbol)
   if (!chaseStatusData) {
     logger.error("[generateSignal] no chase status data found")
     return
   }
-  logger.info(
-    `[generateSignal] status=${JSON.stringify(chaseStatusData)} date=${todaysDate}`
-  )
+  logger.info(`[generateSignal] status=${JSON.stringify(chaseStatusData)} date=${todaysDate}`)
 
-  let { status: currentStatus, tradingsymbol, stoploss, isSignalBreachingTolerance, createdAt } =
-    chaseStatusData
+  let {
+    status: currentStatus,
+    tradingsymbol,
+    stoploss,
+    isSignalBreachingTolerance,
+    createdAt,
+  } = chaseStatusData
+
+  const settings = await getChaseSettings()
+  if (
+    !chaseAllowsNewEntry(settings.paused) &&
+    !chaseManagesOpenPosition(settings.paused, currentStatus)
+  ) {
+    if (
+      currentStatus === CHASE_STATUS.AWAITING_LONG ||
+      currentStatus === CHASE_STATUS.AWAITING_SHORT
+    ) {
+      const pendingSide = currentStatus === CHASE_STATUS.AWAITING_LONG ? "BUY" : "SELL"
+      const pendingInstrument =
+        instruments.find(i => i.tradingsymbol === tradingsymbol) ?? instruments[0]
+      if (pendingInstrument && tradingsymbol) {
+        await cancelOrder(tradingsymbol, pendingSide, accessToken)
+      }
+      await updateChaseStatus({
+        instrument: nfoSymbol,
+        updatedAt: new Date(),
+        createdAt: new Date(),
+        status: CHASE_STATUS.AWAITING_SIGNAL,
+        isSignalBreachingTolerance: false,
+      })
+      logger.info("[generateSignal] paused — cancelled pending entry, waiting until resume")
+      return
+    }
+    logger.info("[generateSignal] Chase is paused — not opening a new trade")
+    return
+  }
 
   if (!instruments.length) {
     logger.error("[generateSignal] no instruments found")
@@ -151,13 +205,15 @@ export const generateSignal = async (
       currentStatus === CHASE_STATUS.LONG
         ? Math.max(instrument.ema, stoploss ?? 0)
         : Math.min(instrument.ema, stoploss ?? 0)
-    logger.info(
-      `[generateSignal] updating SL to ${stoploss} for ${instrument.tradingsymbol}`
-    )
+    logger.info(`[generateSignal] updating SL to ${stoploss} for ${instrument.tradingsymbol}`)
     await postToSlack(
       `:shield: Action $chase: Chase is currently ${currentStatus}, update the stoploss to ${stoploss} for symbol:${instrument.tradingsymbol}`
     )
-    const { success, error } = await updateChaseStatus({ stoploss, updatedAt: new Date() })
+    const { success, error } = await updateChaseStatus({
+      instrument: nfoSymbol,
+      stoploss,
+      updatedAt: new Date(),
+    })
     if (!success) {
       logger.error("[generateSignal] error updating chase_status:", error)
     } else {
@@ -170,8 +226,8 @@ export const generateSignal = async (
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL && hour === 16) {
     logger.info("[generateSignal] 4:15 PM EOD run — EMA stored, skipping signal generation")
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
-    const longTolerance = instrument.ema ? 1.002 * instrument.ema : 0
-    const shortTolerance = instrument.ema ? 0.998 * instrument.ema : 0
+    const { bufferPercent } = await getChaseEngineConfig()
+    const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
     logger.info(
       `[generateSignal] awaiting signal; longTolerance=${longTolerance} shortTolerance=${shortTolerance}`
     )
@@ -182,6 +238,7 @@ export const generateSignal = async (
         `:rocket: Action $chase: Chase is AWAITING_LONG. 🚀 Enter on crossing ${instrument.highestHigh} for symbol: ${instrument.tradingsymbol}, stoploss ${stoploss} :shield:`
       )
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         stoploss,
         updatedAt: new Date(),
         createdAt: new Date(),
@@ -202,6 +259,7 @@ export const generateSignal = async (
         `:rotating_light: Action $chase: Chase is AWAITING_SHORT. 🔻 Enter on crossing ${instrument.lowestLow} for symbol: ${instrument.tradingsymbol}, stoploss ${stoploss} :shield:`
       )
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         stoploss,
         updatedAt: new Date(),
         createdAt: new Date(),
@@ -227,12 +285,13 @@ export const generateSignal = async (
   ) {
     instrument = instruments.find(i => i.tradingsymbol === tradingsymbol) ?? instrument
     logger.info(`[generateSignal] validating signal for ${instrument.tradingsymbol}`)
-    const longTolerance = instrument.ema ? 1.002 * instrument.ema : 0
-    const shortTolerance = instrument.ema ? 0.998 * instrument.ema : 0
+    const { bufferPercent } = await getChaseEngineConfig()
+    const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
 
     if (hour === 16) {
       logger.info("[generateSignal] EOD — resetting to AWAITING_SIGNAL")
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         updatedAt: new Date(),
         createdAt: new Date(),
         status: CHASE_STATUS.AWAITING_SIGNAL,
@@ -250,13 +309,14 @@ export const generateSignal = async (
       )
       await cancelOrder(instrument.tradingsymbol, "BUY", accessToken)
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         updatedAt: new Date(),
         createdAt: new Date(),
         status: CHASE_STATUS.AWAITING_SIGNAL,
         isSignalBreachingTolerance: false,
       })
       if (success) {
-        await generateSignal(instruments, todaysDate, accessToken)
+        await generateSignal(instruments, todaysDate, accessToken, nfoSymbol)
       } else {
         logger.error("[generateSignal] error updating chase_status:", error)
       }
@@ -264,10 +324,9 @@ export const generateSignal = async (
       currentStatus === CHASE_STATUS.AWAITING_LONG &&
       instrument.lastClose < shortTolerance
     ) {
-      logger.info(
-        "[generateSignal] awaiting long but below short tolerance — marking breach"
-      )
+      logger.info("[generateSignal] awaiting long but below short tolerance — marking breach")
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         updatedAt: new Date(),
         isSignalBreachingTolerance: true,
       })
@@ -283,13 +342,14 @@ export const generateSignal = async (
       )
       await cancelOrder(instrument.tradingsymbol, "SELL", accessToken)
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         updatedAt: new Date(),
         createdAt: new Date(),
         status: CHASE_STATUS.AWAITING_SIGNAL,
         isSignalBreachingTolerance: false,
       })
       if (success) {
-        await generateSignal(instruments, todaysDate, accessToken)
+        await generateSignal(instruments, todaysDate, accessToken, nfoSymbol)
       } else {
         logger.error("[generateSignal] error updating chase_status:", error)
       }
@@ -297,10 +357,9 @@ export const generateSignal = async (
       currentStatus === CHASE_STATUS.AWAITING_SHORT &&
       instrument.lastClose > longTolerance
     ) {
-      logger.info(
-        "[generateSignal] awaiting short but above long tolerance — marking breach"
-      )
+      logger.info("[generateSignal] awaiting short but above long tolerance — marking breach")
       const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
         isSignalBreachingTolerance: true,
         updatedAt: new Date(),
       })

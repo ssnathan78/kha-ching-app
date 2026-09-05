@@ -12,25 +12,29 @@ import {
 } from "../constants"
 import { doSquareOffPositions } from "../exit-strategies/autoSquareOff"
 import {
-  syncGetKiteInstance,
+  ensureMarginForBasketOrder,
   getExpiryTradingSymbol,
+  getHedgeForStrike,
   getIndexInstruments,
   getInstrumentPrice,
   getSkew,
-  ensureMarginForBasketOrder,
-  getHedgeForStrike,
+  remoteOrderSuccessEnsurer,
   type StrikeInterface,
+  syncGetKiteInstance,
 } from "../kiteUtils"
 import logger from "../logger"
-import { EXIT_TRADING_Q_NAME } from "../queue"
-import { remoteOrderSuccessEnsurer } from "../kiteUtils"
 import { orderQuantity } from "../pnl"
+import { EXIT_TRADING_Q_NAME } from "../queue"
+import { shouldEnqueueExitQueue } from "../strategyValidation"
 import {
   attemptBrokerOrders,
   delay,
+  isMarketOpen,
+  isMockOrder,
   ms,
   withRemoteRetry,
 } from "../utils"
+import { computeUpdatedSkewPercent, isSkewAcceptable } from "./skewMath"
 
 dayjs.extend(isSameOrBefore)
 
@@ -61,6 +65,13 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
     expiryType,
     attempt = 0,
   } = args
+  const MAX_ATM_STRADDLE_ATTEMPTS = 250
+  if (attempt >= MAX_ATM_STRADDLE_ATTEMPTS) {
+    return Promise.reject(new Error("[atmStraddle] too many skew/network retries — fail closed"))
+  }
+  if (!isMockOrder() && !isMarketOpen()) {
+    return Promise.reject(new Error("[atmStraddle] market is closed"))
+  }
   try {
     /**
      * getting a little smarter about skews
@@ -84,14 +95,11 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
     const timeExpired = dayjs().isAfter(dayjs(expiresAt))
 
     const fractionalTimeRemaining = remainingTime / totalTime
-    const updatedSkewPercent = thresholdSkewPercent
-      ? fractionalTimeRemaining >= 0.5
-        ? maxSkewPercent
-        : Math.round(
-            fractionalTimeRemaining * maxSkewPercent! +
-              (1 - fractionalTimeRemaining) * thresholdSkewPercent
-          )
-      : maxSkewPercent
+    const updatedSkewPercent = computeUpdatedSkewPercent(
+      fractionalTimeRemaining,
+      maxSkewPercent!,
+      thresholdSkewPercent
+    )
 
     const underlyingLTP = await withRemoteRetry(async () =>
       getInstrumentPrice(kite, underlyingSymbol!, exchange!)
@@ -126,7 +134,7 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
     // if time hasn't expired
     const { skew } = await withRemoteRetry(async () => getSkew(kite, PE_STRING, CE_STRING, "NFO"))
     // if skew not fitting in, try again
-    if (skew > updatedSkewPercent!) {
+    if (!isSkewAcceptable(skew, updatedSkewPercent!)) {
       logger.info(
         `Retry #${attempt + 1}... Live skew (${skew as string}%) > Skew consideration (${String(
           updatedSkewPercent
@@ -206,10 +214,11 @@ async function atmStraddle({
   productType = PRODUCT_TYPE.MIS,
   volatilityType = VOLATILITY_TYPE.SHORT,
   expiryType = EXPIRY_TYPE.CURRENT,
+  exitStrategy,
   _nextTradingQueue = EXIT_TRADING_Q_NAME,
 }: ATM_STRADDLE_TRADE): Promise<
   | {
-      _nextTradingQueue: string
+      _nextTradingQueue?: string
       straddle: Record<string, unknown>
       isTargetEnabled: boolean
       rawKiteOrdersResponse: KiteOrder[]
@@ -241,6 +250,20 @@ async function atmStraddle({
     })
 
     const { PE_STRING, CE_STRING, atmStrike, LOT_SIZE } = straddle
+
+    const { recordDecision } = await import("../trading/ledger")
+    await recordDecision({
+      strategy: "ATM_STRADDLE",
+      instrument,
+      action: "ENTER",
+      intent: `ATM ${atmStrike} ${PE_STRING} / ${CE_STRING}`,
+      reason: "skew accepted",
+      riskResult: "PASSED",
+      parameters: { lots, productType, volatilityType, expiryType, orderTag },
+      features: { atmStrike, PE_STRING, CE_STRING, LOT_SIZE },
+      proposedQty: lots * LOT_SIZE,
+      idempotencyKey: `straddle:${orderTag || "notag"}:${atmStrike}:${PE_STRING}:${CE_STRING}`,
+    })
 
     let allOrdersLocal: KiteOrder[] = []
     let hedgeOrdersLocal: KiteOrder[] = []
@@ -293,6 +316,16 @@ async function atmStraddle({
       ensureMarginForBasketOrder(user, allOrdersLocal)
     )
     if (!hasMargin) {
+      const { recordDecision } = await import("../trading/ledger")
+      await recordDecision({
+        strategy: "ATM_STRADDLE",
+        instrument,
+        action: "RISK_BLOCK",
+        reason: "insufficient margin",
+        riskResult: "FAILED",
+        parameters: { lots, orderTag },
+        idempotencyKey: `straddle-margin:${orderTag || "notag"}:${atmStrike}`,
+      })
       throw Error("insufficient margin!")
     }
 
@@ -340,7 +373,7 @@ async function atmStraddle({
     }
 
     return {
-      _nextTradingQueue,
+      ...(shouldEnqueueExitQueue(exitStrategy) ? { _nextTradingQueue } : {}),
       straddle,
       isTargetEnabled: isMaxLossEnabled || isMaxProfitEnabled,
       rawKiteOrdersResponse: statefulOrders,

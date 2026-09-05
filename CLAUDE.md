@@ -4,15 +4,15 @@ Personal algorithmic trading app for Indian markets via Zerodha Kite Connect.
 
 ## Tech stack
 
-- **Framework:** Next.js 16 (Pages Router + API routes), React 18, Material-UI 5
+- **Framework:** Next.js 16 (Pages Router + API routes), React 19, Material-UI 9
 - **Language:** TypeScript 5 (mixed JS/TS). Prefer TypeScript for new files.
 - **Database:** PostgreSQL via Drizzle ORM (`lib/drizzle.ts`, `lib/schema.ts`)
-- **Queue:** BullMQ 5 with IORedis (`lib/queue.ts`, `lib/queue-processor/`)
+- **Queue:** BullMQ 6 with IORedis 6 (`lib/queue.ts`, `lib/queue-processor/`)
 - **Broker:** Zerodha Kite Connect (`lib/kiteUtils.ts`)
 - **Auth:** iron-session encrypted cookie `khaching-kite-session` (`lib/session.ts`)
 - **Observability:** OpenTelemetry → optional Grafana Cloud (`otel.js`)
 - **Server:** Express (`server.js`) with Bull Board at `/queues`
-- **Package manager:** Yarn Classic **1.22.22** (`yarn.lock` is v1). Use `yarn`, not `npm`.
+- **Package manager:** Yarn Berry **4.9.1** (`.yarn/releases/`, `nodeLinker: node-modules` in `.yarnrc.yml`). Use `yarn`, not `npm`.
 
 ## Commands
 
@@ -23,13 +23,21 @@ yarn migrate          # Apply SQL in drizzle/
 yarn start            # Production server (TZ=Asia/Kolkata)
 yarn lint             # Biome
 yarn format           # Biome write
-yarn test             # Jest
-yarn unit-test        # Unit only
-yarn int-test         # Integration (needs DB/Redis)
+yarn test             # unit + sim + int + api
+yarn unit-test        # Hermetic unit tests (no Kite)
+yarn sim-test         # Market simulation (injected clock, no Kite)
+yarn simulate -- --scenario normal-day
+yarn int-test         # Postgres integration
+yarn api-test         # API contract tests
+yarn e2e-test         # Playwright E2E (after build)
+yarn test:coverage    # Coverage summary
+yarn live-test        # Optional; needs USER_SESSION
 yarn drizzle:generate
 yarn drizzle:push
 yarn queues           # Standalone Bull Board script
 ```
+
+**Tests with Docker:** `docker compose up -d postgres redis`, then `yarn migrate` and Jest on the host. Details: [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md#running-tests-with-docker).
 
 ## Architecture (queues)
 
@@ -46,7 +54,8 @@ Defined in `lib/queue.ts`:
 
 | Table | Role |
 |---|---|
-| `trade_plans` | Saved weekday templates |
+| `trade_plans` | Saved weekday templates (one per strategy per day) |
+| `chase_settings` | Single Chase plan (lots, EMA, buffer, pause) |
 | `job_executions` | Job lifecycle (audit; not deleted by daily cleanup) |
 | `transactions` | Completed Kite orders (`order_id` unique) |
 | `accesstoken` | Today's access token |
@@ -75,7 +84,9 @@ Health: `GET /api/health`.
 
 ## Tests
 
-`__tests__/unit/` — pnl, SL orders, instruments. Setup: `__tests__/setupEnv.ts`.
+`__tests__/unit/` — hermetic (pnl, EMA, Chase defaults, cookies, help). `__tests__/integration/` — Postgres. `__tests__/live/` — Kite session, not CI.
+
+Run int/api/e2e with Docker deps: [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md#running-tests-with-docker).
 
 ## Domain
 
@@ -86,10 +97,13 @@ Health: `GET /api/health`.
 ## File map
 
 ```
-lib/           schema, queues, strategies, Kite, session
-pages/         UI + API routes
+lib/           schema, queues, strategies, Kite, session, clock, marketCalendar
+lib/trading/   ledger + independent risk engine (riskEngine, riskGate, riskSettings)
+lib/simulation/ market/broker/scenario runner (no live Kite)
+pages/         UI + API routes (including /desk and /api/desk/risk)
 components/    strategy forms and shared UI
 types/         trade / plan / kite types
-drizzle/       SQL migrations
-scripts/       migrate, docker-entrypoint, backups
+drizzle/       SQL migrations (0004+ trading ledger)
+scripts/       migrate, docker-entrypoint, backups, production-health-check
+docs/          TRADING_*, PRODUCTION_*, SSH.md (any agent → Droplet)
 ```

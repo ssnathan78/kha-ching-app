@@ -1,18 +1,18 @@
-import React, { useEffect } from "react"
 import {
   FormControl,
   FormControlLabel,
-  Typography,
   FormLabel,
-  RadioGroup,
-  Radio,
   Grid,
+  Radio,
+  RadioGroup,
+  Typography,
 } from "@mui/material"
+import React, { useEffect } from "react"
 import {
   EXPIRY_TYPE,
   EXPIRY_TYPE_HUMAN,
   expiryTypesForInstrument,
-  INSTRUMENTS,
+  type INSTRUMENTS,
 } from "../../lib/constants"
 
 const ExpiryTypeComponent = ({ state, onChange }) => {
@@ -26,7 +26,7 @@ const ExpiryTypeComponent = ({ state, onChange }) => {
   }, [instrument, state.expiryType])
 
   return (
-    <Grid item xs={12}>
+    <Grid size={12}>
       <FormControl component="fieldset">
         <FormLabel component="legend">Option expiry</FormLabel>
         <RadioGroup
@@ -46,7 +46,7 @@ const ExpiryTypeComponent = ({ state, onChange }) => {
           ))}
         </RadioGroup>
         {instrument && !expiryTypes.includes(EXPIRY_TYPE.MONTHLY) ? (
-          <Typography variant="caption" color="textSecondary">
+          <Typography variant="caption" color="text.secondary">
             Weekly contracts are not listed for this index (monthly expiries only).
           </Typography>
         ) : null}

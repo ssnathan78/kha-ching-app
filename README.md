@@ -55,6 +55,7 @@ Compose starts **Postgres**, **Redis**, and the **app**. On first boot the app r
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Running without Docker, Yarn, tests, migrations |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How UI, queues, DB, and Kite fit together |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Putting this on a VPS / Droplet with HTTPS |
+| [docs/SSH.md](docs/SSH.md) | Laptop SSH, Windows ssh-agent, any coding agent → Droplet |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Login 500, health 503, orders not firing |
 | [DOCKER.md](DOCKER.md) | Compose commands only |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | Notes for coding agents working in this repo |

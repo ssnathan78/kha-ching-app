@@ -1,24 +1,25 @@
+import type { Job } from "bullmq"
 import { STRATEGIES } from "../../lib/constants"
+import type { SUPPORTED_TRADE_CONFIG } from "../../types/trade"
 import ATMStraddleDetails from "../trades/atmStraddle/TradeSetupDetails"
 import ATMStrangleDetails from "../trades/atmStrangle/TradeSetupDetails"
-import { SUPPORTED_TRADE_CONFIG } from "../../types/trade"
-import { Job } from "bullmq"
 
 const TradeDetails = ({
   strategy,
   tradeDetails,
   jobDetails,
 }: {
-  strategy: STRATEGIES
-  tradeDetails: SUPPORTED_TRADE_CONFIG
-  jobDetails?: Job
+  strategy: STRATEGIES | string
+  tradeDetails: SUPPORTED_TRADE_CONFIG | Record<string, unknown>
+  jobDetails?: Job | Record<string, unknown>
 }) => {
+  const jobProps = (jobDetails ?? {}) as Record<string, unknown>
   return (
     <>
       {strategy === STRATEGIES.ATM_STRADDLE ? (
-        <ATMStraddleDetails {...tradeDetails} {...jobDetails} />
+        <ATMStraddleDetails {...tradeDetails} {...jobProps} />
       ) : strategy === STRATEGIES.ATM_STRANGLE ? (
-        <ATMStrangleDetails {...tradeDetails} {...jobDetails} />
+        <ATMStrangleDetails {...tradeDetails} {...jobProps} />
       ) : strategy === STRATEGIES.SUBSCRIBE_CHASE ? (
         <p style={{ margin: "8px 0" }}>Lots: {(tradeDetails as any).lots ?? "—"}</p>
       ) : null}

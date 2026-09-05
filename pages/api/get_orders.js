@@ -1,14 +1,15 @@
 import axios from "axios"
 import dayjs from "dayjs"
-import { uniqBy } from "lodash"
-
-import withSession from "../../lib/session"
-import { syncGetKiteInstance, getCurrentExpiryTradingSymbol } from "../../lib/kiteUtils"
 import advancedFormat from "dayjs/plugin/advancedFormat"
+import { sendApiError } from "../../lib/apiErrors"
+import { getCurrentExpiryTradingSymbol, syncGetKiteInstance } from "../../lib/kiteUtils"
+import logger from "../../lib/logger"
+import withSession from "../../lib/session"
+
 dayjs.extend(advancedFormat)
 
 export default withSession(async (req, res) => {
-  const user = req.session.get("user")
+  const user = req.session.user
 
   if (!user) {
     return res.status(401).send("Unauthorized")
@@ -23,7 +24,12 @@ export default withSession(async (req, res) => {
     const kite = syncGetKiteInstance(user)
     // const rawOrders = ordersInDB?.length ? ordersInDB : await kite.getOrders()
     const rawOrders = await kite.getOrders()
-    const uniqueOrders = uniqBy(rawOrders, order => order.order_id)
+    const seenOrderIds = new Set()
+    const uniqueOrders = rawOrders.filter(order => {
+      if (seenOrderIds.has(order.order_id)) return false
+      seenOrderIds.add(order.order_id)
+      return true
+    })
 
     const orders = uniqueOrders
       .filter(order => order.tag === orderTag)
@@ -68,6 +74,6 @@ export default withSession(async (req, res) => {
 
     res.json(orders)
   } catch (e) {
-    res.status(500).send(e)
+    return sendApiError(res, e, logger, "get_orders")
   }
 })

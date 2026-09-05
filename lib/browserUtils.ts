@@ -6,13 +6,10 @@ import {
   type AvailablePlansConfig,
   COMBINED_SL_EXIT_STRATEGY,
 } from "../types/plans"
-import type {
-  ATM_STRADDLE_TRADE,
-  ATM_STRANGLE_TRADE,
-  SUPPORTED_TRADE_CONFIG,
-} from "../types/trade"
+import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../types/trade"
 
 import { EXIT_STRATEGIES, STRATEGIES, STRATEGIES_DETAILS } from "./constants"
+import { coerceLots, coercePlanName } from "./planMapper"
 
 type StraddleOrStrangleConfig = ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
 
@@ -109,7 +106,7 @@ export const formatFormDataForApi = ({
     case STRATEGIES.SUBSCRIBE_CHASE: {
       return {
         ...(data as any),
-        lots: Number((data as any).lots ?? 1),
+        lots: coerceLots((data as any).lots),
         strategy: STRATEGIES.SUBSCRIBE_CHASE,
       } as any
     }
@@ -134,7 +131,8 @@ export const formatFormDataForApi = ({
 
       const apiProps: ATM_STRADDLE_TRADE = {
         ...(data as ATM_STRADDLE_CONFIG),
-        lots: Number(lots),
+        name: coercePlanName((data as ATM_STRADDLE_CONFIG).name, STRATEGIES.ATM_STRADDLE),
+        lots: coerceLots(lots),
         slmPercent: Number(slmPercent),
         trailEveryPercentageChangeValue: Number(trailEveryPercentageChangeValue),
         trailingSlPercent: Number(trailingSlPercent),
@@ -176,7 +174,8 @@ export const formatFormDataForApi = ({
 
       const apiProps: ATM_STRANGLE_TRADE = {
         ...(data as ATM_STRANGLE_CONFIG),
-        lots: Number(lots),
+        name: coercePlanName((data as ATM_STRANGLE_CONFIG).name, STRATEGIES.ATM_STRANGLE),
+        lots: coerceLots(lots),
         slmPercent: Number(slmPercent),
         trailEveryPercentageChangeValue: Number(trailEveryPercentageChangeValue),
         trailingSlPercent: Number(trailingSlPercent),

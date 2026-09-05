@@ -1,12 +1,16 @@
 import type { KiteOrder } from "../../types/kite"
 import { SL_ORDER_TYPE } from "../../types/plans"
-import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
+import type {
+  ATM_STRADDLE_TRADE,
+  ATM_STRANGLE_TRADE,
+  SUPPORTED_TRADE_CONFIG,
+} from "../../types/trade"
 
 type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
+
 import { STATUS_TRIGGER_PENDING } from "../constants"
-import { syncGetKiteInstance } from "../kiteUtils"
+import { remoteOrderSuccessEnsurer, syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
-import { remoteOrderSuccessEnsurer } from "../kiteUtils"
 import { convertSlmToSll } from "../slOrders"
 import { attemptBrokerOrders, round } from "../utils"
 import { doDeletePendingOrders, doSquareOffPositions } from "./autoSquareOff"

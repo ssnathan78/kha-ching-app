@@ -1,9 +1,10 @@
 import { type Job, Worker } from "bullmq"
 
-// import { omit } from 'lodash'
+// Removed lodash omit — job data logged without user field when needed
 
+import dayjs from "dayjs"
 import { eq } from "drizzle-orm"
-import { JOB_EXECUTION_STATUS, STRATEGIES } from "../constants"
+import { JOB_EXECUTION_STATUS } from "../constants"
 import { db } from "../drizzle"
 import logger from "../logger"
 import {
@@ -14,28 +15,12 @@ import {
   TRADING_Q_NAME,
 } from "../queue"
 import { jobExecutions } from "../schema"
-import atmStraddle from "../strategies/atmStraddle"
-import strangle from "../strategies/strangle"
 import { getCustomBackoffStrategies, logDeep, ms } from "../utils"
-import dayjs from "dayjs"
+import { isStaleTradingJob } from "./staleJobGuard"
+import { processTradingJob } from "./tradingJobProcessor"
 
 async function processJob(job: Job) {
-  const {
-    data,
-    data: { strategy },
-  } = job
-  logger.info(`[tradingQueue] Beginning job processing for ${strategy}`)
-  switch (strategy) {
-    case STRATEGIES.ATM_STRADDLE: {
-      return atmStraddle(data)
-    }
-    case STRATEGIES.ATM_STRANGLE: {
-      return strangle(data)
-    }
-    default: {
-      return null
-    }
-  }
+  return processTradingJob(job.data)
 }
 
 const worker = new Worker(
@@ -43,7 +28,7 @@ const worker = new Worker(
   async job => {
     // console.log(`processing tradingQueue id ${job.id}`, omit(job.data, ['user']))
     const scheduledAt = dayjs(job.timestamp + (job.opts.delay ?? 0))
-    if (!scheduledAt.isSame(dayjs(), "day")) {
+    if (isStaleTradingJob(job.timestamp, job.opts.delay ?? 0)) {
       logger.info(
         `[tradingQueue] Discarding stale job ${job.id} scheduled for ${scheduledAt.toISOString()}`
       )
@@ -157,3 +142,5 @@ worker.on("failed", async (job, err) => {
     logger.error("🔴 failed to update job_executions status on queue failure", updateError)
   }
 })
+
+export { worker }

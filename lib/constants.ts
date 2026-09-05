@@ -1,10 +1,20 @@
 import dayjs from "dayjs"
 import { COMBINED_SL_EXIT_STRATEGY, SL_ORDER_TYPE } from "../types/plans"
-import { chaseStatusEnum } from "./schema"
 
-const NEXT_PUBLIC_DEFAULT_LOTS = process.env.NEXT_PUBLIC_DEFAULT_LOTS
-const NEXT_PUBLIC_DEFAULT_SKEW_PERCENT = process.env.NEXT_PUBLIC_DEFAULT_SKEW_PERCENT
-const NEXT_PUBLIC_DEFAULT_SLM_PERCENT = process.env.NEXT_PUBLIC_DEFAULT_SLM_PERCENT
+function envPositiveInt(value: string | undefined, fallback: number): number {
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback
+}
+
+const NEXT_PUBLIC_DEFAULT_LOTS = envPositiveInt(process.env.NEXT_PUBLIC_DEFAULT_LOTS, 1)
+const NEXT_PUBLIC_DEFAULT_SKEW_PERCENT = envPositiveInt(
+  process.env.NEXT_PUBLIC_DEFAULT_SKEW_PERCENT,
+  10
+)
+const NEXT_PUBLIC_DEFAULT_SLM_PERCENT = envPositiveInt(
+  process.env.NEXT_PUBLIC_DEFAULT_SLM_PERCENT,
+  30
+)
 
 export enum INSTRUMENTS {
   NIFTY = "NIFTY",
@@ -12,9 +22,13 @@ export enum INSTRUMENTS {
   FINNIFTY = "FINNIFTY",
 }
 
-export const CHASE_STATUS = Object.fromEntries(
-  chaseStatusEnum.enumValues.map(v => [v, v])
-) as { [K in (typeof chaseStatusEnum.enumValues)[number]]: K }
+export const CHASE_STATUS = {
+  SHORT: "SHORT",
+  LONG: "LONG",
+  AWAITING_SHORT: "AWAITING_SHORT",
+  AWAITING_LONG: "AWAITING_LONG",
+  AWAITING_SIGNAL: "AWAITING_SIGNAL",
+} as const
 
 export enum TRANSACTION_TYPE {
   BUY = "BUY",
@@ -77,6 +91,9 @@ export enum STRATEGIES {
   ATM_STRANGLE = "ATM_STRANGLE",
   SUBSCRIBE_CHASE = "SUBSCRIBE_CHASE",
 }
+
+export const INTRADAY_STRATEGIES = [STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE] as const
+export type KillDeskScope = "intraday" | "all"
 
 export enum EXIT_STRATEGIES {
   INDIVIDUAL_LEG_SLM_1X = "INDIVIDUAL_LEG_SLM_1X",
@@ -168,6 +185,7 @@ export const STRATEGIES_DETAILS = {
     },
     defaultFormState: {
       instruments: getInstrumentsDefaultState(),
+      name: "ATM Straddle",
       lots: NEXT_PUBLIC_DEFAULT_LOTS,
       maxSkewPercent: NEXT_PUBLIC_DEFAULT_SKEW_PERCENT,
       thresholdSkewPercent: 20,
@@ -187,14 +205,15 @@ export const STRATEGIES_DETAILS = {
       maxLossPoints: 20,
       maxProfitPoints: 20,
       expireIfUnsuccessfulInMins: 10,
+      isAutoSquareOffEnabled: true,
       exitStrategy: EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
       slOrderType: SL_ORDER_TYPE.SLL,
       slLimitPricePercent: 1,
       combinedExitStrategy: COMBINED_SL_EXIT_STRATEGY.EXIT_ALL,
       rollback: {
-        onBrokenHedgeOrders: false,
-        onBrokenPrimaryOrders: false,
-        onBrokenExitOrders: false,
+        onBrokenHedgeOrders: true,
+        onBrokenPrimaryOrders: true,
+        onBrokenExitOrders: true,
       },
     },
   },
@@ -208,6 +227,7 @@ export const STRATEGIES_DETAILS = {
     },
     defaultFormState: {
       instruments: getInstrumentsDefaultState(),
+      name: "ATM Strangle",
       lots: NEXT_PUBLIC_DEFAULT_LOTS,
       slmPercent: NEXT_PUBLIC_DEFAULT_SLM_PERCENT,
       trailEveryPercentageChangeValue: 2,
@@ -220,15 +240,16 @@ export const STRATEGIES_DETAILS = {
       volatilityType: VOLATILITY_TYPE.SHORT,
       expiryType: EXPIRY_TYPE.CURRENT,
       runNow: false,
-      exitStrategy: EXIT_STRATEGIES.NO_SL,
+      isAutoSquareOffEnabled: true,
+      exitStrategy: EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
       orderType: ENTRY_ORDER.MARKET_ORDER,
       slOrderType: SL_ORDER_TYPE.SLL,
       slLimitPricePercent: 1,
       combinedExitStrategy: COMBINED_SL_EXIT_STRATEGY.EXIT_ALL,
       rollback: {
-        onBrokenHedgeOrders: false,
-        onBrokenPrimaryOrders: false,
-        onBrokenExitOrders: false,
+        onBrokenHedgeOrders: true,
+        onBrokenPrimaryOrders: true,
+        onBrokenExitOrders: true,
       },
     },
     ENTRY_STRATEGIES: STRANGLE_ENTRY_STRATEGIES,
@@ -257,6 +278,9 @@ export const STRATEGIES_DETAILS = {
     defaultRunAt: dayjs().set("hour", 9).set("minutes", 16).set("seconds", 0).format(),
     defaultFormState: {
       lots: 1,
+      emaPeriod: 40,
+      bufferPercent: 0.2,
+      entryLimitOffset: 5,
     },
   },
 }

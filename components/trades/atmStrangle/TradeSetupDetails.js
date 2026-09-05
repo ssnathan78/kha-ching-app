@@ -1,12 +1,8 @@
 import dayjs from "dayjs"
 import React from "react"
 
-import {
-  EXIT_STRATEGIES,
-  EXIT_STRATEGIES_DETAILS,
-  STRANGLE_ENTRY_STRATEGIES,
-  STRATEGIES_DETAILS,
-} from "../../../lib/constants"
+import { EXIT_STRATEGIES, STRANGLE_ENTRY_STRATEGIES } from "../../../lib/constants"
+import { strangleEntryLabel } from "../../../lib/planLabels"
 import commonDetailsRows from "../../lib/commonDetailsRows"
 import OrdersTable from "../../lib/ordersTable"
 
@@ -32,7 +28,7 @@ const Details = args => {
         [
           { value: "Entry strategy" },
           {
-            value: STRATEGIES_DETAILS.ATM_STRANGLE.ENTRY_STRATEGY_DETAILS[entryStrategy].label,
+            value: strangleEntryLabel(entryStrategy),
           },
         ],
         entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM

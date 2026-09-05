@@ -1,19 +1,19 @@
-import React from "react"
 import {
   FormControl,
   FormControlLabel,
-  Typography,
   FormLabel,
-  RadioGroup,
-  Radio,
   Grid,
+  Radio,
+  RadioGroup,
+  Typography,
 } from "@mui/material"
+import React from "react"
 import { VOLATILITY_TYPE } from "../../lib/constants"
 
 const VolatilityTypeComponent = ({ state, onChange }) => {
   const volTypes = [VOLATILITY_TYPE.SHORT, VOLATILITY_TYPE.LONG]
   return (
-    <Grid item xs={12}>
+    <Grid size={12}>
       <FormControl component="fieldset">
         <FormLabel component="legend">Vol type</FormLabel>
         <RadioGroup

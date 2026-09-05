@@ -1,5 +1,5 @@
-import React from "react"
 import { Checkbox, FormControl, FormControlLabel, FormGroup, Grid, TextField } from "@mui/material"
+import React from "react"
 import { VOLATILITY_TYPE } from "../../lib/constants"
 
 const HedgeComponent = ({ volatilityType, isHedgeEnabled, hedgeDistance, onChange }) => {
@@ -8,7 +8,7 @@ const HedgeComponent = ({ volatilityType, isHedgeEnabled, hedgeDistance, onChang
   }
 
   return (
-    <Grid item xs={12}>
+    <Grid size={12}>
       <FormControl component="fieldset">
         <FormGroup>
           <FormControlLabel

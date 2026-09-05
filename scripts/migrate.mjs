@@ -1,8 +1,8 @@
 import "dotenv/config"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
+import { dirname, resolve } from "path"
 import pg from "pg"
-import { resolve, dirname } from "path"
 import { fileURLToPath } from "url"
 
 const { Pool } = pg

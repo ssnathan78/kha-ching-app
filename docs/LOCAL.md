@@ -101,6 +101,7 @@ Should print `PONG`.
 1. Open [http://127.0.0.1:3000/api/health](http://127.0.0.1:3000/api/health). You want `"status":"ok"` and both checks `"ok"`.
 2. Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and click **Continue with Kite**.
 3. After Zerodha, you should land on `/dashboard`.
+4. New ledger screens are on [http://127.0.0.1:3000/desk](http://127.0.0.1:3000/desk): Positions, Orders, Trades (history), Activity, and Risk (live-order / lot caps). Weekday templates stay on `/plan`. Chase settings stay on `/chase`.
 
 ### Login failed / Chrome “HTTP ERROR 500”
 
@@ -126,7 +127,55 @@ docker compose down -v             # stop AND delete Postgres/Redis data
 
 Deleting volumes (`-v`) wipes trades and tokens. You will need to log in again.
 
-## 7. Optional: app-dev profile
+## 7. Running automated tests (Docker + host)
+
+You do **not** need the full app container to run integration or API tests — only **Postgres** and **Redis**. Run Jest on your PC; point it at the published Docker ports.
+
+### Start dependencies
+
+```powershell
+docker compose up -d postgres redis
+docker compose exec postgres pg_isready -U postgres -d trading_db
+docker compose exec redis redis-cli ping
+```
+
+### Run tests (from repo root, Node ≥ 22.13 installed)
+
+```powershell
+yarn install --immutable
+yarn migrate
+yarn unit-test
+yarn int-test
+yarn api-test
+```
+
+If your `.env` uses internal hostnames like `@db:` or `redis://redis:` (for the app container), host-side tests still work: `__tests__/loadEnv.js` maps those to `localhost:5432` and `127.0.0.1:6379` automatically.
+
+### E2E (Playwright)
+
+Needs a built app and something listening on port **3000**:
+
+1. **Easiest:** keep `docker compose up` running (app container healthy), then on the host:
+
+   ```powershell
+   yarn build
+   yarn playwright install chromium
+   yarn e2e-test
+   ```
+
+2. **Or** run `yarn start` on the host after `yarn build`, with postgres/redis still in Docker.
+
+Full options (Playwright-in-Docker, CI checklist, troubleshooting `ENOTFOUND db`): [TESTING_STRATEGY.md](./TESTING_STRATEGY.md#running-tests-with-docker).
+
+### Verify the production image (optional)
+
+```powershell
+docker compose build app
+```
+
+The image builder runs `yarn unit-test` and `yarn build` inside Docker — useful when you are not running Node locally.
+
+## 8. Optional: app-dev profile
 
 `docker compose --profile dev up --build` builds the **dev** image and bind-mounts source. Port 3000 conflicts with `app`. Use one or the other.
 

@@ -1,24 +1,11 @@
-import axios from "axios"
-
 import withSession from "../../lib/session"
 
+/** Log out of the app session only. Does not flatten trades or pause Chase. */
 export default withSession(async (req, res) => {
-  const user = req.session.get("user")
-
-  if (!user) {
-    return res.status(401).send("Unauthorized")
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" })
   }
 
-  await axios.delete(
-    `https://api.kite.trade/session/token?api_key=${
-      process.env.KITE_API_KEY as string
-    }&access_token=${user.session.access_token as string}`,
-    {
-      headers: {
-        "X-Kite-Version": 3,
-      },
-    }
-  )
-
-  res.json({ status: "ok" })
+  await req.session.destroy()
+  res.json({ status: "ok", isLoggedIn: false })
 })

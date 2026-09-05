@@ -1,7 +1,7 @@
+import { randomUUID } from "node:crypto"
 import { type Job, type JobsOptions, Queue } from "bullmq"
 import dayjs from "dayjs"
 import IORedis from "ioredis"
-import { v4 as uuidv4 } from "uuid"
 
 import logger from "./logger"
 import {
@@ -56,7 +56,7 @@ export async function addToNextQueue(jobData, jobResponse): Promise<Job | undefi
       case ANCILLARY_Q_NAME: {
         const marketClosing = dayjs().set("hours", 15).set("minutes", 30).set("seconds", 0)
         return ancillaryQueue.add(
-          `${ANCILLARY_Q_NAME}_${uuidv4() as string}`,
+          `${ANCILLARY_Q_NAME}_${randomUUID()}`,
           {
             initialJobData: jobData,
             jobResponse,
@@ -71,7 +71,7 @@ export async function addToNextQueue(jobData, jobResponse): Promise<Job | undefi
         // console.log('Adding job to exit trade queue', jobData)
         const queueOptions = getQueueOptionsForExitStrategy(jobData.exitStrategy)
         return exitTradesQueue.add(
-          `${EXIT_TRADING_Q_NAME}_${uuidv4() as string}`,
+          `${EXIT_TRADING_Q_NAME}_${randomUUID()}`,
           {
             initialJobData: jobData,
             jobResponse,
@@ -96,12 +96,12 @@ export async function addToNextQueue(jobData, jobResponse): Promise<Job | undefi
           queueOptions.delay = delay
         }
 
-        return tradingQueue.add(`${TRADING_Q_NAME}_${uuidv4() as string}`, jobData, queueOptions)
+        return tradingQueue.add(`${TRADING_Q_NAME}_${randomUUID()}`, jobData, queueOptions)
       }
       case TARGETPNL_Q_NAME: {
         logger.info(`[queue] added to ${TARGETPNL_Q_NAME}`)
         return targetPnLQueue.add(
-          `${TARGETPNL_Q_NAME}_${uuidv4() as string}`, //Job name
+          `${TARGETPNL_Q_NAME}_${randomUUID()}`, //Job name
           {
             initialJobData: jobData,
             jobResponse,
@@ -141,7 +141,7 @@ export async function addToAutoSquareOffQueue({ initialJobData, jobResponse }) {
   const delay = dayjs(runAtTime).diff(dayjs())
   // console.log(`>>> auto square off scheduled for ${Math.ceil(delay / 60000)} minutes from now`)
   return autoSquareOffQueue.add(
-    `${AUTO_SQUARE_OFF_Q_NAME}_${uuidv4() as string}`,
+    `${AUTO_SQUARE_OFF_Q_NAME}_${randomUUID()}`,
     {
       rawKiteOrdersResponse: squareOffOrders || rawKiteOrdersResponse,
       deletePendingOrders,
@@ -157,7 +157,7 @@ export async function addToCoSquareOff(user) {
   const marketClosingforEquity = dayjs().set("hours", 15).set("minutes", 10).set("seconds", 0)
   const delay = Math.max(0, marketClosingforEquity.diff(dayjs()))
   return autoSquareOffQueue.add(
-    `${AUTO_SQUARE_OFF_Q_NAME}_${uuidv4() as string}`,
+    `${AUTO_SQUARE_OFF_Q_NAME}_${randomUUID()}`,
     {
       user,
     },
@@ -179,41 +179,38 @@ export async function addToAncillaryQueue(user) {
 export const cleanupQueues = async () =>
   await Promise.all(allQueues.map(async queue => await queue.obliterate({ force: true })))
 
+export const CHASE_EMA_SCHEDULER_ID = "chase-calculateEMA"
+export const CHASE_UPDATE_SL_SCHEDULER_ID = "chase-updateSL"
+
 export async function addToChaseQueue(user: any) {
   try {
-    const today = dayjs().format("YYYY-MM-DD") // just the date part
+    const today = dayjs().format("YYYY-MM-DD")
 
-    const startDate = new Date(`${today}T10:14:00+05:30`)
-    const endDate = new Date(`${today}T16:15:00+05:30`)
-
-    // cron: every hour at :15, 10:15–16:15 IST
-    await chaseQueue.add(
-      "calculateEMA",
-      { user },
+    await chaseQueue.upsertJobScheduler(
+      CHASE_EMA_SCHEDULER_ID,
       {
-        repeat: {
-          pattern: "15 10-16 * * *",
-          startDate: startDate,
-          endDate: endDate,
-          tz: "Asia/Kolkata",
-        },
+        pattern: "15 10-16 * * *",
+        startDate: new Date(`${today}T10:14:00+05:30`),
+        endDate: new Date(`${today}T16:15:00+05:30`),
+        tz: "Asia/Kolkata",
+      },
+      {
+        name: "calculateEMA",
+        data: { user },
       }
     )
 
-    const updateSLStart = new Date(`${today}T09:15:59+05:30`)
-    const updateSLEnd = new Date(`${today}T15:30:00+05:30`)
-
-    // cron: every minute, 09:16–15:30 IST
-    await chaseQueue.add(
-      "updateSL",
-      { user },
+    await chaseQueue.upsertJobScheduler(
+      CHASE_UPDATE_SL_SCHEDULER_ID,
       {
-          repeat: {
-          pattern: "0 * 9-15 * * *",
-          startDate: updateSLStart,
-          endDate: updateSLEnd,
-          tz: "Asia/Kolkata",
-        },
+        pattern: "0 * 9-15 * * *",
+        startDate: new Date(`${today}T09:15:59+05:30`),
+        endDate: new Date(`${today}T15:30:00+05:30`),
+        tz: "Asia/Kolkata",
+      },
+      {
+        name: "updateSL",
+        data: { user },
       }
     )
 
@@ -221,9 +218,4 @@ export async function addToChaseQueue(user: any) {
   } catch (e) {
     logger.error("[queue] addToChaseQueue error", e)
   }
-}
-
-// alias with requested name
-export async function addtoChaseQueue(user: any) {
-  return addToChaseQueue(user)
 }

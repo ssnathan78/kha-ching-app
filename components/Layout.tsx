@@ -1,16 +1,31 @@
-import Container from "@mui/material/Container"
-import React from "react"
+import { Box, CircularProgress } from "@mui/material"
+import type React from "react"
 
-import Header from "./Header"
+import AppShell from "./AppShell"
 
-const Layout = ({ children }) => (
-  <>
-    <Header />
+type LayoutProps = {
+  children?: React.ReactNode
+  title?: string
+  maxWidth?: "sm" | "md" | "lg" | "xl" | false
+  loading?: boolean
+}
 
-    <main style={{ paddingBottom: "60px" }}>
-      <Container maxWidth="sm">{children}</Container>
-    </main>
-  </>
-)
+const Layout = ({ children, title, maxWidth = "lg", loading = false }: LayoutProps) => {
+  if (loading) {
+    return (
+      <AppShell title={title} maxWidth={maxWidth}>
+        <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
+          <CircularProgress size={28} />
+        </Box>
+      </AppShell>
+    )
+  }
+
+  return (
+    <AppShell title={title} maxWidth={maxWidth}>
+      {children}
+    </AppShell>
+  )
+}
 
 export default Layout

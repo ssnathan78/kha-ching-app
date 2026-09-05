@@ -1,12 +1,8 @@
 import dayjs from "dayjs"
 import { useCallback, useEffect, useState } from "react"
 
-import {
-  EXIT_STRATEGIES,
-  EXIT_STRATEGIES_DETAILS,
-  PRODUCT_TYPE,
-  VOLATILITY_TYPE,
-} from "../../lib/constants"
+import { EXIT_STRATEGIES } from "../../lib/constants"
+import { exitStrategyLabel } from "../../lib/planLabels"
 
 const CommonDetailsRows = ({
   runNow,
@@ -63,7 +59,7 @@ const CommonDetailsRows = ({
     productType ? [{ value: "Product" }, { value: productType }] : null,
     expiryType ? [{ value: "Expiry" }, { value: expiryType }] : null,
 
-    [{ value: "Exit Strategy" }, { value: EXIT_STRATEGIES_DETAILS[exitStrategy].label }],
+    [{ value: "Exit Strategy" }, { value: exitStrategyLabel(exitStrategy) }],
     [{ value: "SL" }, { value: `${slmPercent as string}%` }],
     [{ value: "Max Profit " }, { value: trailingMaxProfitPoints }],
     [{ value: "Max Loss " }, { value: trailingMaxLossPoints }],

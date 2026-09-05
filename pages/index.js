@@ -1,6 +1,6 @@
+import { Alert, Box, Button, Paper, Stack, Typography } from "@mui/material"
 import { useRouter } from "next/router"
 import useUser from "../lib/useUser"
-import styles from "../styles/Home.module.css"
 
 export default function Home() {
   const router = useRouter()
@@ -8,22 +8,42 @@ export default function Home() {
   const loginError = typeof router.query.loginError === "string" ? router.query.loginError : null
 
   return (
-    <div className={styles.container}>
-      <main className={styles.main}>
-        <img src="/logo.png" width="300" alt="Kha-Ching" />
-
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        px: 2,
+      }}
+    >
+      <Paper sx={{ maxWidth: 480, width: "100%", p: { xs: 3, sm: 5 } }}>
+        <Typography variant="overline" color="primary.main" sx={{ letterSpacing: "0.18em" }}>
+          Kha-Ching
+        </Typography>
+        <Typography variant="h4" sx={{ mt: 1, mb: 1 }}>
+          Personal algo desk
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          Sign in with Zerodha Kite. Local Docker uses HTTP cookies; keep mock orders on until you
+          intend live punches.
+        </Typography>
         {loginError ? (
-          <p className={styles.description} style={{ color: "#b71c1c", maxWidth: 480 }}>
-            Kite login did not complete: {loginError}. Request tokens are one-time; click Continue
-            with Kite again. Local Docker must use HTTP redirect
-            http://127.0.0.1:3000/api/redirect_url_kite on kite.trade.
-          </p>
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {loginError}. Request tokens are one-time — click Continue with Kite again.
+          </Alert>
         ) : null}
-
-        <p className={styles.description}>
-          <a href="/api/login">Continue with Kite</a>
-        </p>
-      </main>
-    </div>
+        <Stack spacing={1.5}>
+          <Button variant="contained" size="large" href="/api/login" fullWidth>
+            Continue with Kite
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            Redirect URL on kite.trade must match this origin, including http vs https.
+          </Typography>
+        </Stack>
+      </Paper>
+    </Box>
   )
 }
+
+export { getServerSideProps } from "../lib/ssrPage"

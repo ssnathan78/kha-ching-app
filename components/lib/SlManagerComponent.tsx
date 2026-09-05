@@ -19,7 +19,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
   const slOrderTypes = [SL_ORDER_TYPE.SLL]
   return (
     <>
-      <Grid item xs={12}>
+      <Grid size={12}>
         <FormControl component="fieldset">
           <FormLabel component="legend">Exit Strategy</FormLabel>
           <RadioGroup
@@ -41,7 +41,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
                 control={<Radio size="small" />}
                 label={
                   <Typography variant="body2">
-                    {EXIT_STRATEGIES_DETAILS[exitStrategy].label}
+                    {EXIT_STRATEGIES_DETAILS[exitStrategy]?.label ?? exitStrategy}
                   </Typography>
                 }
               />
@@ -51,7 +51,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
       </Grid>
       {state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD ? (
         <>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <FormLabel component="legend">When Combined trailing SL triggers</FormLabel>
             <RadioGroup
               aria-label="combinedExitStrategy"
@@ -80,7 +80,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
             </RadioGroup>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid size={12}>
             <TextField
               fullWidth
               name="trailEveryPercentageChangeValue"
@@ -93,7 +93,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
               label="Trail SL everytime total premium decreases by %"
             />
           </Grid>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <TextField
               fullWidth
               name="trailingSlPercent"
@@ -107,7 +107,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
       {state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD ||
       state.exitStrategy === EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X ? (
         <>
-          <Grid item xs={12} style={{ marginBottom: "16px" }}>
+          <Grid size={12} style={{ marginBottom: "16px" }}>
             <TextField
               fullWidth
               name="slmPercent"

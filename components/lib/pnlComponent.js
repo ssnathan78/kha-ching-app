@@ -11,7 +11,7 @@ export default function PnLComponent({ pnl, points }) {
     <Chip
       label={label || "P&L"}
       color={negative ? "error" : "success"}
-      style={{ fontWeight: "bold" }}
+      sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 600 }}
     />
   )
 }

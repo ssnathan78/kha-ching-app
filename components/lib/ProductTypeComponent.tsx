@@ -1,19 +1,19 @@
-import React from "react"
 import {
   FormControl,
   FormControlLabel,
-  Typography,
   FormLabel,
-  RadioGroup,
-  Radio,
   Grid,
+  Radio,
+  RadioGroup,
+  Typography,
 } from "@mui/material"
+import React from "react"
 import { PRODUCT_TYPE } from "../../lib/constants"
 
 const ProductTypeComponent = ({ state, onChange }) => {
   const productTypes = [PRODUCT_TYPE.MIS, PRODUCT_TYPE.NRML]
   return (
-    <Grid item xs={12}>
+    <Grid size={12}>
       <FormControl component="fieldset">
         <FormLabel component="legend">Product</FormLabel>
         <RadioGroup

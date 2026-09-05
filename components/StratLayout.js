@@ -7,10 +7,14 @@ const StratLayout = ({ children }) => {
   const { user } = useUser({ redirectTo: "/" })
 
   if (!user || user.isLoggedIn === false) {
-    return <Layout>loading...</Layout>
+    return <Layout title="Strategy" loading />
   }
 
-  return <Layout>{children}</Layout>
+  return (
+    <Layout title="Strategy" maxWidth="xl">
+      {children}
+    </Layout>
+  )
 }
 
 export default StratLayout

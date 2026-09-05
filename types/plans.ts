@@ -1,12 +1,12 @@
 import type {
-  INSTRUMENTS,
-  EXIT_STRATEGIES,
-  STRATEGIES,
-  STRANGLE_ENTRY_STRATEGIES,
-  PRODUCT_TYPE,
-  VOLATILITY_TYPE,
-  EXPIRY_TYPE,
   ENTRY_ORDER,
+  EXIT_STRATEGIES,
+  EXPIRY_TYPE,
+  INSTRUMENTS,
+  PRODUCT_TYPE,
+  STRANGLE_ENTRY_STRATEGIES,
+  STRATEGIES,
+  VOLATILITY_TYPE,
 } from "../lib/constants"
 
 interface COMMON_TRADE_PROPS {
@@ -103,6 +103,10 @@ export interface SUBSCRIBE_CHASE_CONFIG {
   id?: string
   name?: string
   lots: number
+  instrument?: INSTRUMENTS
+  emaPeriod?: number
+  bufferPercent?: number
+  entryLimitOffset?: number
   strategy: STRATEGIES.SUBSCRIBE_CHASE
   dayOfWeek?: string
   runAt?: string

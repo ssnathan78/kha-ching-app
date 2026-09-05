@@ -6,7 +6,7 @@ import type { KiteUser } from "../../types/misc"
 const apiKey = process.env.KITE_API_KEY
 
 export default withSession(async (req, res) => {
-  const user: KiteUser | undefined = req.session.get("user")
+  const user: KiteUser | undefined = req.session.user
 
   if (user) {
     if (!apiKey) {

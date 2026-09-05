@@ -5,10 +5,16 @@ import type {
   ATM_STRANGLE_TRADE,
   SUPPORTED_TRADE_CONFIG,
 } from "../../types/trade"
-import { USER_OVERRIDE, STATUS_TRIGGER_PENDING } from "../constants"
+import { STATUS_TRIGGER_PENDING, USER_OVERRIDE } from "../constants"
 import { db } from "../drizzle"
 import { patchDbTrade } from "../drizzleDbUtils"
-import { type PlaceOrderParams, placeOrder, syncGetKiteInstance, getCompletedOrdersbyTag, remoteOrderSuccessEnsurer } from "../kiteUtils"
+import {
+  getCompletedOrdersbyTag,
+  type PlaceOrderParams,
+  placeOrder,
+  remoteOrderSuccessEnsurer,
+  syncGetKiteInstance,
+} from "../kiteUtils"
 import logger from "../logger"
 import { jobExecutions } from "../schema"
 import { withRemoteRetry } from "../utils"
@@ -141,27 +147,26 @@ async function squareOffOrder(order: KiteOrder, kite: any) {
     order_type: kite.ORDER_TYPE_MARKET,
     product: order.product,
     tag: order.tag,
+    purpose: "FLATTEN",
   }
   logger.info(`Placing order ${exitOrder.tradingsymbol} and quantity - ${exitOrder.quantity}`)
   await withRemoteRetry(() => placeOrder(kite, kite.VARIETY_REGULAR, exitOrder as PlaceOrderParams))
 }
 
 //Squares off the tag
-export async function squareOffTag(orderTag: string, kite: any): Promise<any> {
-  /*
-  1. Do not square off it's aborted
-  2. Check if there are orders which are yet to be squared off
-  2. Cancel Pending orders if any
-  3. Square off the orders
-  */
+export async function squareOffTag(
+  orderTag: string,
+  kite: any,
+  { force = false }: { force?: boolean } = {}
+): Promise<any> {
   logger.info(`[autoSquareOff] squareOfforders ${orderTag} `)
   const execRows = await db
     .select({ userOverride: jobExecutions.userOverride })
     .from(jobExecutions)
     .where(eq(jobExecutions.orderTag, orderTag))
-  if (execRows[0]?.userOverride === USER_OVERRIDE.ABORT) {
+  if (!force && execRows[0]?.userOverride === USER_OVERRIDE.ABORT) {
     logger.error("Not squaring off as user aborted")
-    Promise.resolve("Not suqaring off")
+    return "Not squaring off"
   }
   const orderSummarybyTag = (await getCompletedOrdersbyTag(orderTag, kite)).filter(
     summary => summary.quantity != 0

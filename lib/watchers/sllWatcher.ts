@@ -11,7 +11,13 @@
 import type { KiteUser } from "../../types/misc"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
-import { finiteStateChecker, ms, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry } from "../utils"
+import {
+  finiteStateChecker,
+  ms,
+  orderStateChecker,
+  RemoteRetryTimeoutError,
+  withRemoteRetry,
+} from "../utils"
 
 const sllWatcher = async ({ sllOrderId, user }: { sllOrderId: string; user: KiteUser }) => {
   try {

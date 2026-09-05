@@ -1,3 +1,4 @@
+import { sendApiError } from "../../lib/apiErrors"
 import logger from "../../lib/logger"
 import { tradingQueue } from "../../lib/queue"
 import withSession from "../../lib/session"
@@ -19,7 +20,7 @@ function publicJobView(job: {
 }
 
 export default withSession(async (req, res) => {
-  const user = req.session.get("user")
+  const user = req.session.user
 
   if (!user) {
     return res.status(401).send("Unauthorized")
@@ -40,9 +41,6 @@ export default withSession(async (req, res) => {
       current_state: jobState,
     })
   } catch (e) {
-    logger.error("get_job error", e)
-    res.status(500).json({
-      status: "something went wrong",
-    })
+    return sendApiError(res, e, logger, "get_job")
   }
 })

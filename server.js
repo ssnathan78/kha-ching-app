@@ -6,15 +6,18 @@ const { ExpressAdapter } = require("@bull-board/express")
 const { Queue } = require("bullmq")
 const IORedis = require("ioredis")
 const { sessionMiddleware } = require("./lib/sessionExpress")
+const { shutdownWorkers } = require("./lib/shutdown")
+const { createSensitiveRouteLimiter } = require("./lib/rateLimit")
 
 const dev = process.env.NODE_ENV !== "production"
 const PORT = parseInt(process.env.PORT || "3000", 10)
+const BIND_HOST = process.env.BIND_HOST || "0.0.0.0"
 
 const app = next({ dev })
 const handle = app.getRequestHandler()
 
 function requireLoggedInUser(req, res, nextFn) {
-  const user = req.session.get("user")
+  const user = req.session.user
   if (!user) {
     return res.status(401).send("Unauthorized")
   }
@@ -60,17 +63,24 @@ async function setupBullBoard(server) {
 
 app.prepare().then(async () => {
   const server = express()
+  server.use(express.json({ limit: "100kb" }))
+  server.use(createSensitiveRouteLimiter())
 
   await setupBullBoard(server)
 
   server.all("/{*path}", (req, res) => handle(req, res))
 
-  const httpServer = server.listen(PORT, "0.0.0.0", () => {
+  const httpServer = server.listen(PORT, BIND_HOST, () => {
     console.log(`> Ready on http://localhost:${PORT}`)
   })
 
-  const shutdown = signal => {
+  const shutdown = async signal => {
     console.log(`[server] ${signal} received, shutting down`)
+    try {
+      await shutdownWorkers()
+    } catch (e) {
+      console.warn("[server] worker shutdown error", e)
+    }
     httpServer.close(() => process.exit(0))
     setTimeout(() => process.exit(1), 10000)
   }

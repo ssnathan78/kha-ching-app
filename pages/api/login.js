@@ -9,7 +9,7 @@ const kc = new KiteConnect({
 })
 
 export default withSession(async (req, res) => {
-  const user = req.session.get("user")
+  const user = req.session.user
 
   if (!user) {
     return res.redirect(kc.getLoginURL())

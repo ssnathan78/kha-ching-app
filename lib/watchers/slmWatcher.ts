@@ -21,14 +21,16 @@
 
 import type { KiteOrder } from "../../types/kite"
 import type { KiteUser } from "../../types/misc"
-import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../../types/trade"
+import type {
+  ATM_STRADDLE_TRADE,
+  ATM_STRANGLE_TRADE,
+  SUPPORTED_TRADE_CONFIG,
+} from "../../types/trade"
 import { STATUS_TRIGGER_PENDING } from "../constants"
-import { syncGetKiteInstance } from "../kiteUtils"
+//, WATCHER_Q_NAME
+import { getInstrumentPrice, remoteOrderSuccessEnsurer, syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
 import { addToNextQueue } from "../queue"
-//, WATCHER_Q_NAME
-import { getInstrumentPrice } from "../kiteUtils"
-import { remoteOrderSuccessEnsurer } from "../kiteUtils"
 import { withRemoteRetry } from "../utils"
 
 /**
@@ -167,7 +169,8 @@ const slmWatcher = async ({
       const { response } = await remoteOrderSuccessEnsurer({
         ensureOrderState: exitOrder.trigger_price ? STATUS_TRIGGER_PENDING : kite.STATUS_COMPLETE,
         orderProps: exitOrder,
-        instrument: (_queueJobData.initialJobData as ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE).instrument,
+        instrument: (_queueJobData.initialJobData as ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE)
+          .instrument,
         user,
       })
       // add this new job to the watcher queue and ensure it succeeds

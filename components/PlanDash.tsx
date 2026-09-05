@@ -1,4 +1,4 @@
-import { Typography, Link, Button, Grid, Paper } from "@mui/material"
+import { Button, Grid, Paper, Typography } from "@mui/material"
 
 import axios from "axios"
 import dayjs from "dayjs"
@@ -7,7 +7,7 @@ import useSWR, { mutate } from "swr"
 import { formatFormDataForApi } from "../lib/browserUtils"
 
 import { STRATEGIES_DETAILS } from "../lib/constants"
-import { SUPPORTED_TRADE_CONFIG } from "../types/trade"
+import type { SUPPORTED_TRADE_CONFIG } from "../types/trade"
 import ActionButtonOrLoader from "./lib/ActionButtonOrLoader"
 import TradeDetails from "./lib/tradeDetails"
 
@@ -29,6 +29,10 @@ const PlanDash = () => {
         const updatedConfig = { ...config }
         const dayKey =
           updatedConfig.day_of_week || updatedConfig.dayOfWeek || updatedConfig.collection
+
+        if (updatedConfig.strategy === "SUBSCRIBE_CHASE") {
+          return accum
+        }
 
         if (updatedConfig.runAt) {
           updatedConfig.runAt = dayjs(updatedConfig.runAt)
@@ -110,16 +114,24 @@ const PlanDash = () => {
   if (!pendingTrades?.length) {
     if (plans[dayOfWeek]) {
       return (
-        <Typography>
-          You&apos;ve scheduled all trades as per plan. Check &quot;Today&quot; tab for details.
-        </Typography>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6">All templates scheduled</Typography>
+          <Typography color="text.secondary" sx={{ mt: 1 }}>
+            Check the Today tab for live status and P&amp;L.
+          </Typography>
+        </Paper>
       )
     }
     return (
-      <Typography>
-        You don&apos;t have a plan for {dayOfWeekHuman} yet. Create one{" "}
-        <Link href="/plan">here</Link>.
-      </Typography>
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6">No plan for {dayOfWeekHuman}</Typography>
+        <Typography color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+          Create weekday templates so this tab can schedule them in one click.
+        </Typography>
+        <Button variant="contained" href="/plan">
+          Open trade plan
+        </Button>
+      </Paper>
     )
   }
 
@@ -129,10 +141,8 @@ const PlanDash = () => {
         <ActionButtonOrLoader>
           {({ setLoading }) => (
             <Button
-              style={{ marginBottom: 18 }}
+              sx={{ mb: 2 }}
               variant="contained"
-              color="primary"
-              type="button"
               onClick={async () => {
                 setLoading(true)
                 await handleScheduleEverything()
@@ -149,14 +159,14 @@ const PlanDash = () => {
         const isPlanScheduleable = dayjs().isBefore(dayjs(plan.runAt))
         return (
           <div key={plan.id}>
-            <Paper style={{ padding: 16, marginBottom: 32 }}>
-              <h4>
-                {`${idx + 1}`} · {plan.name}
-              </h4>
+            <Paper sx={{ p: 2.5, mb: 2 }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                {`${idx + 1}. ${plan.name}`}
+              </Typography>
 
               <TradeDetails strategy={plan.strategy} tradeDetails={plan} />
 
-              <Grid item style={{ marginTop: 16 }}>
+              <Grid style={{ marginTop: 16 }}>
                 <ActionButtonOrLoader>
                   {({ setLoading }) => (
                     <Button

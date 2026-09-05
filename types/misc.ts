@@ -1,5 +1,5 @@
-import type { STRATEGIES } from "../lib/constants"
 import type { Order, SessionData } from "kiteconnect"
+import type { STRATEGIES } from "../lib/constants"
 import type { AvailablePlansConfig } from "./plans"
 
 export type DailyPlansDayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday"

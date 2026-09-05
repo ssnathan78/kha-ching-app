@@ -3,11 +3,17 @@
 # dependencies
 /node_modules
 .yarn/*
+!.yarn/releases
+!.yarn/releases/**
 /.pnp
 .pnp.js
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # next.js
 /.next/
@@ -31,6 +37,10 @@ yarn-error.log
 # database dumps
 /backups
 
+
+# local SSH / deploy overrides (never commit filled HostName/User)
+docs/ssh-config.local
+.ssh-deploy.local
 
 # local env files — never commit secrets
 .env

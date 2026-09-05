@@ -1,0 +1,15 @@
+# Copy lines into ~/.ssh/config on your laptop. Do not commit a filled-in copy.
+# Windows path: C:\Users\<you>\.ssh\config  (must be named "config", not config.txt)
+# Full guide: docs/SSH.md
+#
+# After editing:
+#   ssh -o BatchMode=yes kha-ching-prod -- uname -a
+
+Host kha-ching-prod
+    HostName REPLACE_WITH_DROPLET_IP_OR_DNS
+    User REPLACE_WITH_LINUX_USER
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    ForwardAgent no
+    ServerAliveInterval 30
+    ServerAliveCountMax 6

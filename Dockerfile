@@ -1,14 +1,14 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-# Lockfile is Yarn v1; pin classic Yarn (node:20-alpine already ships a Yarn binary).
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+RUN corepack enable
 
 COPY package.json yarn.lock .yarnrc.yml ./
-RUN yarn install --ignore-engines
+COPY .yarn/releases ./.yarn/releases
+RUN yarn install --immutable
 
 COPY . .
 ENV DATABASE_URL=postgresql://postgres:postgres@localhost:5432/trading_db
@@ -17,25 +17,33 @@ ENV SECRET_COOKIE_PASSWORD=build-time-secret-cookie-password-32ch
 ENV KITE_API_KEY=build
 ENV KITE_API_SECRET=build
 ENV MOCK_ORDERS=true
-RUN yarn build
+ENV NEXT_PUBLIC_DEFAULT_LOTS=1
+ENV NEXT_PUBLIC_DEFAULT_SKEW_PERCENT=10
+ENV NEXT_PUBLIC_DEFAULT_SLM_PERCENT=30
+    RUN yarn unit-test --forceExit
+    ENV NODE_ENV=production
+    RUN yarn build
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+RUN corepack enable
 
 ENV NODE_ENV=production
 ENV TZ=Asia/Kolkata
 
 COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn/releases ./.yarn/releases
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/pages ./pages
+COPY --from=builder /app/components ./components
+COPY --from=builder /app/types ./types
 COPY --from=builder /app/next.config.js ./
 COPY --from=builder /app/tsconfig.json ./
 COPY --from=builder /app/server.js ./
@@ -56,15 +64,16 @@ HEALTHCHECK --interval=90s --timeout=13s --start-period=40s --retries=3 \
 CMD ["sh", "./scripts/docker-entrypoint.sh"]
 
 # Dev stage — source mounted via docker-compose volume
-FROM node:20-alpine AS dev
+FROM node:22-alpine AS dev
 
 WORKDIR /app
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+RUN corepack enable
 
 COPY package.json yarn.lock .yarnrc.yml ./
-RUN yarn install --ignore-engines
+COPY .yarn/releases ./.yarn/releases
+RUN yarn install --immutable
 
 ENV TZ=Asia/Kolkata
 EXPOSE 3000

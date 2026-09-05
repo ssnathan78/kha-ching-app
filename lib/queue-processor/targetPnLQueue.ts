@@ -36,6 +36,7 @@ const worker = new Worker(
 )
 
 worker.on("error", err => {
-  // log the error
   logger.error("🔴 [targetPnLQueue] worker error", err)
 })
+
+export { worker }

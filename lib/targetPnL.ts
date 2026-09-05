@@ -3,10 +3,11 @@ import type { KiteOrder } from "../types/kite"
 import type { ATM_STRADDLE_TRADE, ATM_STRANGLE_TRADE, SUPPORTED_TRADE_CONFIG } from "../types/trade"
 
 type StraddleOrStrangleTrade = ATM_STRADDLE_TRADE | ATM_STRANGLE_TRADE
+
 import { type COMPLETED_BY_TAG, JOB_EXECUTION_STATUS, USER_OVERRIDE } from "./constants"
 import { getValuesfromDB, patchDbTrade } from "./drizzleDbUtils"
 import autoSquareOffStrat, { squareOffTag } from "./exit-strategies/autoSquareOff"
-import { syncGetKiteInstance, getInstrumentPrice, getCompletedOrdersbyTag } from "./kiteUtils"
+import { getCompletedOrdersbyTag, getInstrumentPrice, syncGetKiteInstance } from "./kiteUtils"
 import logger from "./logger"
 import {
   getTimeLeftInMarketClosingMs,
@@ -80,10 +81,10 @@ const targetPnL = async ({
     })
     return Promise.resolve("[targetPnL] all orders are completed")
   } else if (isMaxProfitEnabled && totalPoints.points > dbData.trailingMaxProfitPoints!) {
-
     const trailingProfitMultiplier = 1 + (trailingProfitPercent || 10) / 100
     const newTrailingMaxProfitPoints = round(
-      trailingProfitMultiplier * dbData.trailingMaxProfitPoints!,0.1
+      trailingProfitMultiplier * dbData.trailingMaxProfitPoints!,
+      0.1
     )
     await patchDbTrade(initialJobData.id!, {
       lastTargetAt: dbData.lastTargetAt,

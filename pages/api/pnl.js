@@ -1,3 +1,4 @@
+import { sendApiError } from "../../lib/apiErrors"
 import { syncGetKiteInstance } from "../../lib/kiteUtils"
 import logger from "../../lib/logger"
 import { rupeePnl, strategyPointsFromFills } from "../../lib/pnl"
@@ -5,7 +6,7 @@ import withSession from "../../lib/session"
 import { withRemoteRetry } from "../../lib/utils"
 
 export default withSession(async (req, res) => {
-  const user = req.session.get("user")
+  const user = req.session.user
 
   if (!user) {
     return res.status(401).send("Unauthorized")
@@ -32,7 +33,6 @@ export default withSession(async (req, res) => {
     const points = strategyPointsFromFills(taggedOrders)
     res.json({ pnl, points, currency: "INR" })
   } catch (e) {
-    logger.error("[api/pnl] error", e)
-    res.status(500).json({ error: e.message })
+    return sendApiError(res, e, logger, "pnl")
   }
 })

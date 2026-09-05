@@ -1,4 +1,5 @@
 import { KiteConnect, type SessionData } from "kiteconnect"
+import { assertAllowedKiteUser } from "../../lib/authPolicy"
 import { checksameToken, storeAccessToken } from "../../lib/drizzleDbUtils"
 import { getIndexInstruments } from "../../lib/kiteUtils"
 import logger from "../../lib/logger"
@@ -24,10 +25,17 @@ function kiteErrorMessage(error: unknown): string {
   return "Kite login failed"
 }
 
+function serializeLoginTime(loginTime: SessionData["login_time"]): SessionData["login_time"] {
+  const value = loginTime as unknown
+  if (value instanceof Date) {
+    return value.toISOString() as SessionData["login_time"]
+  }
+  return loginTime
+}
+
 function slimSession(sessionData: SessionData): SessionData {
   return {
     access_token: sessionData.access_token,
-    refresh_token: sessionData.refresh_token,
     user_id: sessionData.user_id,
     user_name: sessionData.user_name,
     user_shortname: sessionData.user_shortname,
@@ -37,7 +45,7 @@ function slimSession(sessionData: SessionData): SessionData {
     avatar_url: sessionData.avatar_url,
     api_key: sessionData.api_key,
     public_token: sessionData.public_token,
-    login_time: sessionData.login_time,
+    login_time: serializeLoginTime(sessionData.login_time),
   } as SessionData
 }
 
@@ -52,8 +60,9 @@ export default withSession(async (req, res) => {
 
   try {
     const sessionData: SessionData = await kc.generateSession(requestToken, kiteSecret)
+    assertAllowedKiteUser(sessionData.user_id)
     const user: KiteUser = { isLoggedIn: true, session: slimSession(sessionData) }
-    req.session.set("user", user)
+    req.session.user = user
     await req.session.save()
     logger.info("[redirect_url_kite] session cookie saved")
 
@@ -76,8 +85,11 @@ export default withSession(async (req, res) => {
 
     res.redirect("/dashboard")
   } catch (error: unknown) {
-    const message = kiteErrorMessage(error)
-    logger.error("[redirect_url_kite] login failed", message, error)
+    const message =
+      error instanceof Error && error.message.includes("not authorized")
+        ? "This Kite account is not authorized"
+        : kiteErrorMessage(error)
+    logger.error("[redirect_url_kite] login failed", message)
     res.redirect(`/?loginError=${encodeURIComponent(message)}`)
   }
 })

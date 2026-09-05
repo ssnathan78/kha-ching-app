@@ -2,6 +2,10 @@
 
 This guide assumes you have used SSH before, but not that you know this app. Production is **one VM**, not Kubernetes and not DigitalOcean App Platform.
 
+Operations after the box exists: [PRODUCTION_ARCHITECTURE.md](./PRODUCTION_ARCHITECTURE.md), [PRODUCTION_RUNBOOK.md](./PRODUCTION_RUNBOOK.md), [PRODUCTION_SECURITY.md](./PRODUCTION_SECURITY.md), [PRODUCTION_HEALTH.md](./PRODUCTION_HEALTH.md). **SSH / any coding agent:** [SSH.md](./SSH.md). Template: [ssh-config.example](./ssh-config.example). Read-only probe: `scripts/production-health-check.sh`.
+
+The current repo/CI/Docker image use **Node 22** and **Yarn Berry 4.9.1** (`yarn install --immutable`). Older notes below that say Node 20 / Yarn Classic are stale until you confirm what the Droplet actually has.
+
 Why one VM: BullMQ **workers run in the same Node process** as `server.js`. A platform that only runs `next start` will skip workers and `/queues`.
 
 ## What you are installing
@@ -44,8 +48,12 @@ Copy `.env.example` to `/opt/kha-ching-app/.env` (or wherever `WorkingDirectory`
 | `REDIS_URL` | `redis://127.0.0.1:6379` (add a password in Redis config) |
 | `SECRET_COOKIE_PASSWORD` | 32+ random chars; **do not reuse** the local Docker password if that file ever leaked |
 | `KITE_API_KEY` / `KITE_API_SECRET` | Production Kite app |
+| `ALLOWED_KITE_USER_ID` | Your Zerodha user id — **required** in production (blocks other Kite accounts) |
+| `HEALTH_CHECK_TOKEN` | Optional shared secret for `GET /api/health` (Bearer or `x-health-token`) |
 
 Optional: `OTEL_EXPORTER_OTLP_ENDPOINT` and headers for Grafana Cloud.
+
+**Security:** See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) and [SECURITY_FINDINGS.md](SECURITY_FINDINGS.md). Do **not** publish Postgres (5432) or Redis (6379) to the internet; bind to localhost or use Docker internal networks only.
 
 ## Database: first boot vs later
 

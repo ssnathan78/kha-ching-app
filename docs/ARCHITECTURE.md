@@ -20,58 +20,187 @@ Next.js API routes handle HTTP (login, plans, P&amp;L). **BullMQ workers** must 
 
 If you run only `next start`, you lose that glue.
 
-## Request path: Kite login
+## Frontend
 
-1. Browser `GET /api/login` → if no cookie, redirect to Zerodha.
-2. Zerodha redirects to `/api/redirect_url_kite?request_token=...`.
-3. Server calls Kite `generateSession` (HTTPS to Zerodha) with `KITE_API_SECRET`.
-4. A **small** session payload is stored in an encrypted cookie (`iron-session`). Access tokens are **not** returned by `GET /api/user`.
-5. If this is the first token of the IST day, the server stores it in `accesstoken` and schedules ancillary / chase / square-off jobs. Failures there must **not** fail login.
-6. Browser goes to `/dashboard`.
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 16 Pages Router |
+| UI | Material-UI 5, Emotion |
+| Data fetching | SWR 2 + `fetchJson` |
+| Auth gate | `lib/useUser.ts` → `/api/user` |
+| Timezone | Asia/Kolkata (`TZ` env) |
 
-Local HTTP: cookie `Secure` flag is off (`SESSION_COOKIE_SECURE=false`). Production HTTPS: `Secure` on.
+### Pages
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/` | `pages/index.js` | Login landing |
+| `/dashboard` | `pages/dashboard.js` | Today's jobs, new trade links, weekday plan runner |
+| `/plan` | `pages/plan.tsx` | Weekday straddle/strangle templates |
+| `/chase` | `pages/chase.tsx` | Single Chase config (not weekday-based) |
+| `/strat/straddle` | `pages/strat/[strategy].js` | Punch-now ATM straddle |
+| `/strat/strangle` | `pages/strat/[strategy].js` | Punch-now ATM strangle |
+| `/profile` | `pages/profile.tsx` | Read-only broker profile |
+| `/help`, `/help/[topic]` | `pages/help/*` | In-app guides |
+| `/desk` | `pages/desk.tsx` | Ledger + risk halt/resume |
+| `/queues` | Express (`server.js`) | Bull Board (session required) |
+
+## Authentication
+
+- **Library:** iron-session 8
+- **Cookie:** `khaching-kite-session` (`SESSION_COOKIE_NAME`)
+- **Password:** `SECRET_COOKIE_PASSWORD` (≥32 chars)
+- **TTL:** until next 7 AM IST
+- **Secure flag:** `SESSION_COOKIE_SECURE` or inferred from `NEXT_PUBLIC_APP_URL`
+
+### Login flow
+
+1. `GET /api/login` → Kite OAuth or `/dashboard` if session exists
+2. Kite → `/api/redirect_url_kite?request_token=...`
+3. `generateSession` → encrypted cookie (small payload; token not exposed on `/api/user`)
+4. First token of IST day → `accesstoken` row + ancillary/chase/square-off scheduling (failures must not block login)
+5. Redirect `/dashboard`
+
+## API catalog
+
+All routes except `/api/health` require session unless noted.
+
+| Endpoint | Methods | Behavior |
+|----------|---------|----------|
+| `/api/health` | GET | Postgres + Redis check; 200 or 503 |
+| `/api/login` | GET | OAuth redirect |
+| `/api/redirect_url_kite` | GET | OAuth callback |
+| `/api/user` | GET | Profile; destroys session on invalid Kite token |
+| `/api/logout` | * | Destroy session |
+| `/api/revoke_session` | * | Destroy session (no desk kill) |
+| `/api/plan` | GET/POST/PUT/DELETE | Weekday templates; 409 on duplicate `(day, strategy)` |
+| `/api/plan/copy` | POST | Copy template to other weekdays |
+| `/api/strategy-defaults` | GET/PUT | Master defaults (not Chase) |
+| `/api/chase-settings` | GET/PUT/POST | Chase config; POST `action:reset` |
+| `/api/trades_day` | GET/POST/PUT/DELETE | Job CRUD + BullMQ enqueue |
+| `/api/get_job` | GET | BullMQ job state |
+| `/api/delete_job` | POST | Remove queued job |
+| `/api/kill-desk` | POST | Emergency flatten (`intraday` \| `all`) |
+| `/api/get_orders` | GET | Kite orders by `order_tag` |
+| `/api/order_history` | GET | Kite order history by `id` |
+| `/api/positions` | GET | Kite MIS positions |
+| `/api/pnl` | GET | Dual P&amp;L by `order_tag` |
+| `/api/desk/portfolio` | GET | Ledger portfolio + daily sessions |
+| `/api/desk/orders` | GET | Persisted order blotter |
+| `/api/desk/positions` | GET | Attributed positions |
+| `/api/desk/trades` | GET | Round-trip trades |
+| `/api/desk/activity` | GET | Decisions, audit, recon events |
+| `/api/desk/reconcile` | POST | Sync ledger with Kite (does not place orders) |
+| `/api/desk/risk` | GET/PUT/POST | Risk limits; POST `halt` \| `resume` |
+
+Trading ledger docs: [TRADING_DOMAIN_MODEL.md](./TRADING_DOMAIN_MODEL.md). Risk: [TRADING_RISK_AUDIT.md](./TRADING_RISK_AUDIT.md).
+
+### Common HTTP status codes
+
+| Code | When |
+|------|------|
+| 401 | Missing session |
+| 400 | Validation (scope, missing params) |
+| 404 | Plan not found |
+| 409 | Duplicate weekday plan |
+| 405 | Wrong HTTP method |
+| 500 | Unhandled exception |
+| 503 | Health degraded |
 
 ## Queues (Redis)
 
-Queue names include your `KITE_API_KEY` as a suffix so two API keys on one Redis stay separate.
+Queue names include `KITE_API_KEY` as suffix for isolation.
 
-| Queue | Job |
-|---|---|
-| `tradingQueue_*` | Place entry orders |
+| Queue | Role |
+|-------|------|
+| `tradingQueue_*` | Entry orders (straddle/strangle) |
 | `exitTradingQueue_*` | Stop-loss / exit |
 | `autoSquareOffQueue_*` | Time-based square-off |
 | `ancillaryQueue_*` | Orderbook sync to DB |
-| `targetPnlQueue_*` | Max profit / max loss (points) |
-| `chaseQueue_*` | EMA + chase SL updates |
+| `targetPnlQueue_*` | Max profit/loss (**points**) |
+| `chaseQueue_*` | EMA calc, signals, SL updates |
 
-Workers live in `lib/queue-processor/`.
+Workers: `lib/queue-processor/`. Stale jobs (scheduled date ≠ today) are discarded in `tradingQueue`.
+
+## Watchers (in-process)
+
+| Watcher | Role |
+|---------|------|
+| `slmWatcher` | Re-exit if exchange cancels SL-M |
+| `sllWatcher` | Convert stuck SL-L to market after 30s |
 
 ## Database
 
-Postgres. Schema in `lib/schema.ts`. Applied by `scripts/migrate.mjs` from `drizzle/*.sql`.
+Postgres via Drizzle (`lib/schema.ts`). Migrations in `drizzle/`.
 
 | Table | Purpose |
-|---|---|
-| `trade_plans` | Saved strategies per weekday |
-| `job_executions` | Each scheduled/live job (kept for audit) |
-| `transactions` | Completed orders; `order_id` unique |
-| `accesstoken` | Latest Kite token for the IST day |
-| `ema` | Chase EMA snapshots |
-| `chase_status` / `chase_log` | Chase state |
+|-------|---------|
+| `trade_plans` | Weekday templates; unique `(day_of_week, strategy)` |
+| `chase_settings` | Single-row Chase config |
+| `strategy_defaults` | Master JSON per strategy |
+| `job_executions` | Scheduled/live jobs (audit; not daily-deleted) |
+| `transactions` | Completed orders (`order_id` unique) |
+| `accesstoken` | Daily Kite token |
+| `ema`, `chase_status`, `chase_log` | Chase engine state |
+| `orders`, `order_events`, `fills` | Local order book and executions |
+| `positions`, `position_events`, `trades` | Attributed book and round-trips |
+| `trading_decisions`, `audit_events` | Why we acted |
+| `portfolio_snapshots`, `daily_sessions` | Equity, drawdown, session stats |
+| `reconciliation_events` | Ledger vs Kite disagreements |
 
-`cleanup_old_records()` deletes old tokens and EMA rows, **not** `job_executions`.
+See [TRADING_DOMAIN_MODEL.md](./TRADING_DOMAIN_MODEL.md). `transactions` remains the legacy EOD archive.
 
-## P&amp;L (two metrics)
+## P&amp;L (two metrics — do not merge)
 
-- **Rupees:** `quantity × average_price` (gross). `/api/pnl` and the dashboard chip.
-- **Points:** signed option prices used by `lib/targetPnL.ts` for max profit/loss. Intentionally not qty-weighted.
+- **Rupees:** qty × price (`lib/pnl.ts`, `/api/pnl`, dashboard)
+- **Points:** signed option prices for `lib/targetPnL.ts` (not lot-weighted)
 
-## UI
+## Strategies
 
-- `pages/` — Pages Router (`dashboard`, `plan`, `profile`, `strat/[strategy]`)
-- `components/trades/` — straddle / strangle forms
-- `src/theme.js` — MUI theme
+| Strategy | Module | Notes |
+|----------|--------|-------|
+| ATM Straddle | `lib/strategies/atmStraddle.ts` | Skew gate, optional hedge |
+| ATM Strangle | `lib/strategies/strangle.ts` | Strike selection modes |
+| Subscribe & Chase | `lib/chaseSignal.ts` | Nifty futures NRML; hourly EMA |
 
-## Instruments and lots
+### Known partial features
 
-Kite instruments are fetched and memoized for hours (`lib/kiteUtils.ts`). Strangle lot size prefers live Kite `lot_size`. Fallback constants (Jan 2026 NSE): Nifty 65, BankNifty 30, FinNifty 60. Weekly expiry UI is **Nifty only**.
+- Exit queue implements `INDIVIDUAL_LEG_SLM_1X` only; other exit enums appear in UI but are unwired in `exitTradingQueue.ts`
+- Strangle form may list FinNifty while punch-now page restricts indices
+- `runNow` market-open check is commented out in `pages/api/trades_day.ts`
+
+## Environment variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | Yes | Postgres |
+| `REDIS_URL` | Yes | BullMQ |
+| `KITE_API_KEY` / `KITE_API_SECRET` | Yes | Kite + queue suffix |
+| `SECRET_COOKIE_PASSWORD` | Yes | Session encryption |
+| `TZ` | Yes | `Asia/Kolkata` |
+| `MOCK_ORDERS` | Recommended | Default true; skips live orders |
+| `SESSION_COOKIE_SECURE` | Local HTTP | `false` for http:// |
+| `NEXT_PUBLIC_*` | Optional | Form defaults |
+| `SLACK_WEBHOOK_URL` | Optional | Chase alerts |
+| `OTEL_*` | Optional | Grafana Cloud logs |
+
+## Market simulation
+
+Reusable desk lab (not a PnL backtester): `lib/clock.ts`, `lib/marketCalendar.ts`, `lib/simulation/`. Run `yarn sim-test` or `yarn simulate -- --scenario normal-day`. Docs: [TRADING_SIMULATION_ARCHITECTURE.md](./TRADING_SIMULATION_ARCHITECTURE.md), [TRADING_SIMULATION_GUIDE.md](./TRADING_SIMULATION_GUIDE.md).
+
+## External integrations
+
+- **Zerodha Kite Connect** — `lib/kiteUtils.ts`, `lib/broker.js`
+- **Redis** — BullMQ
+- **Postgres** — Drizzle ORM
+- **OpenTelemetry** — optional via `otel.js`
+- **Slack** — optional webhooks
+
+## Error handling
+
+- API routes: per-handler try/catch; JSON `{ error }` on 500
+- Kite retries: `withRemoteRetry` (`lib/remoteRetry.ts`); 401/TokenException throws immediately
+- Job POST failure after DB insert → status `REJECT`
+- Login queue scheduling errors logged but login succeeds
+
+See also [TESTING_STRATEGY.md](./TESTING_STRATEGY.md) and [TEST_COVERAGE.md](./TEST_COVERAGE.md).

@@ -5,29 +5,48 @@
 
 import dayjs from "dayjs"
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore"
-import memoizer from "memoizee"
-
-import { KiteConnect, HistoricalData } from "kiteconnect"
-import type {
-  Connect,
-  Exchanges,
-  Instrument,
-  MarginOrder,
-  Order,
-  Variety,
-} from "kiteconnect"
-
 import { eq } from "drizzle-orm"
-import logger from "./logger"
-import type { COMPLETED_BY_TAG } from "./constants"
-import { EXPIRY_TYPE, INSTRUMENT_DETAILS, USER_OVERRIDE, STATUS_TRIGGER_PENDING, type INSTRUMENTS } from "./constants"
-import { db } from "./drizzle"
-import { allSettled } from "./es6-promise"
-import { jobExecutions } from "./schema"
+import type { Connect, Exchanges, Instrument, MarginOrder, Order, Variety } from "kiteconnect"
+import { type HistoricalData, KiteConnect } from "kiteconnect"
+import memoizer from "memoizee"
 import type { KiteOrder } from "../types/kite"
 import type { KiteUser } from "../types/misc"
+import { getChaseEngineConfig } from "./chaseSettings"
+import type { COMPLETED_BY_TAG } from "./constants"
+import {
+  EXPIRY_TYPE,
+  INSTRUMENT_DETAILS,
+  type INSTRUMENTS,
+  STATUS_TRIGGER_PENDING,
+  USER_OVERRIDE,
+} from "./constants"
+import { db } from "./drizzle"
+import { calculate40EMA } from "./ema"
+import { allSettled } from "./es6-promise"
+import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
-import { millisecondsTill7, closest, delay, finiteStateChecker, orderStateChecker, RemoteRetryTimeoutError, withRemoteRetry, isMockOrder, ms } from "./utils"
+import { jobExecutions } from "./schema"
+import {
+  applyBrokerOrderSnapshot,
+  markOrderSubmitted,
+  markOrderUnknown,
+  safeRecordOrderFromKiteProps,
+} from "./trading/ledger"
+import { inferOrderRole } from "./trading/riskEngine"
+import { assertOrderAllowed } from "./trading/riskGate"
+import {
+  closest,
+  delay,
+  finiteStateChecker,
+  isMockOrder,
+  millisecondsTill7,
+  ms,
+  orderStateChecker,
+  RemoteRetryTimeoutError,
+  withRemoteRetry,
+} from "./utils"
+
+export { calculate40EMA, calculateEmaFromCandles } from "./ema"
 
 dayjs.extend(isSameOrBefore)
 
@@ -41,78 +60,6 @@ export interface StrikeInterface {
 }
 
 type KiteConnectInstance = InstanceType<typeof KiteConnect>
-
-/**
- * Calculate 40-period Exponential Moving Average (EMA) from candle data.
- *
- * @param candles - Array of candle data with open/high/low/close/volume
- * @param prevEMA - Previous EMA value, if available (for incremental calculation)
- * @returns Object with ema, highestHigh, lowestLow, lastClose or null if insufficient data
- */
-export const calculate40EMA = (
-  candles: HistoricalData[],
-  prevEMA: number | null = null
-): {
-  ema: number
-  highestHigh: number
-  lowestLow: number
-  lastClose: number
-} | null => {
-  const period = 40
-  const multiplier = 2 / (period + 1)
-
-  const today = new Date().toISOString().split("T")[0]
-  const filteredCandles = candles.filter(candle => candle.date.toISOString().startsWith(today))
-
-  if (filteredCandles.length === 0) {
-    logger.error("kiteUtils.calculate40EMA: No candles found for the date", {
-      date: today,
-      candleCount: candles.length,
-    })
-    return null
-  }
-
-  if (prevEMA === null && candles.length < period) {
-    logger.error("kiteUtils.calculate40EMA: Not enough candles for the calculation", {
-      candleCount: candles.length,
-      required: period,
-    })
-    return null
-  }
-
-  const highestHigh = Math.round(Math.max(...filteredCandles.map(candle => candle.high)))
-  const lowestLow = Math.round(Math.min(...filteredCandles.map(candle => candle.low)))
-  const lastClose = Math.round(filteredCandles[filteredCandles.length - 1].close)
-
-  const hlcValues = candles.map(candle => (candle.high + candle.low + candle.close) / 3)
-
-  let ema: number
-  if (prevEMA === null) {
-    const sma40 = hlcValues.slice(0, period).reduce((acc, value) => acc + value, 0) / period
-    const emaArray = [sma40]
-
-    for (let i = period; i < hlcValues.length; i++) {
-      emaArray.push(hlcValues[i] * multiplier + emaArray[emaArray.length - 1] * (1 - multiplier))
-    }
-
-    ema = emaArray[emaArray.length - 1]
-  } else {
-    ema = hlcValues[hlcValues.length - 1] * multiplier + prevEMA * (1 - multiplier)
-  }
- logger.info("[kiteUtils.calculate40EMA]: Calculated EMA", {
-    ema,
-    highestHigh,
-    lowestLow,
-    lastClose,
-  });
-
-  return {
-    ema: Math.round(ema),
-    highestHigh,
-    lowestLow,
-    lastClose,
-  }
-}
 
 /**
  * Create a KiteConnect client instance.
@@ -144,7 +91,7 @@ export function getKiteInstance(accessToken?: string): KiteConnectInstance {
 export async function getPreviousTradingDay(accessToken: string): Promise<Date> {
   const kite = getKiteInstance(accessToken)
   const today = new Date()
-  let fiveDaysBack = new Date(today)
+  const fiveDaysBack = new Date(today)
   fiveDaysBack.setDate(fiveDaysBack.getDate() - 5)
   const candles: HistoricalData[] = await kite.getHistoricalData(
     256265, // NIFTY 50 instrument token
@@ -164,7 +111,9 @@ export async function getPreviousTradingDay(accessToken: string): Promise<Date> 
   }
 
   const lastCandle = candles[candles.length - 1]
-  logger.info(`[kiteUtils.getPreviousTradingDay] last candle date=${lastCandle.date} open=${lastCandle.open} high=${lastCandle.high} low=${lastCandle.low} close=${lastCandle.close}`)
+  logger.info(
+    `[kiteUtils.getPreviousTradingDay] last candle date=${lastCandle.date} open=${lastCandle.open} high=${lastCandle.high} low=${lastCandle.low} close=${lastCandle.close}`
+  )
 
   // Sort it and find the last candle which is before today (in case the last candle is for today but we want the previous trading day)
   if (new Date(lastCandle.date).toDateString() === today.toDateString()) {
@@ -174,18 +123,23 @@ export async function getPreviousTradingDay(accessToken: string): Promise<Date> 
       .find(candle => new Date(candle.date).toDateString() !== today.toDateString())
 
     if (!previousCandle) {
-      logger.error("kiteUtils.getPreviousTradingDay: no previous trading day found in candle data", {
-        instrumentToken: 256265,
-        from: fiveDaysBack,
-        to: today,
-      })
+      logger.error(
+        "kiteUtils.getPreviousTradingDay: no previous trading day found in candle data",
+        {
+          instrumentToken: 256265,
+          from: fiveDaysBack,
+          to: today,
+        }
+      )
       throw new Error("No previous trading day found in candle data")
     }
 
     return new Date(previousCandle.date)
   }
 
-  logger.info(`[kiteUtils.getPreviousTradingDay] last candle date ${lastCandle.date} is the previous trading day`)
+  logger.info(
+    `[kiteUtils.getPreviousTradingDay] last candle date ${lastCandle.date} is the previous trading day`
+  )
   const result = new Date(lastCandle.date)
   logger.info(`[kiteUtils.getPreviousTradingDay] ${result.toDateString()}`)
   return result
@@ -214,24 +168,24 @@ export async function calculateEma(
   let candles: HistoricalData[] = []
   const kite = getKiteInstance(accessToken)
   const now = dayjs()
+  const { emaPeriod } = await getChaseEngineConfig()
 
   if (prevEma === null) {
-    // If no previous EMA, we need at least 40 candles to calculate the initial SMA
-candles = await kite.getHistoricalData(
+    candles = await kite.getHistoricalData(
       instrumentToken,
       "60minute",
-      now.subtract(50, "day").toDate(),
+      now.subtract(Math.max(50, emaPeriod + 20), "day").toDate(),
       now.toDate()
     )
 
-    if (!Array.isArray(candles) || candles.length < 40) {
+    if (!Array.isArray(candles) || candles.length < emaPeriod) {
       logger.error("kiteUtils.calculateEma: not enough historical candles for initial EMA", {
         tradingsymbol: instrument.tradingsymbol,
         candleCount: Array.isArray(candles) ? candles.length : 0,
-        required: 40,
+        required: emaPeriod,
       })
       throw new Error(
-        `Not enough historical candles to calculate initial EMA for ${instrument.tradingsymbol}. Found: ${Array.isArray(candles) ? candles.length : 0}, Required: 40`
+        `Not enough historical candles to calculate initial EMA for ${instrument.tradingsymbol}. Found: ${Array.isArray(candles) ? candles.length : 0}, Required: ${emaPeriod}`
       )
     }
   } else {
@@ -250,9 +204,7 @@ candles = await kite.getHistoricalData(
         from: now.subtract(4, "day").toDate(),
         to: now.toDate(),
       })
-      throw new Error(
-        `No historical candles found for ${instrument.tradingsymbol} to update EMA.`
-      )
+      throw new Error(`No historical candles found for ${instrument.tradingsymbol} to update EMA.`)
     }
   }
 
@@ -264,7 +216,7 @@ candles = await kite.getHistoricalData(
     throw new Error(`Unexpected Kite historical candle response for ${instrument.tradingsymbol}`)
   }
 
-  return calculate40EMA(candles, prevEma)
+  return calculate40EMA(candles, prevEma, emaPeriod)
 }
 
 /**
@@ -301,15 +253,86 @@ export function syncGetKiteInstance(user): KiteConnectInstance {
  * @param order - Order payload accepted by Kite.
  * @returns The Kite placeOrder response.
  */
+export type RiskAwarePlaceOrder = PlaceOrderParams & {
+  purpose?: string
+}
+
+function stripRiskMeta(order: RiskAwarePlaceOrder): PlaceOrderParams {
+  const { purpose: _purpose, ...rest } = order as RiskAwarePlaceOrder & Record<string, unknown>
+  return rest as PlaceOrderParams
+}
+
 export async function placeOrder(
   kite: KiteConnectInstance,
   variety: Variety,
-  order: PlaceOrderParams
+  order: RiskAwarePlaceOrder
 ): Promise<any> {
-  return kite.placeOrder(variety, {
-    ...order,
-    market_protection: (order as any).market_protection ?? 2,
-  } as PlaceOrderParams)
+  const purpose = (order as RiskAwarePlaceOrder).purpose
+  const kiteOrder = stripRiskMeta(order)
+  await assertOrderAllowed({
+    tradingsymbol: kiteOrder.tradingsymbol,
+    exchange: kiteOrder.exchange,
+    transaction_type: kiteOrder.transaction_type,
+    order_type: kiteOrder.order_type,
+    product: kiteOrder.product,
+    quantity: kiteOrder.quantity,
+    price: kiteOrder.price,
+    trigger_price: kiteOrder.trigger_price,
+    tag: kiteOrder.tag,
+    purpose,
+    role: inferOrderRole({ purpose, orderType: kiteOrder.order_type }),
+  })
+
+  const ledgerOrderId = await safeRecordOrderFromKiteProps(
+    kiteOrder as {
+      tradingsymbol?: string
+      exchange?: string
+      transaction_type?: string
+      order_type?: string
+      product?: string
+      quantity?: number
+      price?: number
+      trigger_price?: number
+      tag?: string
+      validity?: string
+    },
+    purpose ? { purpose: purpose as any } : undefined
+  )
+  try {
+    if (isMockOrder()) {
+      const mockId = ledgerOrderId ? `mock:${ledgerOrderId}` : `mock:${Date.now()}`
+      await markOrderSubmitted({
+        orderId: ledgerOrderId,
+        brokerOrderId: mockId,
+        status: "SUBMITTED",
+        provenance: "MOCK",
+      })
+      logger.info("[placeOrder] MOCK_ORDERS=true — not calling Kite", {
+        tradingsymbol: kiteOrder.tradingsymbol,
+        quantity: kiteOrder.quantity,
+        purpose,
+      })
+      return { order_id: mockId }
+    }
+
+    const result = await kite.placeOrder(variety, {
+      ...kiteOrder,
+      market_protection: (kiteOrder as any).market_protection ?? 2,
+    } as PlaceOrderParams)
+    await markOrderSubmitted({
+      orderId: ledgerOrderId,
+      brokerOrderId: result?.order_id || null,
+      status: result?.order_id ? "SUBMITTED" : "FAILED",
+    })
+    return result
+  } catch (e) {
+    await markOrderSubmitted({
+      orderId: ledgerOrderId,
+      status: "FAILED",
+      errorInfo: e instanceof Error ? e.message : String(e),
+    })
+    throw e
+  }
 }
 
 /**
@@ -354,7 +377,9 @@ export async function fetchOrdersFromKite(accessToken: string): Promise<Order[]>
 export async function asyncGetIndexInstruments(exchange = "NFO"): Promise<Instrument[]> {
   const kite = getKiteInstance()
   const instruments = await kite.getInstruments(exchange as Exchanges)
-logger.info(`[asyncGetIndexInstruments] Fetched ${instruments.length} instruments for exchange: ${exchange}`);
+  logger.info(
+    `[asyncGetIndexInstruments] Fetched ${instruments.length} instruments for exchange: ${exchange}`
+  )
   if (exchange === "NFO") {
     return instruments.filter(
       item => item.name === "NIFTY" || item.name === "BANKNIFTY" || item.name === "FINNIFTY"
@@ -792,11 +817,27 @@ export const getOTMStrangleByOptionPrice = async ({
     }
   }
 
-  const otmCEOptions = await getOTMOptions({ nfoSymbol, strike: pivotStrike, instrumentType: "CE", expiry: expiryDate })
-  const otmPEOptions = await getOTMOptions({ nfoSymbol, strike: pivotStrike, instrumentType: "PE", expiry: expiryDate })
+  const otmCEOptions = await getOTMOptions({
+    nfoSymbol,
+    strike: pivotStrike,
+    instrumentType: "CE",
+    expiry: expiryDate,
+  })
+  const otmPEOptions = await getOTMOptions({
+    nfoSymbol,
+    strike: pivotStrike,
+    instrumentType: "PE",
+    expiry: expiryDate,
+  })
 
-  const otmCEInstruments = otmCEOptions.map(row => ({ exchange: kite.EXCHANGE_NFO, tradingSymbol: row.tradingsymbol }))
-  const otmPEInstruments = otmPEOptions.map(row => ({ exchange: kite.EXCHANGE_NFO, tradingSymbol: row.tradingsymbol }))
+  const otmCEInstruments = otmCEOptions.map(row => ({
+    exchange: kite.EXCHANGE_NFO,
+    tradingSymbol: row.tradingsymbol,
+  }))
+  const otmPEInstruments = otmPEOptions.map(row => ({
+    exchange: kite.EXCHANGE_NFO,
+    tradingSymbol: row.tradingsymbol,
+  }))
 
   const otmCEPrices = await getMultipleInstrumentPrices(otmCEInstruments, user)
   const otmPEPrices = await getMultipleInstrumentPrices(otmPEInstruments, user)
@@ -805,11 +846,21 @@ export const getOTMStrangleByOptionPrice = async ({
 
   const CEformattedPrices: LTP_TYPE[] = otmCEInstruments.map(({ tradingSymbol }) => {
     const { instrumentToken, lastPrice } = otmCEPrices[tradingSymbol]
-    return { tradingsymbol: tradingSymbol, strike: getStrike(tradingSymbol), instrument_token: instrumentToken, last_price: lastPrice }
+    return {
+      tradingsymbol: tradingSymbol,
+      strike: getStrike(tradingSymbol),
+      instrument_token: instrumentToken,
+      last_price: lastPrice,
+    }
   })
   const PEformattedPrices: LTP_TYPE[] = otmPEInstruments.map(({ tradingSymbol }) => {
     const { instrumentToken, lastPrice } = otmPEPrices[tradingSymbol]
-    return { tradingsymbol: tradingSymbol, strike: getStrike(tradingSymbol), instrument_token: instrumentToken, last_price: lastPrice }
+    return {
+      tradingsymbol: tradingSymbol,
+      strike: getStrike(tradingSymbol),
+      instrument_token: instrumentToken,
+      last_price: lastPrice,
+    }
   })
 
   return [
@@ -869,10 +920,20 @@ export const getTradingSymbolsByOptionPrice = async ({
 
   const formattedPrices: LTP_TYPE[] = instruments.map(({ tradingSymbol }) => {
     const { instrumentToken, lastPrice } = priceDataByTradingSymbol[tradingSymbol]
-    return { tradingsymbol: tradingSymbol, strike: getStrike(tradingSymbol), instrument_token: instrumentToken, last_price: lastPrice }
+    return {
+      tradingsymbol: tradingSymbol,
+      strike: getStrike(tradingSymbol),
+      instrument_token: instrumentToken,
+      last_price: lastPrice,
+    }
   })
 
-  return closest(price, formattedPrices, "last_price", greaterThanEqualToPrice) as Partial<Instrument>
+  return closest(
+    price,
+    formattedPrices,
+    "last_price",
+    greaterThanEqualToPrice
+  ) as Partial<Instrument>
 }
 
 /**
@@ -944,6 +1005,19 @@ export const remoteOrderSuccessEnsurer = async (args: {
     throw Error(USER_OVERRIDE.ABORT)
   }
 
+  await assertOrderAllowed({
+    tradingsymbol: orderProps.tradingsymbol,
+    exchange: orderProps.exchange,
+    transaction_type: orderProps.transaction_type,
+    order_type: orderProps.order_type,
+    product: orderProps.product,
+    quantity: orderProps.quantity,
+    price: orderProps.price,
+    trigger_price: orderProps.trigger_price,
+    tag: orderProps.tag,
+    purpose: (orderProps as { purpose?: string }).purpose,
+  })
+
   const kite = (_kite ?? syncGetKiteInstance(user)) as any
 
   const { freezeQty } = INSTRUMENT_DETAILS[instrument]
@@ -983,9 +1057,20 @@ export const remoteOrderSuccessEnsurer = async (args: {
       logger.info("mock order", orderProps)
     }
     logger.info(`[remoteOrderSuccessEnsurer] Order details are ${JSON.stringify(orderProps)}`)
+    const ledgerOrderId = mockOrders
+      ? await safeRecordOrderFromKiteProps(orderProps, { provenance: "MOCK" })
+      : null
     const orderAckResponse = mockOrders
-      ? { order_id: "" }
+      ? { order_id: ledgerOrderId ? `mock:${ledgerOrderId}` : "" }
       : await placeOrder(kite, kite.VARIETY_REGULAR, orderProps as PlaceOrderParams)
+    if (mockOrders && ledgerOrderId) {
+      await markOrderSubmitted({
+        orderId: ledgerOrderId,
+        brokerOrderId: orderAckResponse.order_id,
+        status: "SUBMITTED",
+        provenance: "MOCK",
+      })
+    }
     const { order_id: ackOrderId } = orderAckResponse
     const { promise: isOrderInUltimateStatePr, cancel: cancelOrderStateCheck } = orderStateChecker(
       kite,
@@ -998,10 +1083,14 @@ export const remoteOrderSuccessEnsurer = async (args: {
         orderStatusCheckTimeout,
         cancelOrderStateCheck
       )
+      await applyBrokerOrderSnapshot(ultimateStateOrder as KiteOrder, {
+        internalOrderId: ledgerOrderId,
+      })
       return { successful: true, response: [ultimateStateOrder] }
     } catch (e) {
       logger.error("🔴 [remoteOrderSuccessEnsurer] caught", e)
       if (e instanceof RemoteRetryTimeoutError) {
+        if (ledgerOrderId) await markOrderUnknown(ledgerOrderId, "order state timeout")
         return { successful: false, response: [orderAckResponse] }
       }
       if (e?.message === kite.STATUS_REJECTED) {
@@ -1041,16 +1130,15 @@ export const remoteOrderSuccessEnsurer = async (args: {
           return remoteOrderSuccessEnsurer({ ...args, attemptCount: attemptCount + 1 })
         }
 
-        const {
-          promise: isMatchedOrderInUltimateStatePr,
-          cancel: cancelMatchedOrderStateCheck,
-        } = orderStateChecker(kite, matchedOrder.order_id, ensureOrderState)
+        const { promise: isMatchedOrderInUltimateStatePr, cancel: cancelMatchedOrderStateCheck } =
+          orderStateChecker(kite, matchedOrder.order_id, ensureOrderState)
         try {
           const ultimateStateOrder = await finiteStateChecker(
             isMatchedOrderInUltimateStatePr,
             orderStatusCheckTimeout,
             cancelMatchedOrderStateCheck
           )
+          await applyBrokerOrderSnapshot(ultimateStateOrder as KiteOrder)
           return { successful: true, response: [ultimateStateOrder] }
         } catch (e) {
           if (e?.message === kite.STATUS_REJECTED) {
@@ -1205,10 +1293,7 @@ export async function cancelOrder(
 /**
  * Place a regular order on Kite using an access token directly.
  */
-export async function placeKiteOrder(
-  accessToken: string,
-  params: PlaceOrderParams
-): Promise<any> {
+export async function placeKiteOrder(accessToken: string, params: PlaceOrderParams): Promise<any> {
   const kite = getKiteInstance(accessToken)
   return placeOrder(kite, kite.VARIETY_REGULAR, params)
 }
@@ -1256,7 +1341,9 @@ export async function placeSL(
       trigger_price: stoploss,
       price,
     } as any)
-    logger.info(`[placeSL] Modified SL order ${existingSL.order_id} to ${stoploss} for ${tradingsymbol}`)
+    logger.info(
+      `[placeSL] Modified SL order ${existingSL.order_id} to ${stoploss} for ${tradingsymbol}`
+    )
     return
   }
 
@@ -1269,11 +1356,12 @@ export async function placeSL(
   }
 
   const stoplossBreached =
-    (transactionType === "BUY" && stoploss < ltp) ||
-    (transactionType === "SELL" && stoploss > ltp)
+    (transactionType === "BUY" && stoploss < ltp) || (transactionType === "SELL" && stoploss > ltp)
 
   if (stoplossBreached) {
-    logger.warn(`[placeSL] Stoploss ${stoploss} already breached for ${tradingsymbol}, placing market order`)
+    logger.warn(
+      `[placeSL] Stoploss ${stoploss} already breached for ${tradingsymbol}, placing market order`
+    )
     await placeOrder(kite, kite.VARIETY_REGULAR, {
       tradingsymbol,
       exchange: kite.EXCHANGE_NFO,
@@ -1283,6 +1371,7 @@ export async function placeSL(
       product: kite.PRODUCT_NRML,
       price: ltp,
       tag: "chase",
+      purpose: "FLATTEN",
     } as PlaceOrderParams)
   } else {
     await placeOrder(kite, kite.VARIETY_REGULAR, {
@@ -1295,6 +1384,7 @@ export async function placeSL(
       tag: "chase",
       trigger_price: stoploss,
       price,
+      purpose: "SL",
     } as PlaceOrderParams)
   }
   logger.info(`[placeSL] Placed SL order for ${tradingsymbol} at ${stoploss}`)
@@ -1306,7 +1396,10 @@ export async function placeSL(
  * @param user - session user object containing access_token
  * @returns Mapping from tradingSymbol -> { exchange, tradingSymbol, instrumentToken, lastPrice }
  */
-export async function getMultipleInstrumentPrices(instruments: Array<{ exchange: string; tradingSymbol: string }>, user: any) {
+export async function getMultipleInstrumentPrices(
+  instruments: Array<{ exchange: string; tradingSymbol: string }>,
+  user: any
+) {
   const kite = syncGetKiteInstance(user)
 
   const results = await Promise.all(
@@ -1314,12 +1407,15 @@ export async function getMultipleInstrumentPrices(instruments: Array<{ exchange:
       const key = `${exchange}:${tradingSymbol}`
       const res = await kite.getLTP(key)
       const data = res[key]
-      return [tradingSymbol, {
-        exchange,
+      return [
         tradingSymbol,
-        instrumentToken: data?.instrument_token,
-        lastPrice: data?.last_price,
-      }]
+        {
+          exchange,
+          tradingSymbol,
+          instrumentToken: data?.instrument_token,
+          lastPrice: data?.last_price,
+        },
+      ]
     })
   )
 

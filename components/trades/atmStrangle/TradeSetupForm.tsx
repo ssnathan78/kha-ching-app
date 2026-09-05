@@ -1,4 +1,5 @@
 import {
+  Box,
   Button,
   Checkbox,
   FormControl,
@@ -13,38 +14,42 @@ import {
   Typography,
 } from "@mui/material"
 import { TimePicker } from "@mui/x-date-pickers/TimePicker"
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
 import dayjs from "dayjs"
 import React from "react"
 
 import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import {
   EXIT_STRATEGIES,
-  INSTRUMENT_DETAILS,
   INSTRUMENTS,
-  STRATEGIES,
   STRANGLE_ENTRY_STRATEGIES,
+  STRATEGIES,
   STRATEGIES_DETAILS,
-  ENTRY_ORDER,
 } from "../../../lib/constants"
-import { ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
+import { coerceLots } from "../../../lib/planMapper"
+import { validateLots } from "../../../lib/strategyValidation"
+import type { ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
+import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
+import FormSection from "../../lib/FormSection"
 import HedgeComponent from "../../lib/HedgeComponent"
-import VolatilityTypeComponent from "../../lib/VolatilityTypeComponent"
+import InstrumentPicker from "../../lib/InstrumentPicker"
 import ProductTypeComponent from "../../lib/ProductTypeComponent"
 import RollbackComponent from "../../lib/RollbackComponent"
 import DiscreteSlider from "../../lib/Slider"
 import SlManagerComponent from "../../lib/SlManagerComponent"
-import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
+import VolatilityTypeComponent from "../../lib/VolatilityTypeComponent"
 
 interface ATMStrangleTradeSetupFormProps {
   formHeading?: string
   strategy: STRATEGIES
   state: ATM_STRANGLE_CONFIG
   isRunnable?: boolean
+  embedded?: boolean
   onChange: (changedProps: Partial<ATM_STRANGLE_CONFIG>) => void
   onCancel: () => void
   onSubmit: (data: AvailablePlansConfig | null) => void
+  onRunNow?: () => void
+  enabledInstruments?: INSTRUMENTS[]
+  exitStrategies?: EXIT_STRATEGIES[]
 }
 
 const TradeSetupForm = ({
@@ -53,273 +58,296 @@ const TradeSetupForm = ({
   state,
   onChange,
   onSubmit,
+  onRunNow,
   onCancel,
   isRunnable = true,
+  embedded = false,
+  enabledInstruments: enabledInstrumentsProp,
+  exitStrategies: exitStrategiesProp,
 }: ATMStrangleTradeSetupFormProps) => {
   const isSchedulingDisabled = false
 
-  const enabledInstruments = [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]
+  const enabledInstruments = enabledInstrumentsProp ?? [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]
+
+  const exitStrategies = exitStrategiesProp ?? [
+    EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
+    EXIT_STRATEGIES.NO_SL,
+  ]
+
   const entryStrategies = [
     STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM,
     STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM,
     STRANGLE_ENTRY_STRATEGIES.ENTRY_PRICE,
   ]
-  const orderTypes = [ENTRY_ORDER.MARKET_ORDER, ENTRY_ORDER.STOP_LOSS_MARKET_ORDER]
-  const exitStrategies = [
-    EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
-    EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD,
-    EXIT_STRATEGIES.NO_SL,
-  ]
+
+  const [lotsError, setLotsError] = React.useState<string | null>(null)
 
   const handleFormSubmit = e => {
     e.preventDefault()
+    const lotsCheck = validateLots(state.lots)
+    if (!lotsCheck.ok) {
+      setLotsError(lotsCheck.error)
+      return
+    }
+    setLotsError(null)
     onSubmit(formatFormDataForApi({ strategy, data: state }))
   }
 
-  return (
-    <form noValidate>
-      <Paper style={{ padding: 16 }}>
-        <Typography variant="h6" style={{ marginBottom: 16 }}>
-          {formHeading ?? "Setup new trade"}
+  const body = (
+    <>
+      {formHeading ? (
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          {formHeading}
         </Typography>
-        <Grid container alignItems="flex-start" spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              name="name"
-              value={state.name}
-              onChange={e => onChange({ name: e.target.value || undefined })}
-              label="Name of trade "
+      ) : null}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" },
+          gap: 2,
+        }}
+      >
+        <FormSection
+          title="Contract"
+          hint="Name is a label. Index is the actual Nifty / BankNifty / FinNifty contract."
+          helpHref="/help/strangle#contract"
+        >
+          <Grid container spacing={2}>
+            <Grid size={12}>
+              <TextField
+                size="small"
+                fullWidth
+                name="name"
+                value={state.name ?? ""}
+                onChange={e => onChange({ name: e.target.value })}
+                label="Template name"
+                helperText="Shown in the plan list. Does not change what is traded."
+              />
+            </Grid>
+            <Grid size={12}>
+              <InstrumentPicker
+                single={embedded}
+                instruments={state.instruments}
+                enabledInstruments={enabledInstruments}
+                disabled={state.disableInstrumentChange}
+                onChange={next => onChange({ instruments: next })}
+              />
+            </Grid>
+            <VolatilityTypeComponent state={state} onChange={onChange} />
+            <ProductTypeComponent state={state} onChange={onChange} />
+            <ExpiryTypeComponent state={state} onChange={onChange} />
+            <Grid size={12}>
+              <TextField
+                size="small"
+                fullWidth
+                name="lots"
+                value={state.lots ?? ""}
+                error={Boolean(lotsError)}
+                helperText={lotsError || ""}
+                onChange={e => {
+                  setLotsError(null)
+                  onChange({ lots: coerceLots(e.target.value) })
+                }}
+                label="Lots"
+              />
+            </Grid>
+            <Grid size={12}>
+              <FormControlLabel
+                label="Inverted strangle"
+                control={
+                  <Checkbox
+                    checked={state.inverted}
+                    onChange={() => onChange({ inverted: !state.inverted })}
+                  />
+                }
+              />
+            </Grid>
+          </Grid>
+        </FormSection>
+
+        <FormSection title="Entry" hint="How far from ATM" helpHref="/help/strangle#entry">
+          <Grid container spacing={2}>
+            <Grid size={12}>
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Entry strategy</FormLabel>
+                <RadioGroup
+                  aria-label="entryStrategy"
+                  name="entryStrategy"
+                  value={state.entryStrategy}
+                  onChange={e =>
+                    onChange({
+                      entryStrategy: e.target.value as STRANGLE_ENTRY_STRATEGIES,
+                    })
+                  }
+                >
+                  {entryStrategies.map(entryStrategy => (
+                    <FormControlLabel
+                      key={entryStrategy}
+                      value={entryStrategy}
+                      control={<Radio size="small" />}
+                      label={
+                        <Typography variant="body2">
+                          {STRATEGIES_DETAILS[STRATEGIES.ATM_STRANGLE].ENTRY_STRATEGY_DETAILS[
+                            entryStrategy
+                          ]?.label ?? entryStrategy}
+                        </Typography>
+                      }
+                    />
+                  ))}
+                </RadioGroup>
+              </FormControl>
+            </Grid>
+            <Grid size={12}>
+              {state.entryStrategy === STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM ? (
+                <DiscreteSlider
+                  label="Strikes away from ATM"
+                  defaultValue={1}
+                  step={1}
+                  min={1}
+                  max={20}
+                  value={state.distanceFromAtm}
+                  onChange={(e, newValue) => onChange({ distanceFromAtm: newValue })}
+                />
+              ) : state.entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM ? (
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="percentStrikes"
+                  value={state.percentfromAtm}
+                  defaultValue={2}
+                  onChange={e => onChange({ percentfromAtm: +e.target.value || undefined })}
+                  label="Percent from ATM"
+                />
+              ) : (
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="optionPrice"
+                  value={state.optionPrice}
+                  defaultValue={20}
+                  onChange={e => onChange({ optionPrice: +e.target.value || undefined })}
+                  label="Option price"
+                />
+              )}
+            </Grid>
+          </Grid>
+        </FormSection>
+
+        <FormSection title="Risk" hint="Stops and hedges" helpHref="/help/strangle#risk">
+          <Grid container spacing={2}>
+            <SlManagerComponent state={state} onChange={onChange} exitStrategies={exitStrategies} />
+            <HedgeComponent
+              volatilityType={state.volatilityType}
+              isHedgeEnabled={state.isHedgeEnabled}
+              hedgeDistance={state.hedgeDistance}
+              onChange={onChange}
             />
           </Grid>
+        </FormSection>
 
-          <Grid item xs={12}>
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Instruments</FormLabel>
-              <FormGroup row>
-                {enabledInstruments.map(instrument => (
+        <FormSection title="Timing" hint="When to run and flatten" helpHref="/help/strangle#timing">
+          <Grid container spacing={2}>
+            <Grid size={12}>
+              <FormControl component="fieldset">
+                <FormGroup>
                   <FormControlLabel
-                    key={instrument}
-                    label={INSTRUMENT_DETAILS[instrument].displayName}
+                    label="Auto square off"
                     control={
                       <Checkbox
-                        name="instruments"
-                        disabled={state.disableInstrumentChange}
-                        checked={state.instruments[instrument]}
-                        onChange={() => {
+                        checked={state.isAutoSquareOffEnabled}
+                        onChange={() =>
                           onChange({
-                            instruments: {
-                              [instrument]: !state.instruments[instrument],
-                            } as Record<INSTRUMENTS, boolean>,
+                            isAutoSquareOffEnabled: !state.isAutoSquareOffEnabled,
                           })
-                        }}
+                        }
                       />
                     }
                   />
-                ))}
-              </FormGroup>
-            </FormControl>
-          </Grid>
-
-          <VolatilityTypeComponent state={state} onChange={onChange} />
-
-          <ProductTypeComponent state={state} onChange={onChange} />
-
-          <ExpiryTypeComponent state={state} onChange={onChange} />
-
-          <Grid item xs={12}>
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Entry strategy</FormLabel>
-              <RadioGroup
-                aria-label="entryStrategy"
-                name="entryStrategy"
-                value={state.entryStrategy}
-                onChange={e =>
-                  onChange({
-                    entryStrategy: e.target.value as STRANGLE_ENTRY_STRATEGIES,
-                  })
-                }
-              >
-                {entryStrategies.map(entryStrategy => (
-                  <FormControlLabel
-                    key={entryStrategy}
-                    value={entryStrategy}
-                    control={<Radio size="small" />}
-                    label={
-                      <Typography variant="body2">
-                        {
-                          STRATEGIES_DETAILS[STRATEGIES.ATM_STRANGLE].ENTRY_STRATEGY_DETAILS[
-                            entryStrategy
-                          ].label
-                        }
-                      </Typography>
-                    }
-                  />
-                ))}
-              </RadioGroup>
-            </FormControl>
-          </Grid>
-
-          <Grid item>
-            {state.entryStrategy === STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM ? (
-              <DiscreteSlider
-                label={"Strikes away from ATM strike"}
-                defaultValue={1}
-                step={1}
-                min={1}
-                max={20}
-                value={state.distanceFromAtm}
-                onChange={(e, newValue) => onChange({ distanceFromAtm: newValue })}
-              />
-            ) : state.entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM ? (
-              <TextField
-                fullWidth
-                name="percentStrikes"
-                value={state.percentfromAtm}
-                defaultValue={2}
-                onChange={e => onChange({ percentfromAtm: +e.target.value || undefined })}
-                label="Percent from ATM%"
-              />
-            ) : (
-              <TextField
-                fullWidth
-                name="optionPrice"
-                value={state.optionPrice}
-                defaultValue={20}
-                onChange={e => onChange({ optionPrice: +e.target.value || undefined })}
-                label="Option Price"
-              />
-            )}
-          </Grid>
-
-          <Grid item xs={12} style={{ marginBottom: 8 }}>
-            <TextField
-              fullWidth
-              name="lots"
-              value={state.lots}
-              onChange={e => onChange({ lots: +e.target.value || undefined })}
-              label="# Lots"
-            />
-          </Grid>
-
-          <SlManagerComponent state={state} onChange={onChange} exitStrategies={exitStrategies} />
-
-          <Grid item xs={12}>
-            <FormControl component="fieldset">
-              <FormGroup row>
-                <FormControlLabel
-                  label="Inverted Strangle"
-                  control={
-                    <Checkbox
-                      name="instruments"
-                      checked={state.inverted}
-                      onChange={() => onChange({ inverted: !state.inverted })}
-                    />
-                  }
-                />
-              </FormGroup>
-            </FormControl>
-          </Grid>
-
-          <HedgeComponent
-            volatilityType={state.volatilityType}
-            isHedgeEnabled={state.isHedgeEnabled}
-            hedgeDistance={state.hedgeDistance}
-            onChange={onChange}
-          />
-
-          <Grid item xs={12}>
-            <FormControl component="fieldset">
-              <FormGroup>
-                <FormControlLabel
-                  key="autoSquareOff"
-                  label="Auto Square off"
-                  control={
-                    <Checkbox
-                      checked={state.isAutoSquareOffEnabled}
-                      onChange={() =>
-                        onChange({
-                          isAutoSquareOffEnabled: !state.isAutoSquareOffEnabled,
-                        })
-                      }
-                    />
-                  }
-                />
-                {state.isAutoSquareOffEnabled ? (
-                  <LocalizationProvider dateAdapter={AdapterDateFns}>
+                  {state.isAutoSquareOffEnabled ? (
                     <TimePicker
                       label="Square off time"
-                      value={state.squareOffTime}
+                      value={state.squareOffTime ? dayjs(state.squareOffTime) : null}
                       onChange={selectedDate => {
                         onChange({ squareOffTime: ensureIST(selectedDate) })
                       }}
-                      renderInput={params => (
-                        <TextField {...params} margin="normal" id="time-picker" />
-                      )}
+                      slotProps={{
+                        textField: {
+                          margin: "normal",
+                          id: "time-picker",
+                          size: "small",
+                          fullWidth: true,
+                        },
+                      }}
                     />
-                  </LocalizationProvider>
-                ) : null}
-              </FormGroup>
-            </FormControl>
-          </Grid>
-
-          <RollbackComponent rollback={state.rollback!} onChange={onChange} />
-
-          {isRunnable ? (
-            <Grid item xs={12}>
-              <Button
-                variant="contained"
-                color="secondary"
-                type="button"
-                onClick={e => {
-                  onChange({ runNow: true })
-                }}
-              >
-                Schedule now
-              </Button>
+                  ) : null}
+                </FormGroup>
+              </FormControl>
             </Grid>
-          ) : null}
-
-          <Grid item xs={12}>
-            <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <RollbackComponent rollback={state.rollback!} onChange={onChange} />
+            <Grid size={12}>
               <TimePicker
                 label="Schedule run"
-                value={isSchedulingDisabled ? null : state.runAt}
+                value={isSchedulingDisabled ? null : state.runAt ? dayjs(state.runAt) : null}
                 disabled={isSchedulingDisabled}
                 onChange={selectedDate => {
                   onChange({ runAt: ensureIST(selectedDate) })
                 }}
-                renderInput={params => <TextField {...params} margin="normal" id="time-picker" />}
+                slotProps={{
+                  textField: {
+                    margin: "normal",
+                    id: "time-picker",
+                    size: "small",
+                    fullWidth: true,
+                  },
+                }}
               />
-            </LocalizationProvider>
+            </Grid>
           </Grid>
+        </FormSection>
 
-          <Grid item xs={12}>
+        <FormSection title="Save" span>
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1,
+              flexWrap: "wrap",
+              position: "sticky",
+              bottom: 0,
+              py: 1,
+              bgcolor: "background.paper",
+            }}
+          >
+            {isRunnable ? (
+              <Button variant="outlined" type="button" onClick={onRunNow}>
+                Schedule now
+              </Button>
+            ) : null}
             <Button
               variant="contained"
-              color="primary"
               type="button"
               onClick={handleFormSubmit}
               disabled={isSchedulingDisabled}
             >
-              {isSchedulingDisabled
-                ? "Schedule run"
-                : `Schedule for ${dayjs(state.runAt).format("hh:mma")}`}
+              {isRunnable ? `Schedule for ${dayjs(state.runAt).format("hh:mma")}` : "Save template"}
             </Button>
             {!isRunnable ? (
-              <Button
-                variant="contained"
-                color="inherit"
-                type="button"
-                onClick={onCancel}
-                style={{ marginLeft: 8 }}
-              >
+              <Button type="button" onClick={onCancel}>
                 Cancel
               </Button>
             ) : null}
-          </Grid>
-        </Grid>
-      </Paper>
+          </Box>
+        </FormSection>
+      </Box>
+    </>
+  )
+
+  if (embedded) {
+    return <form noValidate>{body}</form>
+  }
+
+  return (
+    <form noValidate>
+      <Paper sx={{ p: 2 }}>{body}</Paper>
     </form>
   )
 }

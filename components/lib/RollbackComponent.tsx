@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react"
 import { Checkbox, FormControl, FormControlLabel, FormGroup, Grid } from "@mui/material"
+import React, { useEffect, useState } from "react"
 import { ROLLBACK_KEY_MAP } from "../../lib/constants"
-import { ROLLBACK_TYPE } from "../../types/plans"
+import type { ROLLBACK_TYPE } from "../../types/plans"
 
 interface RollbackComponentProps {
   rollback: ROLLBACK_TYPE
@@ -19,7 +19,7 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
   }, [rollback])
 
   return (
-    <Grid item xs={12}>
+    <Grid size={12}>
       <FormControl component="fieldset">
         <FormGroup>
           <FormControlLabel

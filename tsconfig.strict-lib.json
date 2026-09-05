@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": [
+    "lib/strategyValidation.ts",
+    "lib/planMapper.ts",
+    "lib/planClient.ts",
+    "lib/browserUtils.ts",
+    "lib/fetchJson.ts",
+    "pages/api/plan.ts"
+  ]
+}
