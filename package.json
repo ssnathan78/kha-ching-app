@@ -50,7 +50,7 @@
     "iron-session": "^9.0.1",
     "kiteconnect": "5.3.0",
     "memoizee": "^0.4.15",
-    "nanoid": "^3.1.23",
+    "nanoid": "^6.0.1",
     "next": "^16.2.1",
     "pg": "^8.11.3",
     "react": "^19.2.8",

@@ -6539,7 +6539,7 @@ __metadata:
     jest-environment-jsdom: "npm:^30.5.1"
     kiteconnect: "npm:5.3.0"
     memoizee: "npm:^0.4.15"
-    nanoid: "npm:^3.1.23"
+    nanoid: "npm:^6.0.1"
     next: "npm:^16.2.1"
     node-mocks-http: "npm:^1.18.1"
     pg: "npm:^8.11.3"
@@ -6993,12 +6993,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"nanoid@npm:^3.1.23, nanoid@npm:^3.3.16":
+"nanoid@npm:^3.3.16":
   version: 3.3.18
   resolution: "nanoid@npm:3.3.18"
   bin:
     nanoid: bin/nanoid.cjs
   checksum: 10c0/b994b4e396730f8be2520923284e2040d61eaee55cc6d4935ef6d38d34bafdc46133eda4d3faea5073bda545aa6079d82b886caeac5c731cf9ac18bcc1301425
+  languageName: node
+  linkType: hard
+
+"nanoid@npm:^6.0.1":
+  version: 6.0.1
+  resolution: "nanoid@npm:6.0.1"
+  bin:
+    nanoid: bin/nanoid.js
+  checksum: 10c0/5b362ad9822388dfebdf655849c76d3539e074d1003fbe6eb5dff8687faf93a9abbb19bdc5d134b9b8599f875f9b091feacfd7099b34b5fef23bc3f5be41dd10
   languageName: node
   linkType: hard
 
