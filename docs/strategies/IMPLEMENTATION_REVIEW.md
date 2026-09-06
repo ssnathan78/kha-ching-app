@@ -74,7 +74,7 @@ flowchart TB
 
 **Not copied (intentional ops):** Telegram, Prometheus, SQLite, Python `holidays` list. This desk uses Slack, Postgres, Desk alerts, Kite calendar.
 
-**EMA seed:** Incremental EMA depends on accepting the previous row’s timestamp. If 16:15 yesterday is missing, 10:15 **recomputes** from a long history (`prevEma = null`). That can **jump** vs a continuous 40-EMA. **Material** on days after a missed job, not on a clean week.
+**EMA seed:** Incremental EMA depends on accepting the previous row’s timestamp. If yesterday’s 16:15 row is missing but some older `ema` row exists, 10:15 **skips** (alert `CHASE_EMA_GAP`) rather than reseeding from history. First seed is only when that contract has **no** `ema` row.
 
 **Instrument pick:** `instruments.length === 1 ? [0] : [1]` (`chaseSignal.ts`). Off expiry this is the only contract. On expiry day, while **flat**, new work is the next month so the book stays continuous. An open LONG/SHORT keeps `chase_status.tradingsymbol` until 15:00 rollover.
 
@@ -121,7 +121,7 @@ These are **intraday option structures**. There was no attached straddle/strangl
 
 | Issue | Severity | Notes |
 |---|---|---|
-| UI lists Combined SL, Supertrend, OBS trail | **Material if the operator picks them** | `validateExitStrategy` only allows `INDIVIDUAL_LEG_SLM_1X` and `NO_SL`. Forms can still *show* the others |
+| Combined SL, Supertrend, OBS trail | Closed | Hidden in the form; `validateExitStrategy` only allows `INDIVIDUAL_LEG_SLM_1X` and `NO_SL`. Saved plans coerce to per-leg SL |
 | Strangle `STOP_LOSS_MARKET_ORDER` label | **Minor** | Orders are still MARKET |
 | Inverted strangle symbols via `replace("CE","PE")` | **Minor / edge** | Can theoretically name a contract that does not exist if the chain is irregular |
 | Strangle default form has **no** max loss/profit toggles | Intentional vs straddle | Point targets only if the job payload includes them |
@@ -133,12 +133,7 @@ None of these make a short ATM straddle into a different *strategy*; they are pr
 
 ---
 
-## 5. What to change (if you want rule-book-faithful Chase)
+## 5. What to leave as-is
 
-Priority if you ever patch Chase further:
-
-1. **Harden EMA continuity** — fail the 10:15 signal (alert) rather than silently reseeding if yesterday 16:15 is missing, unless you explicitly want a rebuild.
-2. Leave chase-bot’s T1-first-SL-on-entry **out** of this codebase.
-3. Do **not** force expiry-day new entries onto the front month: a flat book should take next-month futures.
-
-Straddle/strangle: hide or disable unimplemented exit enums in the form so the operator cannot schedule a no-op exit name (validation already rejects).
+1. Leave chase-bot’s T1-first-SL-on-entry **out** of this codebase.
+2. Do **not** force expiry-day new entries onto the front month: a flat book should take next-month futures.

@@ -2,7 +2,7 @@ import { type Job, Worker } from "bullmq"
 import dayjs from "dayjs"
 import type { HistoricalData, Order } from "kiteconnect"
 import { getChaseSettings } from "../chaseSettings"
-import { generateSignal, getAcceptedPrevEma } from "../chaseSignal"
+import { generateSignal, resolveChasePrevEma } from "../chaseSignal"
 import { nowDayjs } from "../clock"
 import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "../constants"
 import {
@@ -81,11 +81,28 @@ async function processCalculateEMA(job: Job) {
       instruments.map(async instrument => {
         try {
           const prevRow = await getLatestEma(instrument.tradingsymbol)
-          const prevEMA = await getAcceptedPrevEma(prevRow, now, accessToken)
+          const prevEmaResolution = await resolveChasePrevEma(prevRow, now, accessToken)
           logger.info(
-            `[processCalculateEMA] calculating EMA for ${instrument.tradingsymbol} with prev EMA ${prevRow?.ema ?? "null"} and accepted prev EMA ${prevEMA ?? "null"}`
+            `[processCalculateEMA] ${instrument.tradingsymbol} prevEma=${prevRow?.ema ?? "null"} resolution=${prevEmaResolution.action}`
           )
-          const emaResult = await calculateEma(instrument, prevEMA, accessToken)
+          if (prevEmaResolution.action === "gap") {
+            logger.error(
+              `[processCalculateEMA] EMA gap for ${instrument.tradingsymbol}: missing ${prevEmaResolution.expectedLabel}; skip rebuild`
+            )
+            const { recordOperatorAlert } = await import("../trading/alerts")
+            await recordOperatorAlert({
+              source: "CHASE",
+              code: "CHASE_EMA_GAP",
+              severity: "ERROR",
+              summary: `Chase EMA: missing ${prevEmaResolution.expectedLabel} for ${instrument.tradingsymbol}. Skipped history rebuild so the 0.2% band does not jump.`,
+              strategy: "CHASE",
+              instrument: nfoSymbol,
+              detail: { tradingsymbol: instrument.tradingsymbol },
+              idempotencyKey: `alert:chase-ema-gap:${instrument.tradingsymbol}:${now.format("YYYY-MM-DD-HH:mm")}`,
+            })
+            return null
+          }
+          const emaResult = await calculateEma(instrument, prevEmaResolution.prevEma, accessToken)
           if (!emaResult) {
             logger.warn(
               `[processCalculateEMA] skipped for ${instrument.tradingsymbol} due to insufficient candle data or no current-day candles`

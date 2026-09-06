@@ -48,7 +48,7 @@ Helper: `chaseTolerances(ema, bufferPercent)` in `lib/chaseDefaults.ts`.
 
 **Rounding:** day’s high is **ceiled**, day’s low is **floored**, to whole rupees. EMA and last close stay `Math.round`.
 
-**Incremental EMA:** After the first seed, each hourly job applies `new = hlc3 * k + prev * (1-k)` with `k = 2/(period+1)`, using the **previous hour’s stored EMA** when `getAcceptedPrevEma` accepts it (10:15 IST requires yesterday’s **16:15** row; later hours require the prior hour on the minute).
+**Incremental EMA:** After the first seed, each hourly job applies `new = hlc3 * k + prev * (1-k)` with `k = 2/(period+1)`, using the **previous hour’s stored EMA** when `getAcceptedPrevEma` accepts it (10:15 IST requires yesterday’s **16:15** row; later hours require the prior hour on the minute). If that prior row is missing, the hour is **skipped** (`CHASE_EMA_GAP`) so the 0.2% band is not rebuilt from a long history. A contract with **no** `ema` rows still seeds from history.
 
 ---
 

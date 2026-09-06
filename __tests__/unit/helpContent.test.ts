@@ -30,6 +30,12 @@ describe("help content", () => {
     expect(HELP_PAGES.strangle.sections.some(s => s.id === "contract")).toBe(true)
   })
 
+  it("does not present Combined, Supertrend, or OBS as usable straddle exits", () => {
+    const risk = HELP_PAGES.straddle.sections.find(s => s.id === "risk")
+    expect(risk?.body.join(" ")).toMatch(/not available/i)
+    expect(risk?.body.join(" ")).not.toMatch(/Combined premium exit: flatten/i)
+  })
+
   it("keeps HelpTopic keys aligned with HELP_PAGES", () => {
     const keys = Object.keys(HELP_PAGES) as HelpTopic[]
     expect([...keys].sort()).toEqual([...HELP_TOPICS].sort())

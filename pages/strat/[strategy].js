@@ -5,7 +5,8 @@ import { useRouter } from "next/router"
 import StratLayout from "../../components/StratLayout"
 import AtmStraddleSetup from "../../components/trades/atmStraddle"
 import AtmStrangleSetup from "../../components/trades/atmStrangle"
-import { EXIT_STRATEGIES, INSTRUMENTS } from "../../lib/constants"
+import { INSTRUMENTS } from "../../lib/constants"
+import { SCHEDULEABLE_EXIT_STRATEGIES } from "../../lib/strategyValidation"
 
 const Strategy = () => {
   const router = useRouter()
@@ -20,7 +21,7 @@ const Strategy = () => {
           </Button>
           <AtmStraddleSetup
             enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]}
-            exitStrategies={[EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X, EXIT_STRATEGIES.NO_SL]}
+            exitStrategies={[...SCHEDULEABLE_EXIT_STRATEGIES]}
           />
         </StratLayout>
       )
@@ -33,7 +34,7 @@ const Strategy = () => {
           </Button>
           <AtmStrangleSetup
             enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]}
-            exitStrategies={[EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X, EXIT_STRATEGIES.NO_SL]}
+            exitStrategies={[...SCHEDULEABLE_EXIT_STRATEGIES]}
           />
         </StratLayout>
       )

@@ -6,11 +6,11 @@ dayjs.extend(utc)
 dayjs.extend(tz)
 
 import { chaseAllowsNewEntry, chaseTolerances } from "../../../lib/chaseDefaults"
-import { getAcceptedPrevEma } from "../../../lib/chaseSignal"
+import { getAcceptedPrevEma, resolveChasePrevEma } from "../../../lib/chaseSignal"
 import { CHASE_STATUS } from "../../../lib/constants"
 
 jest.mock("../../../lib/kiteUtils", () => ({
-  getPreviousTradingDay: jest.fn().mockResolvedValue("2026-09-04"),
+  getPreviousTradingDay: jest.fn().mockResolvedValue(new Date("2026-09-04T06:30:00.000Z")),
   placeKiteOrder: jest.fn(),
   getKiteInstance: jest.fn(),
   cancelOrder: jest.fn(),
@@ -29,7 +29,7 @@ jest.mock("../../../lib/chaseSettings", () => ({
 }))
 
 jest.mock("../../../lib/utils", () => ({
-  toIst: (d: dayjs.Dayjs) => d,
+  toIst: (value: dayjs.Dayjs | Date | string) => dayjs(value).tz("Asia/Kolkata"),
   postToSlack: jest.fn(),
 }))
 
@@ -58,6 +58,54 @@ describe("getAcceptedPrevEma", () => {
     expect(
       await getAcceptedPrevEma(null, dayjs.tz("2026-09-05 09:00", "Asia/Kolkata"), "tok")
     ).toBeNull()
+  })
+})
+
+describe("resolveChasePrevEma", () => {
+  const at1015 = dayjs.tz("2026-09-05 10:15", "Asia/Kolkata")
+
+  it("seeds when this contract has no EMA row", async () => {
+    await expect(resolveChasePrevEma(null, at1015, "tok")).resolves.toEqual({
+      action: "seed",
+      prevEma: null,
+    })
+  })
+
+  it("continues from yesterday 16:15 at the 10:15 job", async () => {
+    const prevRow = {
+      ema: 24850,
+      createdAt: dayjs.tz("2026-09-04 16:15", "Asia/Kolkata").toDate(),
+    }
+    await expect(resolveChasePrevEma(prevRow, at1015, "tok")).resolves.toEqual({
+      action: "continue",
+      prevEma: 24850,
+    })
+  })
+
+  it("fails closed at 10:15 when yesterday 16:15 is missing", async () => {
+    const prevRow = {
+      ema: 24850,
+      createdAt: dayjs.tz("2026-09-04 15:15", "Asia/Kolkata").toDate(),
+    }
+    await expect(resolveChasePrevEma(prevRow, at1015, "tok")).resolves.toEqual({
+      action: "gap",
+      prevEma: null,
+      expectedLabel: "yesterday's 16:15 EMA row",
+    })
+  })
+
+  it("fails closed at 11:15 when the 10:15 row is missing", async () => {
+    const prevRow = {
+      ema: 24850,
+      createdAt: dayjs.tz("2026-09-04 16:15", "Asia/Kolkata").toDate(),
+    }
+    await expect(
+      resolveChasePrevEma(prevRow, dayjs.tz("2026-09-05 11:15", "Asia/Kolkata"), "tok")
+    ).resolves.toEqual({
+      action: "gap",
+      prevEma: null,
+      expectedLabel: "the 10:15 EMA row",
+    })
   })
 })
 

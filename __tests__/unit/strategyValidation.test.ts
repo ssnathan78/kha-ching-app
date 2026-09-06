@@ -5,7 +5,9 @@ import {
   STRATEGIES,
 } from "../../lib/constants"
 import {
+  coerceScheduleableExitStrategy,
   EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE,
+  SCHEDULEABLE_EXIT_STRATEGIES,
   selectedTradeInstruments,
   shouldEnqueueExitQueue,
   validateExitStrategy,
@@ -37,6 +39,17 @@ describe("validateExitStrategy", () => {
 
   it("rejects missing exit strategy", () => {
     expect(validateExitStrategy(undefined).ok).toBe(false)
+  })
+
+  it("coerces unimplemented exits to per-leg SL for the form", () => {
+    expect(coerceScheduleableExitStrategy(EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD)).toBe(
+      EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X
+    )
+    expect(coerceScheduleableExitStrategy(EXIT_STRATEGIES.NO_SL)).toBe(EXIT_STRATEGIES.NO_SL)
+    expect([...SCHEDULEABLE_EXIT_STRATEGIES]).toEqual([
+      EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
+      EXIT_STRATEGIES.NO_SL,
+    ])
   })
 })
 

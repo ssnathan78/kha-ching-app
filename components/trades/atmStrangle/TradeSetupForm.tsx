@@ -19,14 +19,20 @@ import React from "react"
 
 import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import {
-  EXIT_STRATEGIES,
+  type EXIT_STRATEGIES,
   INSTRUMENTS,
   STRANGLE_ENTRY_STRATEGIES,
   STRATEGIES,
   STRATEGIES_DETAILS,
 } from "../../../lib/constants"
 import { coerceLots } from "../../../lib/planMapper"
-import { validateLots, validateSelectedInstruments } from "../../../lib/strategyValidation"
+import {
+  coerceScheduleableExitStrategy,
+  EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE,
+  SCHEDULEABLE_EXIT_STRATEGIES,
+  validateLots,
+  validateSelectedInstruments,
+} from "../../../lib/strategyValidation"
 import type { ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
 import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 import FormSection from "../../lib/FormSection"
@@ -69,10 +75,15 @@ const TradeSetupForm = ({
 
   const enabledInstruments = enabledInstrumentsProp ?? [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]
 
-  const exitStrategies = exitStrategiesProp ?? [
-    EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
-    EXIT_STRATEGIES.NO_SL,
-  ]
+  const exitStrategies = (exitStrategiesProp ?? [...SCHEDULEABLE_EXIT_STRATEGIES]).filter(s =>
+    EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(s)
+  )
+
+  React.useEffect(() => {
+    if (!EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(state.exitStrategy)) {
+      onChange({ exitStrategy: coerceScheduleableExitStrategy(state.exitStrategy) })
+    }
+  }, [state.exitStrategy, onChange])
 
   const entryStrategies = [
     STRANGLE_ENTRY_STRATEGIES.DISTANCE_FROM_ATM,

@@ -8,15 +8,20 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
+import { EXIT_STRATEGIES, EXIT_STRATEGIES_DETAILS } from "../../lib/constants"
 import {
-  COMBINED_SL_EXIT_STRATEGY_LABEL,
-  EXIT_STRATEGIES,
-  EXIT_STRATEGIES_DETAILS,
-} from "../../lib/constants"
-import { COMBINED_SL_EXIT_STRATEGY, SL_ORDER_TYPE } from "../../types/plans"
+  EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE,
+  SCHEDULEABLE_EXIT_STRATEGIES,
+} from "../../lib/strategyValidation"
 
 const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
-  const slOrderTypes = [SL_ORDER_TYPE.SLL]
+  const visibleExits = (
+    exitStrategies?.length ? exitStrategies : SCHEDULEABLE_EXIT_STRATEGIES
+  ).filter((exitStrategy: EXIT_STRATEGIES) => EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(exitStrategy))
+  const selectedExit = visibleExits.includes(state.exitStrategy)
+    ? state.exitStrategy
+    : visibleExits[0]
+
   return (
     <>
       <Grid size={12}>
@@ -25,7 +30,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
           <RadioGroup
             aria-label="exitStrategy"
             name="exitStrategy"
-            value={state.exitStrategy}
+            value={selectedExit}
             onChange={e =>
               onChange({
                 exitStrategy: e.target.value as EXIT_STRATEGIES,
@@ -34,7 +39,7 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
               })
             }
           >
-            {exitStrategies.map(exitStrategy => (
+            {visibleExits.map(exitStrategy => (
               <FormControlLabel
                 key={exitStrategy}
                 value={exitStrategy}
@@ -49,78 +54,16 @@ const SlManagerComponent = ({ state, onChange, exitStrategies }) => {
           </RadioGroup>
         </FormControl>
       </Grid>
-      {state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD ? (
-        <>
-          <Grid size={12}>
-            <FormLabel component="legend">When Combined trailing SL triggers</FormLabel>
-            <RadioGroup
-              aria-label="combinedExitStrategy"
-              name="combinedExitStrategy"
-              value={state.combinedExitStrategy}
-              onChange={e =>
-                onChange({
-                  combinedExitStrategy: e.target.value as COMBINED_SL_EXIT_STRATEGY,
-                })
-              }
-            >
-              {[COMBINED_SL_EXIT_STRATEGY.EXIT_ALL, COMBINED_SL_EXIT_STRATEGY.EXIT_LOSING].map(
-                combinedExitStrategy => (
-                  <FormControlLabel
-                    key={combinedExitStrategy}
-                    value={combinedExitStrategy}
-                    control={<Radio size="small" />}
-                    label={
-                      <Typography variant="body2">
-                        {COMBINED_SL_EXIT_STRATEGY_LABEL[combinedExitStrategy]}
-                      </Typography>
-                    }
-                  />
-                )
-              )}
-            </RadioGroup>
-          </Grid>
-
-          <Grid size={12}>
-            <TextField
-              fullWidth
-              name="trailEveryPercentageChangeValue"
-              value={state.trailEveryPercentageChangeValue}
-              onChange={e =>
-                onChange({
-                  trailEveryPercentageChangeValue: +e.target.value || undefined,
-                })
-              }
-              label="Trail SL everytime total premium decreases by %"
-            />
-          </Grid>
-          <Grid size={12}>
-            <TextField
-              fullWidth
-              name="trailingSlPercent"
-              value={state.trailingSlPercent}
-              onChange={e => onChange({ trailingSlPercent: +e.target.value || undefined })}
-              label="Trailing SL %"
-            />
-          </Grid>
-        </>
-      ) : null}
-      {state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD ||
-      state.exitStrategy === EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X ? (
-        <>
-          <Grid size={12} style={{ marginBottom: "16px" }}>
-            <TextField
-              fullWidth
-              name="slmPercent"
-              value={state.slmPercent}
-              onChange={(e: any) => onChange({ slmPercent: +e.target.value || undefined })}
-              label={
-                state.exitStrategy === EXIT_STRATEGIES.MULTI_LEG_PREMIUM_THRESHOLD
-                  ? "Initial SL %"
-                  : "SL %"
-              }
-            />
-          </Grid>
-        </>
+      {selectedExit === EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X ? (
+        <Grid size={12} style={{ marginBottom: "16px" }}>
+          <TextField
+            fullWidth
+            name="slmPercent"
+            value={state.slmPercent}
+            onChange={(e: any) => onChange({ slmPercent: +e.target.value || undefined })}
+            label="SL %"
+          />
+        </Grid>
       ) : null}
     </>
   )

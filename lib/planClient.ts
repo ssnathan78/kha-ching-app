@@ -2,13 +2,20 @@ import type { DailyPlansConfig, DailyPlansDayKey } from "../types/misc"
 import type { AvailablePlansConfig } from "../types/plans"
 import { STRATEGIES, STRATEGIES_DETAILS } from "./constants"
 import { mapPlanFromDb, mapPlanToDb, planApiErrorMessage } from "./planMapper"
+import { coerceScheduleableExitStrategy } from "./strategyValidation"
 
 export function hydratePlanConfig(config: Record<string, unknown>): AvailablePlansConfig {
   const defaults =
     config?.strategy && STRATEGIES_DETAILS[config.strategy as STRATEGIES]?.defaultFormState
       ? STRATEGIES_DETAILS[config.strategy as STRATEGIES].defaultFormState
       : {}
-  return { ...defaults, ...config } as AvailablePlansConfig
+  const hydrated = { ...defaults, ...config } as AvailablePlansConfig
+  if ("exitStrategy" in hydrated) {
+    hydrated.exitStrategy = coerceScheduleableExitStrategy(
+      (hydrated as { exitStrategy?: string }).exitStrategy
+    )
+  }
+  return hydrated
 }
 
 export function groupPlansByDay(

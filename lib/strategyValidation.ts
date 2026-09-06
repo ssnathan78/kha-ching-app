@@ -12,6 +12,18 @@ export const EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE = new Set<string>([
   EXIT_STRATEGIES.NO_SL,
 ])
 
+export const SCHEDULEABLE_EXIT_STRATEGIES = [
+  EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X,
+  EXIT_STRATEGIES.NO_SL,
+] as const
+
+export function coerceScheduleableExitStrategy(exitStrategy?: string | null): EXIT_STRATEGIES {
+  if (exitStrategy && EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(exitStrategy)) {
+    return exitStrategy as EXIT_STRATEGIES
+  }
+  return EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X
+}
+
 const STRATEGY_INSTRUMENTS: Record<string, Set<string>> = {
   [STRATEGIES.ATM_STRADDLE]: new Set([
     INSTRUMENTS.NIFTY,

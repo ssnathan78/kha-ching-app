@@ -18,10 +18,12 @@ import dayjs from "dayjs"
 import React from "react"
 
 import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
-import { EXIT_STRATEGIES, INSTRUMENTS, STRATEGIES } from "../../../lib/constants"
+import { type EXIT_STRATEGIES, INSTRUMENTS, STRATEGIES } from "../../../lib/constants"
 import { coerceLots } from "../../../lib/planMapper"
 import {
+  coerceScheduleableExitStrategy,
   EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE,
+  SCHEDULEABLE_EXIT_STRATEGIES,
   validateLots,
   validateSelectedInstruments,
 } from "../../../lib/strategyValidation"
@@ -70,11 +72,15 @@ const TradeSetupForm = ({
       ? [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]
       : [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY])
 
-  const exitStrategies =
-    exitStrategiesProp ??
-    [EXIT_STRATEGIES.INDIVIDUAL_LEG_SLM_1X, EXIT_STRATEGIES.NO_SL].filter(s =>
-      EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(s)
-    )
+  const exitStrategies = (exitStrategiesProp ?? [...SCHEDULEABLE_EXIT_STRATEGIES]).filter(s =>
+    EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(s)
+  )
+
+  React.useEffect(() => {
+    if (!EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(state.exitStrategy)) {
+      onChange({ exitStrategy: coerceScheduleableExitStrategy(state.exitStrategy) })
+    }
+  }, [state.exitStrategy, onChange])
 
   const [lotsError, setLotsError] = React.useState<string | null>(null)
   const [instrumentError, setInstrumentError] = React.useState<string | null>(null)

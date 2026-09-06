@@ -46,6 +46,15 @@ export type ChaseInstrument = {
   lotSize: number
 }
 
+export type ChasePrevEmaResolution =
+  | { action: "seed"; prevEma: null }
+  | { action: "continue"; prevEma: number }
+  | { action: "gap"; prevEma: null; expectedLabel: string }
+
+function chaseEmaCutoff(nowIst: dayjs.Dayjs): dayjs.Dayjs {
+  return nowIst.set("hour", 10).set("minute", 15).set("second", 0).set("millisecond", 0)
+}
+
 export const getAcceptedPrevEma = async (
   prevRow: any,
   now: dayjs.Dayjs,
@@ -57,7 +66,7 @@ export const getAcceptedPrevEma = async (
 
   const nowIst = toIst(now)
   const currentMinute = nowIst.startOf("minute")
-  const cutoff = nowIst.set("hour", 10).set("minute", 15).set("second", 0).set("millisecond", 0)
+  const cutoff = chaseEmaCutoff(nowIst)
   const prevCreatedAt = prevRow.createdAt ? toIst(prevRow.createdAt).startOf("minute") : null
   logger.info(
     `[chaseQueue] getAcceptedPrevEma currentMinute=${currentMinute.format("HH:mm")} cutoff=${cutoff.format("HH:mm")} prevCreatedAt=${prevCreatedAt ? prevCreatedAt.format("HH:mm") : "null"}`
@@ -79,6 +88,34 @@ export const getAcceptedPrevEma = async (
   }
 
   return null
+}
+
+/** First contract may seed from history. A stale row must not silently rebuild the 0.2% band. */
+export const resolveChasePrevEma = async (
+  prevRow: any,
+  now: dayjs.Dayjs,
+  accessToken: string
+): Promise<ChasePrevEmaResolution> => {
+  if (!prevRow) {
+    return { action: "seed", prevEma: null }
+  }
+
+  const accepted = await getAcceptedPrevEma(prevRow, now, accessToken)
+  if (accepted !== null && Number.isFinite(Number(accepted))) {
+    return { action: "continue", prevEma: Number(accepted) }
+  }
+
+  const nowIst = toIst(now)
+  const currentMinute = nowIst.startOf("minute")
+  const cutoff = chaseEmaCutoff(nowIst)
+  let expectedLabel = "the prior accepted EMA row"
+  if (currentMinute.isSame(cutoff)) {
+    expectedLabel = "yesterday's 16:15 EMA row"
+  } else if (currentMinute.isAfter(cutoff)) {
+    expectedLabel = `the ${currentMinute.subtract(1, "hour").format("HH:mm")} EMA row`
+  }
+
+  return { action: "gap", prevEma: null, expectedLabel }
 }
 
 async function placeEntryTriggerOrder(

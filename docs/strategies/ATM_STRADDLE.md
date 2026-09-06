@@ -111,7 +111,7 @@ Hedges are placed **before** the short legs. If hedge fails and `onBrokenHedgeOr
 | Exit | When | Notes |
 |---|---|---|
 | Per-leg SL | Premium moves `slmPercent` against the fill | Implemented. SL-M converted to SL-Limit (`slLimitPricePercent`) |
-| Combined / Supertrend / OBS trail | Form labels exist | **Not implemented** — schedule validation rejects them |
+| Combined / Supertrend / OBS trail | Not shown | **Not implemented** — form hides them; schedule validation still rejects them |
 | `NO_SL` | Allowed only with auto square-off | Time exit only |
 | Max loss / max profit | Combined structure points | `lib/targetPnL.ts` — do **not** rewrite these as rupees |
 | Auto square-off | Clock IST | Default 15:20 |

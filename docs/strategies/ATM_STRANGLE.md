@@ -101,7 +101,7 @@ Same machinery as the straddle:
 - Per-leg `slmPercent` SL-Limit
 - Time square-off
 - `NO_SL` only with auto square-off
-- Combined / Supertrend / OBS **not implemented**
+- Combined / Supertrend / OBS **not implemented** (hidden in the form)
 - Kill **intraday** includes strangle
 
 If max-profit / max-loss flags are on the job, `targetPnL` still uses **points**.

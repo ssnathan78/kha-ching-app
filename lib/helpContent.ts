@@ -109,8 +109,8 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "risk",
         title: "Risk",
         body: [
-          "Fixed SL %: stop-loss on each leg as a percent of entry premium.",
-          "Combined premium exit: flatten when total premium moves by a threshold.",
+          "Fixed SL %: stop-loss on each leg as a percent of entry premium. Combined, Supertrend, and OBS trail exits are not available.",
+          "No SL: time square-off only. Auto square-off must be on.",
           "Hedge: optional far OTM long options to cap tail risk.",
           "Max loss / max profit (points): strategy-level exits in option points, not rupees. The dashboard still shows rupee P&L separately.",
           "Trail-up %: after max profit is hit, the target can be raised by this percent.",
@@ -153,7 +153,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "risk",
         title: "Risk",
         body: [
-          "Same family of stops and hedges as the straddle. New templates default to a per-leg stop. NO_SL is allowed only if auto square-off is also on.",
+          "Same implemented exits as the straddle: per-leg SL %, or No SL with auto square-off. Combined, Supertrend, and OBS trail exits are not available.",
         ],
       },
       {
