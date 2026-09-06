@@ -41,9 +41,9 @@ describe("round", () => {
 })
 
 describe("dashboardJobActions kill scope", () => {
-  it("SUBSCRIBE_CHASE excluded from intraday kill scope", async () => {
+  it("CHASE excluded from intraday kill scope", async () => {
     const { jobMatchesKillScope } = await import("../../lib/dashboardJobActions")
-    expect(jobMatchesKillScope("SUBSCRIBE_CHASE", "intraday")).toBe(false)
+    expect(jobMatchesKillScope("CHASE", "intraday")).toBe(false)
     expect(jobMatchesKillScope("ATM_STRADDLE", "intraday")).toBe(true)
   })
 })

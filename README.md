@@ -7,7 +7,7 @@ If you have never used this repo: start with **Docker on your PC** (`docs/LOCAL.
 ## What it does
 
 - **ATM straddle / strangle** — sell (or buy, depending on your form) Nifty / BankNifty / FinNifty options around the at-the-money strike, with stop-loss and a time-based square-off.
-- **Subscribe & Chase** — a Nifty futures 40-EMA chase strategy.
+- **Chase** — a Nifty futures 40-EMA chase strategy.
 - **Trade plans** — save weekday templates so jobs can be scheduled without retyping every field.
 - **Queues** — orders are not placed inside the HTTP request. They go to **BullMQ** (Redis). You can inspect jobs at `/queues` after you log in.
 - **Two P&amp;L numbers** — rupee P&amp;L (`quantity × price`) in the UI, and **strategy points** used for max-profit / max-loss square-off. Those two numbers are supposed to be different; do not “fix” points to rupees.

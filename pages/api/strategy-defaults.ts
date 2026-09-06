@@ -12,7 +12,7 @@ export default withSession(async (req, res) => {
   }
 
   const strategy = (req.method === "GET" ? req.query.strategy : req.body?.strategy) as string
-  if (strategy === STRATEGIES.SUBSCRIBE_CHASE) {
+  if (strategy === STRATEGIES.CHASE) {
     return res.status(400).json({ error: "Chase uses /api/chase-settings, not weekday defaults" })
   }
 

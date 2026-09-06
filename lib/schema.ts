@@ -48,7 +48,7 @@ export const chaseStatusEnum = pgEnum("chase_status_type", [
 export const jobExecutionStrategyEnum = pgEnum("job_execution_strategy", [
   "ATM_STRADDLE",
   "ATM_STRANGLE",
-  "SUBSCRIBE_CHASE",
+  "CHASE",
 ])
 
 export const jobExecutions = pgTable(

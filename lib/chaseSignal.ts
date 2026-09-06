@@ -2,7 +2,7 @@ import dayjs from "dayjs"
 import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "./chaseDefaults"
 import { getChaseEngineConfig, getChaseSettings } from "./chaseSettings"
 import { CHASE_STATUS } from "./constants"
-import { getChaseStatus, getSubscribeChaseJob, updateChaseStatus } from "./drizzleDbUtils"
+import { getChaseStatus, getChaseJob, updateChaseStatus } from "./drizzleDbUtils"
 import {
   cancelOrder,
   getKiteInstance,
@@ -24,7 +24,7 @@ async function persistChaseSignal(input: {
 }) {
   const { recordStrategySignal } = await import("./trading/signals")
   await recordStrategySignal({
-    strategy: "SUBSCRIBE_CHASE",
+    strategy: "CHASE",
     instrument: input.instrument,
     tradingsymbol: input.tradingsymbol,
     orderTag: "chase",
@@ -107,7 +107,7 @@ async function placeEntryTriggerOrder(
 
   const { recordDecision } = await import("./trading/ledger")
   await recordDecision({
-    strategy: "SUBSCRIBE_CHASE",
+    strategy: "CHASE",
     tradingsymbol: instrument.tradingsymbol,
     exchange: "NFO",
     side,
@@ -287,8 +287,8 @@ export const generateSignal = async (
       logger.error("[generateSignal] error updating chase_status:", error)
     } else {
       const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-      const subscribeChaseJob = await getSubscribeChaseJob()
-      const lots = subscribeChaseJob?.lots ?? 0
+      const chaseJob = await getChaseJob()
+      const lots = chaseJob?.lots ?? 0
       const quantity = lots * (instrument.lotSize ?? 1)
       await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
     }

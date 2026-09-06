@@ -20,7 +20,7 @@ export function groupPlansByDay(
       const dayKey = String(
         config.day_of_week || config.dayOfWeek || config.collection || ""
       ).toLowerCase()
-      if (!dayKey || config.strategy === STRATEGIES.SUBSCRIBE_CHASE) {
+      if (!dayKey || config.strategy === STRATEGIES.CHASE) {
         return accum
       }
       const hydrated = hydratePlanConfig(config)

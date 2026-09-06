@@ -55,7 +55,7 @@ const result = simulate({
   stepMinutes: 15,
   actors: [
     { kind: "straddle", strategy: "ATM_STRADDLE", symbol: "NIFTY26SEPFUT", lots: 1, fireAt: "09:20" },
-    { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: "NIFTY26SEPFUT", lots: 1, ema: 24800 },
+    { kind: "chase", strategy: "CHASE", symbol: "NIFTY26SEPFUT", lots: 1, ema: 24800 },
   ],
   failures: [{ kind: "broker_timeout", at: "2026-09-08 10:00", until: "2026-09-08 10:20" }],
   sessionSchedule: [{ at: "2026-09-09 11:00", state: "HALTED" }, { at: "2026-09-09 11:30", state: null }],

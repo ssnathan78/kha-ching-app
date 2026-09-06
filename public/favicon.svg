@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Kha-Ching">
+  <rect width="32" height="32" rx="7" fill="#0B1220"/>
+  <circle cx="12" cy="11" r="2.2" fill="#E8C547"/>
+  <path d="M8 20.5 L13 17.5 L16 19 L24 12.5" fill="none" stroke="#E8C547" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 24 H24" fill="none" stroke="#3DDC97" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

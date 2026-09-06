@@ -99,7 +99,7 @@ export interface ATM_STRANGLE_CONFIG extends SavedPlanMeta {
   combinedExitStrategy?: COMBINED_SL_EXIT_STRATEGY
 }
 
-export interface SUBSCRIBE_CHASE_CONFIG {
+export interface CHASE_CONFIG {
   id?: string
   name?: string
   lots: number
@@ -107,7 +107,7 @@ export interface SUBSCRIBE_CHASE_CONFIG {
   emaPeriod?: number
   bufferPercent?: number
   entryLimitOffset?: number
-  strategy: STRATEGIES.SUBSCRIBE_CHASE
+  strategy: STRATEGIES.CHASE
   dayOfWeek?: string
   runAt?: string
   runNow?: boolean
@@ -116,4 +116,4 @@ export interface SUBSCRIBE_CHASE_CONFIG {
 export type AvailablePlansConfig =
   | ATM_STRADDLE_CONFIG
   | ATM_STRANGLE_CONFIG
-  | SUBSCRIBE_CHASE_CONFIG
+  | CHASE_CONFIG

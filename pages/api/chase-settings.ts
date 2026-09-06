@@ -21,7 +21,7 @@ export default withSession(async (req, res) => {
       const patch = req.body?.config || {}
       const { getMaxLotsForStrategy } = await import("../../lib/trading/riskSettings")
       const validation = validateChaseSettings(patch, {
-        maxLots: await getMaxLotsForStrategy("SUBSCRIBE_CHASE"),
+        maxLots: await getMaxLotsForStrategy("CHASE"),
       })
       if (!validation.ok) {
         return res.status(400).json({ error: validation.error })

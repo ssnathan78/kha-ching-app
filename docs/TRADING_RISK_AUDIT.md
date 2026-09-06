@@ -34,7 +34,7 @@ Exits: SL queue, targetPnL (points), time square-off, Chase SL, kill desk
 |-----------|--------|------|
 | ATM Straddle | `lib/strategies/atmStraddle.ts` | Same-session ATM CE+PE, skew wait |
 | ATM Strangle | `lib/strategies/strangle.ts` | Same-session OTM wings |
-| Subscribe & Chase | `lib/chaseSignal.ts`, `chaseQueue.ts` | Nifty futures EMA trend, multi-day |
+| Chase | `lib/chaseSignal.ts`, `chaseQueue.ts` | Nifty futures EMA trend, multi-day |
 | Exits | `lib/exit-strategies/`, `targetPnL.ts` | Per-leg SL, time ASO, point targets |
 | Watchers | `lib/watchers/` | SL-L / SL-M repair |
 | Sizing | lots × NSE lot size (`lib/pnl.ts` `orderQuantity`) | No volatility sizing |
@@ -72,7 +72,7 @@ There is **no backtester** in this repo. There is no implied live edge from hist
 
 **Default change.** New forms default to `INDIVIDUAL_LEG_SLM_1X` and rollback-on-broken-leg **true**. Existing saved plans are not rewritten.
 
-### Subscribe & Chase
+### Chase
 
 **What it does.** Nifty futures around a long EMA with a buffer. States: awaiting signal → awaiting long/short (SL-M entry) → long/short with SL → rollover near expiry.
 
@@ -119,7 +119,7 @@ Adversarial “make it lose fast without a software bug”: short a 20-lot strad
 | R15 | Low | Fees/STT not in risk notional | Residual — notional uses premium/LTP only |
 | R16 | Low | No order-book depth / liquidity check | Residual — personal size assumed small vs Nifty fut/opt |
 | R17 | High | Paper ensurer skipped `placeOrder` then polled Kite for `paper:` ids | **Fixed** — paper returns a synthetic COMPLETE from `placeOrder` |
-| R18 | High | Exits without `strategy` defaulted PAPER (live flatten/SL would not hit Kite) | **Fixed** — Chase tag / job strategy inferred; `placeSL`/`placeKiteOrder` set `SUBSCRIBE_CHASE` |
+| R18 | High | Exits without `strategy` defaulted PAPER (live flatten/SL would not hit Kite) | **Fixed** — Chase tag / job strategy inferred; `placeSL`/`placeKiteOrder` set `CHASE` |
 | R19 | Med | Recon compared paper ledger qty to Kite | **Fixed** — PAPER/MOCK excluded from broker compare |
 | R20 | Med | Portfolio chips / daily_sessions mix paper + live | Residual — Desk tabs filter; header totals do not |
 

@@ -111,7 +111,7 @@ export default withSession(async (req, res) => {
     const queuePayload = mapJobExecutionQueuePayload(req.body, executionData, orderTag)
 
     try {
-      if (executionData.strategy === "SUBSCRIBE_CHASE") {
+      if (executionData.strategy === "CHASE") {
         await addToChaseQueue(user)
         await db
           .update(jobExecutions)

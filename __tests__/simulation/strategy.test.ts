@@ -24,7 +24,7 @@ describe("strategy-faithful scenarios", () => {
       actors: [
         {
           kind: "chase",
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           symbol: "NIFTY26SEPFUT",
           lots: 1,
           ema: 25000,

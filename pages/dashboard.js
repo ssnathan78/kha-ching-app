@@ -197,7 +197,7 @@ const Dashboard = () => {
               <CardActionArea component={Link} href="/chase" sx={{ p: 1 }}>
                 <CardContent>
                   <Typography variant="h6" sx={{ mb: 1 }}>
-                    {STRATEGIES_DETAILS[STRATEGIES.SUBSCRIBE_CHASE].heading}
+                    {STRATEGIES_DETAILS[STRATEGIES.CHASE].heading}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Nifty futures, multi-day. One lots/engine config, with pause after the current

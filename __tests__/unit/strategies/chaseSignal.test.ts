@@ -20,7 +20,7 @@ jest.mock("../../../lib/kiteUtils", () => ({
 jest.mock("../../../lib/drizzleDbUtils", () => ({
   getChaseStatus: jest.fn(),
   updateChaseStatus: jest.fn().mockResolvedValue({ success: true }),
-  getSubscribeChaseJob: jest.fn().mockResolvedValue({ lots: 1 }),
+  getChaseJob: jest.fn().mockResolvedValue({ lots: 1 }),
 }))
 
 jest.mock("../../../lib/chaseSettings", () => ({

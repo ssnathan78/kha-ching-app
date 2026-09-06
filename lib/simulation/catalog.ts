@@ -96,7 +96,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       scenario: "post-market",
       paperRisk: false,
       actors: [
-        { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
+        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
       ],
       assertions: [{ type: "no_orders" }],
     }),
@@ -128,7 +128,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
     stepMinutes: 60,
     paperRisk: false,
     actors: [
-      { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24900 },
+      { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24900 },
     ],
     assertions: [{ type: "closed_market_no_live_entries" }],
   }),
@@ -194,7 +194,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       actors: [
         {
           kind: "chase",
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           symbol: NIFTY.symbol,
           lots: 1,
           ema: 24000,
@@ -266,7 +266,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
     actors: [
       {
         kind: "chase",
-        strategy: "SUBSCRIBE_CHASE",
+        strategy: "CHASE",
         symbol: NIFTY.symbol,
         lots: 1,
         ema: 20000,
@@ -528,7 +528,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       actors: [
         {
           kind: "chase",
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           symbol: NIFTY.symbol,
           lots: 1,
           ema: 24000,
@@ -545,7 +545,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       actors: [
         {
           kind: "chase",
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           symbol: NIFTY.symbol,
           lots: 1,
           ema: 24000,
@@ -559,7 +559,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       pricePath: "choppy",
       volatility: "high",
       actors: [
-        { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
+        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
       ],
     }),
   "conflicting-signals": () =>
@@ -569,7 +569,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       actors: [
         {
           kind: "chase",
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           symbol: NIFTY.symbol,
           lots: 1,
           ema: 24000,
@@ -589,7 +589,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       scenario: "entry-exit-collision",
       pricePath: "flash_crash",
       actors: [
-        { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
+        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
       ],
     }),
   "strategy-disabled": () =>
@@ -618,7 +618,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       actors: [
         {
           kind: "chase",
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           symbol: NIFTY.symbol,
           lots: 1,
           ema: 24000,
@@ -693,7 +693,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
           lots: 1,
           fireAt: "09:20",
         },
-        { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
+        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
       ],
     }),
   "correlated-positions": () =>
@@ -800,7 +800,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
           lots: 1,
           fireAt: "09:20",
         },
-        { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
+        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
       ],
     }),
   random: () =>
@@ -811,7 +811,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       volatility: "high",
       liquidity: "low",
       actors: [
-        { kind: "chase", strategy: "SUBSCRIBE_CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
+        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
       ],
     }),
 }

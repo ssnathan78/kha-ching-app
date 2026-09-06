@@ -13,7 +13,7 @@ describe("guardrails", () => {
   })
 
   it("keeps Chase engine keys on the strategy form defaults", () => {
-    const chase = STRATEGIES_DETAILS[STRATEGIES.SUBSCRIBE_CHASE].defaultFormState
+    const chase = STRATEGIES_DETAILS[STRATEGIES.CHASE].defaultFormState
     expect(chase.emaPeriod).toBe(40)
     expect(chase.bufferPercent).toBe(0.2)
     expect(chase.entryLimitOffset).toBe(5)

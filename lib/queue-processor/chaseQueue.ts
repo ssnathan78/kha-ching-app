@@ -9,7 +9,7 @@ import {
   getChaseStatus,
   getEmaByDate,
   getLatestEma,
-  getSubscribeChaseJob,
+  getChaseJob,
   insertChaseLog,
   insertEma,
   updateChaseStatus,
@@ -62,7 +62,7 @@ async function processCalculateEMA(job: Job) {
         code: "CHASE_NO_FUT",
         severity: "WARN",
         summary: `Chase EMA: no FUT instruments found for ${nfoSymbol}`,
-        strategy: "SUBSCRIBE_CHASE",
+        strategy: "CHASE",
         instrument: nfoSymbol,
         idempotencyKey: `alert:chase-nofut:${nfoSymbol}:${now.format("YYYY-MM-DD")}`,
       })
@@ -198,9 +198,9 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
   const futuresInstruments = await getFnOExpiries(nfoSymbol, "FUT")
   const kite = getKiteInstance(accessToken)
 
-  const subscribeChaseJob = await getSubscribeChaseJob()
-  const isAutomated = subscribeChaseJob !== null && (subscribeChaseJob.lots ?? 0) > 0
-  const lots = subscribeChaseJob?.lots ?? 0
+  const chaseJob = await getChaseJob()
+  const isAutomated = chaseJob !== null && (chaseJob.lots ?? 0) > 0
+  const lots = chaseJob?.lots ?? 0
   const activeInstrumentData = futuresInstruments.find(
     (i: any) => i.tradingsymbol === tradingsymbol
   )
@@ -616,7 +616,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         code: "CHASE_NO_CANDLES",
         severity: "WARN",
         summary: `Chase SL: no 2-min candles for ${tradingsymbol}`,
-        strategy: "SUBSCRIBE_CHASE",
+        strategy: "CHASE",
         instrument: tradingsymbol,
         idempotencyKey: `alert:chase-nocandle:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
       })
@@ -643,7 +643,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         code: "CHASE_INVALID_CANDLE",
         severity: "ERROR",
         summary: `Chase SL: invalid candle for ${tradingsymbol} — fail closed`,
-        strategy: "SUBSCRIBE_CHASE",
+        strategy: "CHASE",
         instrument: tradingsymbol,
         idempotencyKey: `alert:chase-badcandle:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
       })
@@ -668,7 +668,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           code: "CHASE_SL_NO_POSITION",
           severity: "WARN",
           summary: `Chase SL breached but no broker position for ${tradingsymbol}`,
-          strategy: "SUBSCRIBE_CHASE",
+          strategy: "CHASE",
           instrument: tradingsymbol,
           idempotencyKey: `alert:chase-sl-flat:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
         })

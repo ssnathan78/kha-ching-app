@@ -142,7 +142,7 @@ export async function assertOrderAllowed(input: {
   const job = jobRows[0]
   if (intent.lots == null && job?.lots != null) intent.lots = Number(job.lots)
   if (!intent.strategy && job?.strategy) intent.strategy = job.strategy
-  if (!intent.strategy && input.tag === "chase") intent.strategy = "SUBSCRIBE_CHASE"
+  if (!intent.strategy && input.tag === "chase") intent.strategy = "CHASE"
 
   const paper = isPaperStrategy(settings, intent.strategy)
   const sameBook = (provenance: string | null | undefined) =>

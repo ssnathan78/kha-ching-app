@@ -80,7 +80,7 @@ describe("/api/strategy-defaults", () => {
   it("returns 400 for Chase strategy", async () => {
     const result = await invokeApi(strategyDefaultsHandler, {
       method: "GET",
-      query: { strategy: STRATEGIES.SUBSCRIBE_CHASE },
+      query: { strategy: STRATEGIES.CHASE },
       user,
     })
     expect(result.status).toBe(400)

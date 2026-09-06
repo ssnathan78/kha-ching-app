@@ -80,11 +80,11 @@ describe("jobMatchesKillScope", () => {
   it("keeps Chase out of the intraday kill", () => {
     expect(jobMatchesKillScope("ATM_STRADDLE", "intraday")).toBe(true)
     expect(jobMatchesKillScope("ATM_STRANGLE", "intraday")).toBe(true)
-    expect(jobMatchesKillScope("SUBSCRIBE_CHASE", "intraday")).toBe(false)
+    expect(jobMatchesKillScope("CHASE", "intraday")).toBe(false)
   })
 
   it("includes Chase only for kill-all", () => {
-    expect(jobMatchesKillScope("SUBSCRIBE_CHASE", "all")).toBe(true)
+    expect(jobMatchesKillScope("CHASE", "all")).toBe(true)
     expect(jobMatchesKillScope("ATM_STRADDLE", "all")).toBe(true)
   })
 })

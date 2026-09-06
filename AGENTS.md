@@ -52,7 +52,7 @@ Longer project map: [CLAUDE.md](CLAUDE.md).
 
 Modernization patterns and backlog: [docs/CODEBASE_MODERNIZATION.md](docs/CODEBASE_MODERNIZATION.md).
 
-Strategy specs (straddle, strangle, Chase) and Capitalmind vs chase-bot vs this app: [docs/strategies/README.md](docs/strategies/README.md).
+Strategy specs (straddle, strangle, Chase) and rule-book vs chase-bot vs this app: [docs/strategies/README.md](docs/strategies/README.md).
 
 Trading ledger (orders, fills, positions, trades, recon): [docs/TRADING_DOMAIN_MODEL.md](docs/TRADING_DOMAIN_MODEL.md). Do not collapse signal / order / fill / position / trade into one row.
 

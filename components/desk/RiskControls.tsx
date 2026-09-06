@@ -21,7 +21,7 @@ import { RISK_STRATEGY_KEYS, type RiskSettings } from "../../lib/trading/riskEng
 const LABELS: Record<(typeof RISK_STRATEGY_KEYS)[number], string> = {
   ATM_STRADDLE: "ATM Straddle",
   ATM_STRANGLE: "ATM Strangle",
-  SUBSCRIBE_CHASE: "Chase",
+  CHASE: "Chase",
 }
 
 function num(value: string, fallback: number) {

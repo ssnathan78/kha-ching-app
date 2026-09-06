@@ -105,7 +105,7 @@ describeDb("desk API session", () => {
     const { recordStrategySignal } = await import("../../lib/trading/signals")
     const key = `api-desk-filter:${Date.now()}`
     await recordStrategySignal({
-      strategy: "SUBSCRIBE_CHASE",
+      strategy: "CHASE",
       instrument: "NIFTY",
       kind: "EMA_COMPARE",
       outcome: "WAIT",
@@ -115,13 +115,13 @@ describeDb("desk API session", () => {
     const result = await invokeApi(signalsHandler, {
       method: "GET",
       user,
-      query: { strategy: "SUBSCRIBE_CHASE" },
+      query: { strategy: "CHASE" },
     })
     expect(result.status).toBe(200)
     const body = result.body as { signals?: { summary?: string; strategy?: string }[] }
     expect(Array.isArray(body.signals)).toBe(true)
     expect(body.signals?.some(row => row.summary === "API filter seed")).toBe(true)
-    expect(body.signals?.every(row => row.strategy === "SUBSCRIBE_CHASE")).toBe(true)
+    expect(body.signals?.every(row => row.strategy === "CHASE")).toBe(true)
   })
 
   it("returns today's alerts when period=today", async () => {

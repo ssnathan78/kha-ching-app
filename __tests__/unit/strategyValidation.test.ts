@@ -156,7 +156,7 @@ describe("validateTradeJobPayload", () => {
 })
 
 describe("validateStrategyEnum", () => {
-  it.each([STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE, STRATEGIES.SUBSCRIBE_CHASE])(
+  it.each([STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE, STRATEGIES.CHASE])(
     "allows %s",
     strategy => {
       expect(validateStrategyEnum(strategy).ok).toBe(true)

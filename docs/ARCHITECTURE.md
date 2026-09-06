@@ -165,7 +165,7 @@ See [TRADING_DOMAIN_MODEL.md](./TRADING_DOMAIN_MODEL.md). `transactions` remains
 |----------|--------|-------|
 | ATM Straddle | `lib/strategies/atmStraddle.ts` | Skew gate, optional hedge |
 | ATM Strangle | `lib/strategies/strangle.ts` | Strike selection modes |
-| Subscribe & Chase | `lib/chaseSignal.ts` | Nifty futures NRML; hourly EMA |
+| Chase | `lib/chaseSignal.ts` | Index futures NRML; hourly EMA. Stored strategy key is `CHASE` (renamed from `SUBSCRIBE_CHASE` in `drizzle/0010_rename_subscribe_chase_to_chase.sql`) |
 
 ### Known partial features
 

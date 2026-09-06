@@ -172,7 +172,7 @@ describe("evaluateOrder", () => {
       },
     }
     expect(evaluateOrder(intent({ strategy: "ATM_STRADDLE" }), ctx({ settings })).ok).toBe(false)
-    expect(evaluateOrder(intent({ strategy: "SUBSCRIBE_CHASE" }), ctx({ settings })).ok).toBe(true)
+    expect(evaluateOrder(intent({ strategy: "CHASE" }), ctx({ settings })).ok).toBe(true)
     expect(
       evaluateOrder(
         intent(),
@@ -191,14 +191,14 @@ describe("evaluateOrder", () => {
       strategies: {
         ...DEFAULT_RISK_SETTINGS.strategies,
         ATM_STRADDLE: { ...DEFAULT_RISK_SETTINGS.strategies.ATM_STRADDLE, maxLots: 2 },
-        SUBSCRIBE_CHASE: { ...DEFAULT_RISK_SETTINGS.strategies.SUBSCRIBE_CHASE, maxLots: 10 },
+        CHASE: { ...DEFAULT_RISK_SETTINGS.strategies.CHASE, maxLots: 10 },
       },
     }
     expect(evaluateOrder(intent({ strategy: "ATM_STRADDLE", lots: 3 }), ctx({ settings })).ok).toBe(
       false
     )
     expect(
-      evaluateOrder(intent({ strategy: "SUBSCRIBE_CHASE", lots: 3 }), ctx({ settings })).ok
+      evaluateOrder(intent({ strategy: "CHASE", lots: 3 }), ctx({ settings })).ok
     ).toBe(true)
   })
 })

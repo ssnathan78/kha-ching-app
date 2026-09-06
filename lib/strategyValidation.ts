@@ -198,7 +198,7 @@ export function validatePlanConfig(
 const SCHEDULABLE_STRATEGIES = new Set<string>([
   STRATEGIES.ATM_STRADDLE,
   STRATEGIES.ATM_STRANGLE,
-  STRATEGIES.SUBSCRIBE_CHASE,
+  STRATEGIES.CHASE,
 ])
 
 export function validateStrategyEnum(strategy?: string | null): TradeValidationResult {

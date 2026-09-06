@@ -22,7 +22,7 @@ export default withSession(async (req, res) => {
     const result = await runDeskKill(scope, user)
     logger.info("[api/kill-desk]", {
       ...result,
-      chaseKept: jobMatchesKillScope("SUBSCRIBE_CHASE", scope) === false,
+      chaseKept: jobMatchesKillScope("CHASE", scope) === false,
     })
     return res.json(result)
   } catch (e) {

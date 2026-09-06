@@ -2,11 +2,11 @@
 
 Three sources were compared:
 
-1. **Capitalmind Chase** — [Entry and Exit Rules](https://www.capitalmind.in/2024/02/capitalmind-chase-entry-and-exit-rules/) (22 Feb 2024 PDF print, 17 pages). This is the **rule book** for Chase.
+1. **Operator Chase rule book** — Feb 2024 PDF of the published entry/exit rules. This is the **rule book** for Chase.
 2. **chase-bot** — [docs/STRATEGY.md](https://github.com/ssnathan78/chase-bot/blob/master/docs/STRATEGY.md) plus the operator markdown *Chase Bot – Trend Following Logic & Behaviour.md*. This is a **Python rewrite** of “Pine + hourly poll”.
 3. **This repo (kha-ching-app)** — `lib/chaseSignal.ts`, `lib/queue-processor/chaseQueue.ts`, `lib/ema.ts`, plus ATM straddle/strangle under `lib/strategies/`.
 
-ATM straddle and strangle have **no Capitalmind PDF**. Their spec is the code + [ATM_STRADDLE.md](./ATM_STRADDLE.md) / [ATM_STRANGLE.md](./ATM_STRANGLE.md). Chase is the only strategy with an external written rule book.
+ATM straddle and strangle have **no external PDF**. Their spec is the code + [ATM_STRADDLE.md](./ATM_STRADDLE.md) / [ATM_STRANGLE.md](./ATM_STRANGLE.md). Chase is the only strategy with an external written rule book.
 
 Severity:
 
@@ -21,15 +21,15 @@ Severity:
 
 ## 1. Chase — verdict
 
-**Kha-Ching is a close automation of Capitalmind Chase**, not of chase-bot’s STRATEGY.md.
+**Kha-Ching is a close automation of the published Chase rule book**, not of chase-bot’s STRATEGY.md.
 
-chase-bot’s STRATEGY.md is a **simplified (and in places incorrect) subset**: it keeps EMA(40)+HLC3 and ±0.2% bands, then **drops** day-high/low entries, pending-signal invalidation, T+1 T1 matrix, 13:15 trail, and expiry rollover. It also **redefines the stop** as `(EMA + prev day low/high) / 2` **at entry**. Capitalmind uses that midpoint **only on T+1**, and only in one of four 09:16 buckets.
+chase-bot’s STRATEGY.md is a **simplified (and in places incorrect) subset**: it keeps EMA(40)+HLC3 and ±0.2% bands, then **drops** day-high/low entries, pending-signal invalidation, T+1 T1 matrix, 13:15 trail, and expiry rollover. It also **redefines the stop** as `(EMA + prev day low/high) / 2` **at entry**. The rule book uses that midpoint **only on T+1**, and only in one of four 09:16 buckets.
 
-If you treat chase-bot STRATEGY.md as the floor, Kha-Ching will look “over-specified.” If you treat Capitalmind as the floor, chase-bot is the outlier.
+If you treat chase-bot STRATEGY.md as the floor, Kha-Ching will look “over-specified.” If you treat the published rule book as the floor, chase-bot is the outlier.
 
 ```mermaid
 flowchart TB
-  subgraph capitalmind [Capitalmind rule book]
+  subgraph rulebook [Chase rule book]
     C1[Hourly close vs 0.2% band]
     C2[Pending entry at day high/low]
     C3[SL min/max EMA vs day extreme]
@@ -45,15 +45,15 @@ flowchart TB
     B2[Market in immediately]
     B3["SL = T1-first at 09:15 for the whole day"]
   end
-  capitalmind --> khaching
+  rulebook --> khaching
   C1 --> B1
 ```
 
 ---
 
-## 2. Chase — Capitalmind vs Kha-Ching
+## 2. Chase — rule book vs Kha-Ching
 
-| Rule (Capitalmind) | This app | Severity |
+| Rule (published Chase rules) | This app | Severity |
 |---|---|---|
 | EMA(40) on HLC3, hourly | Yes (`lib/ema.ts`) | OK |
 | Long if hourly close &gt; EMA+0.2% | Yes (`bufferPercent` 0.2 → `/100`) | OK |
@@ -80,17 +80,17 @@ flowchart TB
 
 ---
 
-## 3. Chase — chase-bot STRATEGY.md vs Capitalmind (and vs this app)
+## 3. Chase — chase-bot STRATEGY.md vs the rule book (and vs this app)
 
 chase-bot documents a bot that:
 
-| chase-bot claim | Capitalmind | Kha-Ching | Severity of chase-bot vs rule book |
+| chase-bot claim | Rule book | Kha-Ching | Severity of chase-bot vs rule book |
 |---|---|---|---|
 | Close vs ±0.2% → LONG/SHORT | Same | Same | OK |
 | **Market** entry on the signal | Wait for day high/low break | Wait (SL-M / MARKET if already through) | **Blocking** |
 | SL = `(EMA + prev day low)/2` stored **once at 09:15**, used **on every entry that day** | That midpoint is **one T+1 bucket**, not the entry SL | Entry SL = min/max(EMA, day extreme) | **Blocking** |
 | T1 ±0.4% “informational only” | T1 **is** the 09:16 classification | Used at 09:16 | chase-bot **under-implements** |
-| No pending state / 2h invalidate | Required | Implemented | **Blocking** if you run chase-bot as Capitalmind |
+| No pending state / 2h invalidate | Required | Implemented | **Blocking** if you run chase-bot as the published Chase rules |
 | Sleep after 15:25; poll every 3600s | Hourly + 09:16 + 13:15 + 15:00 roll | Two schedulers (hourly EMA + minute SL) | chase-bot **missing** intraday SL management |
 | Paper mode + outside-hours flag | n/a | Desk paper/mock | Intentional |
 
@@ -98,7 +98,7 @@ chase-bot documents a bot that:
 
 Pine snippet in the operator markdown plots T1 SL at 09:15 and signal bands — it does **not** encode pending day-high entries. Kha-Ching followed the **article text and annotated charts**, which is the right source.
 
-Capitalmind’s **prose** for short T+1 copies the long template (`EMA < close < Short T1`), which is **impossible** (Short T1 is below EMA). The **charts** and Kha-Ching use the mirror: `shortT1 ≤ close ≤ EMA` → midpoint of EMA and **previous day high**. Trust the charts + this code, not that one sentence.
+The rule book’s **prose** for short T+1 copies the long template (`EMA < close < Short T1`), which is **impossible** (Short T1 is below EMA). The **charts** and Kha-Ching use the mirror: `shortT1 ≤ close ≤ EMA` → midpoint of EMA and **previous day high**. Trust the charts + this code, not that one sentence.
 
 ---
 
@@ -133,12 +133,12 @@ None of these make a short ATM straddle into a different *strategy*; they are pr
 
 ---
 
-## 5. What to change (if you want Capitalmind-faithful Chase)
+## 5. What to change (if you want rule-book-faithful Chase)
 
 Priority if you ever patch Chase (not done in this docs-only change):
 
 1. **Expiry-day signal contract** — always signal/enter the **front** month until the 15:00 rollover (`instruments[0]`), not `[1]`.
-2. **Ceil/floor** day’s high/low (and maybe SL) per Capitalmind wording.
+2. **Ceil/floor** day’s high/low (and maybe SL) per the published Chase wording.
 3. **Harden EMA continuity** — fail the 10:15 signal (alert) rather than silently reseeding if yesterday 16:15 is missing, unless you explicitly want a rebuild.
 4. Leave chase-bot’s T1-first-SL-on-entry **out** of this codebase.
 

@@ -33,7 +33,7 @@ const PlanDash = () => {
         const dayKey =
           updatedConfig.day_of_week || updatedConfig.dayOfWeek || updatedConfig.collection
 
-        if (updatedConfig.strategy === "SUBSCRIBE_CHASE") {
+        if (updatedConfig.strategy === "CHASE") {
           return accum
         }
 

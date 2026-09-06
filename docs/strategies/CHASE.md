@@ -1,11 +1,8 @@
-# Subscribe & Chase (continuous)
+# Chase (continuous)
 
 ### Technical specification — as implemented in Kha-Ching
 
-Canonical **human** rules: Capitalmind, “Chase Entry and Exit Rules”, 22 Feb 2024  
-<https://www.capitalmind.in/2024/02/capitalmind-chase-entry-and-exit-rules/>
-
-This document is what **this app** does. Differences vs Capitalmind and vs the Python [chase-bot](https://github.com/ssnathan78/chase-bot) are in [IMPLEMENTATION_REVIEW.md](./IMPLEMENTATION_REVIEW.md).
+This document is what **this app** does. Differences vs the operator Chase rule book (Feb 2024) and vs the Python [chase-bot](https://github.com/ssnathan78/chase-bot) are in [IMPLEMENTATION_REVIEW.md](./IMPLEMENTATION_REVIEW.md).
 
 ---
 
@@ -13,7 +10,7 @@ This document is what **this app** does. Differences vs Capitalmind and vs the P
 
 Chase is a **long/short trend-follow** on **index futures**, not options. It uses a **40-period EMA of hourly HLC3**, ±0.2% signal bands, ±0.4% T1 bands (for the **morning-after** stop, not for entry), and **day high/low** for the pending entry and initial stop.
 
-It is **continuous**: one lots + engine config (not a weekday template). Positions are **NRML** and can stay open across sessions. Capitalmind sunsetted the public product on 31 Mar 2024 because hourly monitoring was impractical for most people; this desk automates that monitoring.
+It is **continuous**: one lots + engine config (not a weekday template). Positions are **NRML** and can stay open across sessions. Hourly monitoring is done by this desk rather than by hand.
 
 **Edge hypothesis:** Hourly closes outside a thin EMA band mark the start of a trend. Enter on a break of the day’s extreme; risk the other extreme (or the EMA if that is further). Trail using T1 logic the next morning and EMA thereafter.
 
@@ -49,7 +46,7 @@ Shipped engine (`CHASE_MASTER_DEFAULTS` / `/chase`):
 
 Helper: `chaseTolerances(ema, bufferPercent)` in `lib/chaseDefaults.ts`.
 
-**Rounding (this app):** EMA, day’s high, day’s low, and last close are `Math.round` to whole rupees. Capitalmind says **ceil** day’s high / **floor** day’s low. See the review doc.
+**Rounding (this app):** EMA, day’s high, day’s low, and last close are `Math.round` to whole rupees. The operator rule book says **ceil** day’s high / **floor** day’s low. See the review doc.
 
 **Incremental EMA:** After the first seed, each hourly job applies `new = hlc3 * k + prev * (1-k)` with `k = 2/(period+1)`, using the **previous hour’s stored EMA** when `getAcceptedPrevEma` accepts it (10:15 IST requires yesterday’s **16:15** row; later hours require the prior hour on the minute).
 
@@ -107,7 +104,7 @@ Mirror: `lastClose < ema * 0.998`, enter on **day’s low**, SL = `max(ema, day'
 | Opposite band still true **next** hourly evaluation | Invalidate (the “2 hours” rule) |
 | 16:15 with a pending entry | Reset; do not carry the trigger overnight |
 
-This matches Capitalmind’s “immediate invalidate if close beyond SL” and “two hours on the wrong side of the opposite 0.2% band”.
+This matches the rule book: immediate invalidate if close beyond SL, and two hours on the wrong side of the opposite 0.2% band.
 
 ---
 
@@ -140,13 +137,13 @@ If the position’s `createdAt` date is not the previous trading day, morning up
 
 Hourly EMA job at **13:15** (`hour === 13`) on a **later calendar day** than entry: SL = `max(ema, sl)` (long) or `min(ema, sl)` (short), and replace the broker SL.
 
-Capitalmind text: adjust at **09:16 and 13:15**, not on T-day. This app’s 13:15 path skips T-day via `createdAt` date.
+Rule book: adjust at **09:16 and 13:15**, not on T-day. This app’s 13:15 path skips T-day via `createdAt` date.
 
 ### Expiry 15:00
 
 If LONG/SHORT and the **current** futures expiry is **today**, at 15:00 IST flatten the front month and open the next month MARKET, SL = next contract’s EMA.
 
-Capitalmind: if SL already hit on expiry, do not re-enter the dying contract; the next signal is on the next month. This app’s signal path on expiry day currently prefers `instruments[1]` when two contracts are loaded — see review.
+Rule book: if SL already hit on expiry, do not re-enter the dying contract; the next signal is on the next month. This app’s signal path on expiry day currently prefers `instruments[1]` when two contracts are loaded — see review.
 
 ---
 
@@ -180,9 +177,9 @@ Desk → Signals stores hourly EMA compares (including WAIT). Alerts fire on mis
 
 ## 9. FAQ
 
-**Why SL-M entry instead of a market order on the hourly close?** Capitalmind waits for a **break of the day’s high/low** after the signal. The Python chase-bot market-enters on the close; this app does not.
+**Why SL-M entry instead of a market order on the hourly close?** The rule book waits for a **break of the day’s high/low** after the signal. The Python chase-bot market-enters on the close; this app does not.
 
-**What is T1 (0.4%) for?** Next-morning stop **placement**, not the entry trigger. Chase-bot’s STRATEGY.md treats T1 as optional visualisation and uses a **different** stop (mid of EMA and prev day high/low) **on entry** — that is not Capitalmind and not this app.
+**What is T1 (0.4%) for?** Next-morning stop **placement**, not the entry trigger. Chase-bot’s STRATEGY.md treats T1 as optional visualisation and uses a **different** stop (mid of EMA and prev day high/low) **on entry** — that is not the rule book and not this app.
 
 **Can I run three indexes?** Yes. Each selected index is an independent book.
 

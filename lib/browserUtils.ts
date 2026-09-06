@@ -103,11 +103,11 @@ export const formatFormDataForApi = ({
     combinedExitStrategy === COMBINED_SL_EXIT_STRATEGY.EXIT_ALL
 
   switch (strategy) {
-    case STRATEGIES.SUBSCRIBE_CHASE: {
+    case STRATEGIES.CHASE: {
       return {
         ...(data as any),
         lots: coerceLots((data as any).lots),
-        strategy: STRATEGIES.SUBSCRIBE_CHASE,
+        strategy: STRATEGIES.CHASE,
       } as any
     }
 

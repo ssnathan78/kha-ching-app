@@ -93,7 +93,7 @@ const Plan = () => {
 
   const startAdd = (dayOfWeek: DailyPlansDayKey, selectedStrategy: STRATEGIES) => {
     const next = resetDefaultStratState()
-    if (selectedStrategy !== STRATEGIES.SUBSCRIBE_CHASE) {
+    if (selectedStrategy !== STRATEGIES.CHASE) {
       const current = next[selectedStrategy] as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
       next[selectedStrategy] = {
         ...current,
@@ -149,10 +149,10 @@ const Plan = () => {
     try {
       const selectedConfig = stratState[currentEditStrategy!]
 
-      if (currentEditStrategy === STRATEGIES.SUBSCRIBE_CHASE) {
+      if (currentEditStrategy === STRATEGIES.CHASE) {
         const chaseConfig = cleanupForRemoteSync({
           ...selectedConfig,
-          strategy: STRATEGIES.SUBSCRIBE_CHASE,
+          strategy: STRATEGIES.CHASE,
           name: "Chase",
           instrument: INSTRUMENTS.NIFTY,
           expiryType: EXPIRY_TYPE.CURRENT,
@@ -255,7 +255,7 @@ const Plan = () => {
     const stratConfig = dayState[dayOfWeek].strategies[strategyKey]
     const { strategy } = stratConfig
 
-    if (strategy === STRATEGIES.SUBSCRIBE_CHASE) {
+    if (strategy === STRATEGIES.CHASE) {
       setStratState({
         ...stratState,
         [strategy]: {
@@ -366,7 +366,7 @@ const Plan = () => {
       ...data.config,
       id: keepId,
     } as AvailablePlansConfig
-    if (strategy !== STRATEGIES.SUBSCRIBE_CHASE) {
+    if (strategy !== STRATEGIES.CHASE) {
       const row = merged as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
       const fromConfig = row.instrument
         ? ({ [row.instrument]: true } as Record<INSTRUMENTS, boolean>)
@@ -382,7 +382,7 @@ const Plan = () => {
 
   const handleSaveAsDefaults = async (strategy: STRATEGIES) => {
     const raw = stratState[strategy]
-    const config = strategy === STRATEGIES.SUBSCRIBE_CHASE ? raw : cleanupForRemoteSync(raw)
+    const config = strategy === STRATEGIES.CHASE ? raw : cleanupForRemoteSync(raw)
     await axios.put("/api/strategy-defaults", { strategy, config })
     window.alert("Saved as master defaults for this strategy.")
   }
@@ -406,7 +406,7 @@ const Plan = () => {
           : INSTRUMENTS.NIFTY,
       strategy,
       expiryType: EXPIRY_TYPE.CURRENT,
-      productType: strategy === STRATEGIES.SUBSCRIBE_CHASE ? PRODUCT_TYPE.NRML : PRODUCT_TYPE.MIS,
+      productType: strategy === STRATEGIES.CHASE ? PRODUCT_TYPE.NRML : PRODUCT_TYPE.MIS,
     } as AvailablePlansConfig)
     await axios.put("/api/plan", {
       id: existing.id,
@@ -444,41 +444,41 @@ const Plan = () => {
         inputMode="numeric"
         slotProps={{ htmlInput: { pattern: "[0-9]*" } }}
         value={
-          (stratState[STRATEGIES.SUBSCRIBE_CHASE] as any)?.lots
-            ? String((stratState[STRATEGIES.SUBSCRIBE_CHASE] as any).lots)
+          (stratState[STRATEGIES.CHASE] as any)?.lots
+            ? String((stratState[STRATEGIES.CHASE] as any).lots)
             : ""
         }
         onChange={e => {
           const raw = e.target.value.replace(/[^0-9]/g, "")
           stratOnChangeHandler(
             { lots: raw === "" ? 0 : parseInt(raw, 10) } as any,
-            STRATEGIES.SUBSCRIBE_CHASE
+            STRATEGIES.CHASE
           )
         }}
         onBlur={() => {
-          const current = (stratState[STRATEGIES.SUBSCRIBE_CHASE] as any)?.lots ?? 0
-          if (current < 1) stratOnChangeHandler({ lots: 1 } as any, STRATEGIES.SUBSCRIBE_CHASE)
+          const current = (stratState[STRATEGIES.CHASE] as any)?.lots ?? 0
+          if (current < 1) stratOnChangeHandler({ lots: 1 } as any, STRATEGIES.CHASE)
         }}
         sx={{ mb: 2, maxWidth: 200 }}
       />
       <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
         <Button
           variant="contained"
-          onClick={() => commonOnSubmitHandler(stratState[STRATEGIES.SUBSCRIBE_CHASE]!)}
+          onClick={() => commonOnSubmitHandler(stratState[STRATEGIES.CHASE]!)}
         >
           Save
         </Button>
         <Button
           onClick={() =>
             applyDefaultsToForm(
-              STRATEGIES.SUBSCRIBE_CHASE,
-              stratState[STRATEGIES.SUBSCRIBE_CHASE]?.id
+              STRATEGIES.CHASE,
+              stratState[STRATEGIES.CHASE]?.id
             )
           }
         >
           Reset to default
         </Button>
-        <Button onClick={() => handleSaveAsDefaults(STRATEGIES.SUBSCRIBE_CHASE)}>
+        <Button onClick={() => handleSaveAsDefaults(STRATEGIES.CHASE)}>
           Save as defaults
         </Button>
         <Button onClick={commonOnCancelHandler}>Cancel</Button>
@@ -489,7 +489,7 @@ const Plan = () => {
   const renderStrategyForm = (dayOfWeek: DailyPlansDayKey, strategy: STRATEGIES) => {
     const heading = `${STRATEGIES_DETAILS[strategy].heading} · ${dayState[dayOfWeek].heading}`
     const toolbar =
-      strategy === STRATEGIES.SUBSCRIBE_CHASE ? null : (
+      strategy === STRATEGIES.CHASE ? null : (
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
           <Button
             size="small"
@@ -502,7 +502,7 @@ const Plan = () => {
           </Button>
         </Stack>
       )
-    if (strategy === STRATEGIES.SUBSCRIBE_CHASE) {
+    if (strategy === STRATEGIES.CHASE) {
       return renderChaseForm(dayOfWeek)
     }
     if (strategy === STRATEGIES.ATM_STRADDLE) {

@@ -48,7 +48,7 @@ Defined in `lib/queue.ts`:
 - **ancillaryQueue** — orderbook sync (`lib/queue-processor/ancillaryQueue.ts`)
 - **targetPnLQueue** — profit/loss targets (`lib/queue-processor/targetPnLQueue.ts`)
 - **squareOffQueue** — time square-off (`lib/queue-processor/squareOffQueue.js`)
-- **chaseQueue** — Subscribe & Chase (`lib/queue-processor/chaseQueue.ts`)
+- **chaseQueue** — Chase (`lib/queue-processor/chaseQueue.ts`)
 
 ## Database (`lib/schema.ts`)
 

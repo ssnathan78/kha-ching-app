@@ -62,7 +62,7 @@ describeDb("strategy signals and alert clears", () => {
     const ydayKey = `int-sig-yday:${Date.now()}`
     keys.push(todayKey, ydayKey)
     await recordStrategySignal({
-      strategy: "SUBSCRIBE_CHASE",
+      strategy: "CHASE",
       kind: "EMA_COMPARE",
       outcome: "WAIT",
       summary: "Today signal",
@@ -70,7 +70,7 @@ describeDb("strategy signals and alert clears", () => {
     })
     const yesterday = new Date(Date.now() - 36 * 60 * 60 * 1000)
     await recordStrategySignal({
-      strategy: "SUBSCRIBE_CHASE",
+      strategy: "CHASE",
       kind: "EMA_COMPARE",
       outcome: "HOLD",
       summary: "Yesterday signal",
@@ -79,7 +79,7 @@ describeDb("strategy signals and alert clears", () => {
     })
 
     await deleteSignalsForPeriod("today")
-    const after = await listStrategySignals({ period: "all", strategy: "SUBSCRIBE_CHASE" })
+    const after = await listStrategySignals({ period: "all", strategy: "CHASE" })
     expect(after.signals.some(row => row.summary === "Today signal")).toBe(false)
     expect(after.signals.some(row => row.summary === "Yesterday signal")).toBe(true)
   })

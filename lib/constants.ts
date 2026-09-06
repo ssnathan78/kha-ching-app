@@ -89,7 +89,7 @@ export const INSTRUMENT_DETAILS: Record<INSTRUMENTS, INSTRUMENT_PROPERTIES> = {
 export enum STRATEGIES {
   ATM_STRADDLE = "ATM_STRADDLE",
   ATM_STRANGLE = "ATM_STRANGLE",
-  SUBSCRIBE_CHASE = "SUBSCRIBE_CHASE",
+  CHASE = "CHASE",
 }
 
 export const INTRADAY_STRATEGIES = [STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE] as const
@@ -273,7 +273,7 @@ export const STRATEGIES_DETAILS = {
       },
     },
   },
-  [STRATEGIES.SUBSCRIBE_CHASE]: {
+  [STRATEGIES.CHASE]: {
     heading: "Chase",
     defaultRunAt: dayjs().set("hour", 9).set("minutes", 16).set("seconds", 0).format(),
     defaultFormState: {

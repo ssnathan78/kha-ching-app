@@ -1388,7 +1388,7 @@ export async function placeKiteOrder(
   params: RiskAwarePlaceOrder
 ): Promise<any> {
   const kite = getKiteInstance(accessToken)
-  const strategy = params.strategy || (params.tag === "chase" ? "SUBSCRIBE_CHASE" : params.strategy)
+  const strategy = params.strategy || (params.tag === "chase" ? "CHASE" : params.strategy)
   return placeOrder(kite, kite.VARIETY_REGULAR, { ...params, strategy })
 }
 
@@ -1474,7 +1474,7 @@ export async function placeSL(
       price: ltp,
       tag: "chase",
       purpose: "FLATTEN",
-      strategy: "SUBSCRIBE_CHASE",
+      strategy: "CHASE",
       ltp,
     } as RiskAwarePlaceOrder)
   } else {
@@ -1489,7 +1489,7 @@ export async function placeSL(
       trigger_price: stoploss,
       price,
       purpose: "SL",
-      strategy: "SUBSCRIBE_CHASE",
+      strategy: "CHASE",
       ltp,
     } as RiskAwarePlaceOrder)
   }

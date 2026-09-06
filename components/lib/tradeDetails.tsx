@@ -20,7 +20,7 @@ const TradeDetails = ({
         <ATMStraddleDetails {...tradeDetails} {...jobProps} />
       ) : strategy === STRATEGIES.ATM_STRANGLE ? (
         <ATMStrangleDetails {...tradeDetails} {...jobProps} />
-      ) : strategy === STRATEGIES.SUBSCRIBE_CHASE ? (
+      ) : strategy === STRATEGIES.CHASE ? (
         <p style={{ margin: "8px 0" }}>Lots: {(tradeDetails as any).lots ?? "—"}</p>
       ) : null}
     </>

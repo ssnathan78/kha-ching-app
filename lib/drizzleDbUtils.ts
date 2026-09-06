@@ -239,13 +239,13 @@ export async function updateChaseStatus(fields: {
   }
 }
 
-export async function getSubscribeChaseJob(): Promise<{ lots: number | null } | null> {
+export async function getChaseJob(): Promise<{ lots: number | null } | null> {
   const [row] = await db
     .select({ lots: jobExecutions.lots })
     .from(jobExecutions)
     .where(
       and(
-        eq(jobExecutions.strategy, "SUBSCRIBE_CHASE" as any),
+        eq(jobExecutions.strategy, "CHASE" as any),
         sql`${jobExecutions.runAt}::date = current_date`
       )
     )

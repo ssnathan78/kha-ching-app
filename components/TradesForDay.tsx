@@ -42,7 +42,7 @@ const WrapperComponent = (props: TradeJob) => {
   const [stopLoading, setStopLoading] = useState(false)
   const { showMessage, SnackbarAlert } = useSnackbar()
 
-  const isChase = props.strategy === "SUBSCRIBE_CHASE"
+  const isChase = props.strategy === "CHASE"
   const jobWasQueued = props.status !== "REJECT" && props.queue?.id
   const { data: jobDetails } = useSWR(
     jobWasQueued && !isChase ? `/api/get_job?id=${props.queue?.id}` : null
