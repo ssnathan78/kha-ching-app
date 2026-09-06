@@ -113,7 +113,4 @@ export interface CHASE_CONFIG {
   runNow?: boolean
 }
 
-export type AvailablePlansConfig =
-  | ATM_STRADDLE_CONFIG
-  | ATM_STRANGLE_CONFIG
-  | CHASE_CONFIG
+export type AvailablePlansConfig = ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG | CHASE_CONFIG

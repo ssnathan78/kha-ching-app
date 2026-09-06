@@ -95,9 +95,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
     day(MON, "15:30", "16:30", {
       scenario: "post-market",
       paperRisk: false,
-      actors: [
-        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
-      ],
+      actors: [{ kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 }],
       assertions: [{ type: "no_orders" }],
     }),
   overnight: () => ({
@@ -127,9 +125,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
     pricePath: "gap_up",
     stepMinutes: 60,
     paperRisk: false,
-    actors: [
-      { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24900 },
-    ],
+    actors: [{ kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24900 }],
     assertions: [{ type: "closed_market_no_live_entries" }],
   }),
   "live-weekend-block": () => NAMED.weekend(),
@@ -558,9 +554,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       scenario: "signal-oscillation",
       pricePath: "choppy",
       volatility: "high",
-      actors: [
-        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
-      ],
+      actors: [{ kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 }],
     }),
   "conflicting-signals": () =>
     day(MON, "09:20", "11:00", {
@@ -588,9 +582,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
     day(MON, "09:20", "11:00", {
       scenario: "entry-exit-collision",
       pricePath: "flash_crash",
-      actors: [
-        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
-      ],
+      actors: [{ kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 }],
     }),
   "strategy-disabled": () =>
     day(MON, "09:20", "10:00", {
@@ -810,9 +802,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       pricePath: "choppy",
       volatility: "high",
       liquidity: "low",
-      actors: [
-        { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 },
-      ],
+      actors: [{ kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 }],
     }),
 }
 

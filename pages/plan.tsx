@@ -469,18 +469,11 @@ const Plan = () => {
           Save
         </Button>
         <Button
-          onClick={() =>
-            applyDefaultsToForm(
-              STRATEGIES.CHASE,
-              stratState[STRATEGIES.CHASE]?.id
-            )
-          }
+          onClick={() => applyDefaultsToForm(STRATEGIES.CHASE, stratState[STRATEGIES.CHASE]?.id)}
         >
           Reset to default
         </Button>
-        <Button onClick={() => handleSaveAsDefaults(STRATEGIES.CHASE)}>
-          Save as defaults
-        </Button>
+        <Button onClick={() => handleSaveAsDefaults(STRATEGIES.CHASE)}>Save as defaults</Button>
         <Button onClick={commonOnCancelHandler}>Cancel</Button>
       </Stack>
     </Box>

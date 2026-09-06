@@ -6,10 +6,10 @@ import { generateSignal, getAcceptedPrevEma } from "../chaseSignal"
 import { nowDayjs } from "../clock"
 import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "../constants"
 import {
+  getChaseJob,
   getChaseStatus,
   getEmaByDate,
   getLatestEma,
-  getChaseJob,
   insertChaseLog,
   insertEma,
   updateChaseStatus,

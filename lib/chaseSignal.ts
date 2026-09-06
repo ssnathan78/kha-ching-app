@@ -2,7 +2,7 @@ import dayjs from "dayjs"
 import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "./chaseDefaults"
 import { getChaseEngineConfig, getChaseSettings } from "./chaseSettings"
 import { CHASE_STATUS } from "./constants"
-import { getChaseStatus, getChaseJob, updateChaseStatus } from "./drizzleDbUtils"
+import { getChaseJob, getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
 import {
   cancelOrder,
   getKiteInstance,
