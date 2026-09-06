@@ -51,6 +51,7 @@ Compose starts **Postgres**, **Redis**, and the **app**. On first boot the app r
 
 | Document | Read it when… |
 |---|---|
+| [docs/strategies/README.md](docs/strategies/README.md) | What ATM straddle, strangle, and Chase actually do (formulas, state, exits) |
 | [docs/LOCAL.md](docs/LOCAL.md) | First laptop run, Kite redirect, HTTP cookies, mock orders |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Running without Docker, Yarn, tests, migrations |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How UI, queues, DB, and Kite fit together |

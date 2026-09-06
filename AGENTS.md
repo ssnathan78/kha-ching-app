@@ -52,6 +52,8 @@ Longer project map: [CLAUDE.md](CLAUDE.md).
 
 Modernization patterns and backlog: [docs/CODEBASE_MODERNIZATION.md](docs/CODEBASE_MODERNIZATION.md).
 
+Strategy specs (straddle, strangle, Chase) and Capitalmind vs chase-bot vs this app: [docs/strategies/README.md](docs/strategies/README.md).
+
 Trading ledger (orders, fills, positions, trades, recon): [docs/TRADING_DOMAIN_MODEL.md](docs/TRADING_DOMAIN_MODEL.md). Do not collapse signal / order / fill / position / trade into one row.
 
 Trading risk: [docs/TRADING_RISK_AUDIT.md](docs/TRADING_RISK_AUDIT.md). Pre-trade limits live in `lib/trading/riskEngine.ts` and cannot be bypassed by strategy code.

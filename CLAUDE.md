@@ -67,8 +67,11 @@ Helpers: `lib/drizzleDbUtils.ts`. Init SQL: `drizzle/0000_init.sql`.
 
 ## Strategies
 
+Operator specs: [docs/strategies/README.md](docs/strategies/README.md).
+
 - `lib/strategies/atmStraddle.ts`
 - `lib/strategies/strangle.ts`
+- Chase: `lib/chaseSignal.ts`, `lib/queue-processor/chaseQueue.ts`
 
 Exits: `lib/exit-strategies/`. Watchers: `lib/watchers/`.
 
