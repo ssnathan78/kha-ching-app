@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lt } from "drizzle-orm"
+import { and, desc, eq, gte, isNotNull, lt, type SQL } from "drizzle-orm"
 
 import { now } from "../clock"
 import { db } from "../drizzle"
@@ -146,7 +146,7 @@ export async function recordFeedClear(feed: OperatorFeed, mode: FeedClearMode) {
 
 export async function deleteSignalsForPeriod(period: FeedPeriod) {
   const { from, to } = periodBounds(period)
-  const clauses = []
+  const clauses: SQL[] = []
   if (from) clauses.push(gte(strategySignals.occurredAt, from))
   if (to) clauses.push(lt(strategySignals.occurredAt, to))
   if (clauses.length) {
@@ -166,7 +166,7 @@ export async function listStrategySignals(query: {
 }): Promise<{ signals: StrategySignal[]; filters: SignalFilters }> {
   const period = query.period ?? "all"
   const { from, to } = periodBounds(period)
-  const clauses = []
+  const clauses: SQL[] = []
   if (from) clauses.push(gte(strategySignals.occurredAt, from))
   if (to) clauses.push(lt(strategySignals.occurredAt, to))
   if (query.strategy) clauses.push(eq(strategySignals.strategy, query.strategy))

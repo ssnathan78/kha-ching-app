@@ -54,7 +54,7 @@ async function individualLegExitOrders({
     } = order
     // if (isMaxLossEnabled ||isMaxProfitEnabled)
     // totalOrders.push (order);
-    let exitOrderTransactionType: string
+    let exitOrderTransactionType: "BUY" | "SELL"
     let exitOrderTriggerPrice: number
 
     const absoluteSl: number = (slmPercent / 100) * avgOrderPrice!
