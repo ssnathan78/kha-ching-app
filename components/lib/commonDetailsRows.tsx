@@ -50,6 +50,7 @@ const CommonDetailsRows = ({
 
   const lastHeartbeatAtString = !lastHeartbeatAt ? "-" : dayjs(lastHeartbeatAt).format("hh:mma")
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: heartbeat string is derived; status follows lastHeartbeatAt
   useEffect(() => {
     setAlgoStatus(getAlgoStatus())
   }, [lastHeartbeatAt, getAlgoStatus])

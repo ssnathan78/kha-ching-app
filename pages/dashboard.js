@@ -45,7 +45,7 @@ const Dashboard = () => {
     if (router.query?.tabId != null && Number(router.query.tabId) !== value) {
       setValue(Number(router.query.tabId))
     }
-  }, [router.query?.tabId])
+  }, [router.query?.tabId, value])
 
   if (!user || user.isLoggedIn === false) {
     return <Layout title="Dashboard" loading />
@@ -59,6 +59,9 @@ const Dashboard = () => {
   }
 
   const tradeCount = Array.isArray(trades) ? trades.length : 0
+  const failedJobs = Array.isArray(trades)
+    ? trades.filter(job => job?.status === "REJECT" || job?.status === "FAILED")
+    : []
 
   return (
     <Layout title="Dashboard">
@@ -79,6 +82,21 @@ const Dashboard = () => {
           variant="outlined"
         />
       </Box>
+
+      {failedJobs.length ? (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" component={Link} href="/desk?tab=alerts">
+              Desk alerts
+            </Button>
+          }
+        >
+          {failedJobs.length} job{failedJobs.length === 1 ? "" : "s"} did not run. This is not a
+          Kite order — open Desk → Alerts for the reason.
+        </Alert>
+      ) : null}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, md: 4 }}>

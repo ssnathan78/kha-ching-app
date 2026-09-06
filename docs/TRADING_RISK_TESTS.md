@@ -49,6 +49,7 @@ File: `__tests__/api/desk.test.ts`
 |------|---------|
 | GET `/api/desk/risk` authenticated | settings payload |
 | POST halt / resume | `deskHalted` persists |
+| GET `/api/desk/alerts` authenticated | `{ alerts, errorCount, warnCount }` |
 | GET anonymous | 401 |
 | Existing portfolio/orders auth | unchanged |
 

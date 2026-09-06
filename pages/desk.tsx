@@ -19,12 +19,16 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
+import { useRouter } from "next/router"
 import { useState } from "react"
 import useSWR from "swr"
+import AlertsPanel from "../components/desk/AlertsPanel"
 import RiskControls from "../components/desk/RiskControls"
+import SignalsPanel from "../components/desk/SignalsPanel"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import fetchJson from "../lib/fetchJson"
+import type { FeedClearMode, FeedPeriod } from "../lib/trading/feedWindow"
 import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
 import useUser from "../lib/useUser"
 
@@ -61,9 +65,33 @@ function when(value: string | Date | null | undefined) {
   return new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
 }
 
+const DESK_TABS = [
+  "positions",
+  "orders",
+  "trades",
+  "alerts",
+  "signals",
+  "decisions",
+  "activity",
+  "sessions",
+  "risk",
+] as const
+type DeskTab = (typeof DESK_TABS)[number]
+
+function deskTabFromQuery(value: string | string[] | undefined): DeskTab {
+  const raw = Array.isArray(value) ? value[0] : value
+  return DESK_TABS.includes(raw as DeskTab) ? (raw as DeskTab) : "positions"
+}
+
 export default function DeskPage() {
   const { user } = useUser({ redirectTo: "/" })
-  const [tab, setTab] = useState(0)
+  const router = useRouter()
+  const tab = deskTabFromQuery(router.query.tab)
+  const setTab = (next: DeskTab) => {
+    router.replace({ pathname: "/desk", query: { ...router.query, tab: next } }, undefined, {
+      shallow: true,
+    })
+  }
   const [reconciling, setReconciling] = useState(false)
   const [reconMsg, setReconMsg] = useState<string | null>(null)
   const [resumeOpen, setResumeOpen] = useState(false)
@@ -74,6 +102,14 @@ export default function DeskPage() {
   )
   const [tradeFrom, setTradeFrom] = useState("")
   const [tradeTo, setTradeTo] = useState("")
+  const [feedPeriod, setFeedPeriod] = useState<FeedPeriod>("all")
+  const [signalStrategy, setSignalStrategy] = useState("")
+  const [signalPlan, setSignalPlan] = useState("")
+  const [signalJob, setSignalJob] = useState("")
+  const [clearOpen, setClearOpen] = useState<{
+    feed: "alerts" | "signals"
+    mode: FeedClearMode
+  } | null>(null)
 
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR(
     user?.isLoggedIn ? "/api/desk/portfolio" : null
@@ -97,6 +133,17 @@ export default function DeskPage() {
     user?.isLoggedIn ? `/api/desk/trades${tradeQs ? `?${tradeQs}` : ""}` : null
   )
   const { data: activityData } = useSWR(user?.isLoggedIn ? "/api/desk/activity" : null)
+  const alertQs = new URLSearchParams({ period: feedPeriod })
+  const signalQs = new URLSearchParams({ period: feedPeriod })
+  if (signalStrategy) signalQs.set("strategy", signalStrategy)
+  if (signalPlan) signalQs.set("planRef", signalPlan)
+  if (signalJob) signalQs.set("jobId", signalJob)
+  const { data: alertsData, mutate: mutateAlerts } = useSWR(
+    user?.isLoggedIn ? `/api/desk/alerts?${alertQs}` : null
+  )
+  const { data: signalsData, mutate: mutateSignals } = useSWR(
+    user?.isLoggedIn ? `/api/desk/signals?${signalQs}` : null
+  )
   const { data: riskData, mutate: mutateRisk } = useSWR(user?.isLoggedIn ? "/api/desk/risk" : null)
 
   if (!user?.isLoggedIn) {
@@ -111,6 +158,11 @@ export default function DeskPage() {
   const audit = activityData?.audit ?? []
   const decisions = activityData?.decisions ?? []
   const recon = activityData?.recon ?? []
+  const alerts = alertsData?.alerts ?? []
+  const alertErrors = Number(alertsData?.errorCount ?? 0)
+  const alertWarns = Number(alertsData?.warnCount ?? 0)
+  const signals = signalsData?.signals ?? []
+  const signalFilters = signalsData?.filters ?? { strategies: [], planRefs: [], jobs: [] }
   const risk = riskData?.settings
   const deskHalted = Boolean(risk?.deskHalted)
 
@@ -193,6 +245,43 @@ export default function DeskPage() {
         </Alert>
       ) : null}
       <ConfirmDialog
+        open={Boolean(clearOpen)}
+        title={clearOpen?.feed === "signals" ? "Clear persisted signals?" : "Hide notifications?"}
+        message={
+          clearOpen?.feed === "signals"
+            ? clearOpen.mode === "all"
+              ? "Deletes every stored signal. New evaluations after this still appear."
+              : clearOpen.mode === "today"
+                ? "Deletes today’s IST signal rows. Later evaluations still appear."
+                : "Deletes signal rows from before today’s IST midnight."
+            : clearOpen?.mode === "all"
+              ? "Hides every notification until now. Ledger, jobs, and orders stay. New alerts still appear."
+              : clearOpen?.mode === "today"
+                ? "Hides today’s notifications up to now. New alerts still appear."
+                : "Hides notifications from before today’s IST midnight."
+        }
+        confirmLabel="Clear"
+        confirmColor="warning"
+        onCancel={() => setClearOpen(null)}
+        onConfirm={async () => {
+          if (!clearOpen) return
+          const path = clearOpen.feed === "signals" ? "/api/desk/signals" : "/api/desk/alerts"
+          try {
+            await fetchJson(path, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ period: clearOpen.mode }),
+            })
+            if (clearOpen.feed === "signals") await mutateSignals()
+            else await mutateAlerts()
+          } catch (e) {
+            setReconMsg(e instanceof Error ? e.message : "Clear failed")
+          } finally {
+            setClearOpen(null)
+          }
+        }}
+      />
+      <ConfirmDialog
         open={resumeOpen}
         title="Resume trading?"
         message="This clears the desk halt and allows new entries again. Flatten and stop-loss orders were still allowed while halted. Resume only after you have reviewed positions."
@@ -230,13 +319,31 @@ export default function DeskPage() {
         <Chip label={`Gross exposure ${money(p?.grossExposure)}`} variant="outlined" />
         <Chip label={`Drawdown ${money(p?.drawdown)}`} variant="outlined" />
         <Chip label={`Open ${p?.openPositionCount ?? 0}`} variant="outlined" />
+        <Chip
+          label={
+            alertErrors + alertWarns
+              ? `${alertErrors + alertWarns} alert${alertErrors + alertWarns === 1 ? "" : "s"}`
+              : "No alerts"
+          }
+          color={alertErrors ? "error" : alertWarns ? "warning" : "default"}
+          variant={alertErrors || alertWarns ? "filled" : "outlined"}
+          onClick={() => setTab("alerts")}
+        />
       </Stack>
 
       <Paper sx={{ mb: 2 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable">
+        <Tabs
+          value={DESK_TABS.indexOf(tab)}
+          onChange={(_, v) => setTab(DESK_TABS[v] ?? "positions")}
+          variant="scrollable"
+        >
           <Tab label="Positions" />
           <Tab label="Orders" />
           <Tab label="Trades" />
+          <Tab
+            label={alertErrors + alertWarns > 0 ? `Alerts (${alertErrors + alertWarns})` : "Alerts"}
+          />
+          <Tab label={signals.length ? `Signals (${signals.length})` : "Signals"} />
           <Tab label="Decisions" />
           <Tab label="Activity" />
           <Tab label="Sessions" />
@@ -244,7 +351,7 @@ export default function DeskPage() {
         </Tabs>
       </Paper>
 
-      {tab === 0 || tab === 1 || tab === 2 ? (
+      {tab === "positions" || tab === "orders" || tab === "trades" ? (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Book</InputLabel>
@@ -258,7 +365,7 @@ export default function DeskPage() {
               <MenuItem value="LIVE">Live / recon</MenuItem>
             </Select>
           </FormControl>
-          {tab === 2 ? (
+          {tab === "trades" ? (
             <>
               <FormControl size="small" sx={{ minWidth: 140 }}>
                 <InputLabel>Period</InputLabel>
@@ -299,7 +406,7 @@ export default function DeskPage() {
         </Stack>
       ) : null}
 
-      {tab === 0 ? (
+      {tab === "positions" ? (
         <Paper>
           <Table size="small">
             <TableHead>
@@ -341,7 +448,7 @@ export default function DeskPage() {
         </Paper>
       ) : null}
 
-      {tab === 1 ? (
+      {tab === "orders" ? (
         <Paper>
           <Table size="small">
             <TableHead>
@@ -355,6 +462,7 @@ export default function DeskPage() {
                 <TableCell>Purpose</TableCell>
                 <TableCell>Book</TableCell>
                 <TableCell>Tag</TableCell>
+                <TableCell>Reason</TableCell>
                 <TableCell>Broker id</TableCell>
               </TableRow>
             </TableHead>
@@ -372,15 +480,22 @@ export default function DeskPage() {
                   <TableCell>{String(row.purpose)}</TableCell>
                   <TableCell>{String(row.provenance || "—")}</TableCell>
                   <TableCell>{String(row.orderTag || "—")}</TableCell>
+                  <TableCell>{String(row.rejectReason || row.errorInfo || "—")}</TableCell>
                   <TableCell>{String(row.brokerOrderId || "—")}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          {orders.length === 0 ? (
+            <Typography sx={{ p: 2 }} color="text.secondary">
+              No ledger orders in this book. A job that never punched (Sunday, risk block, enqueue
+              fail) is not an order — see Alerts.
+            </Typography>
+          ) : null}
         </Paper>
       ) : null}
 
-      {tab === 2 ? (
+      {tab === "trades" ? (
         <Paper>
           <Table size="small">
             <TableHead>
@@ -423,7 +538,34 @@ export default function DeskPage() {
         </Paper>
       ) : null}
 
-      {tab === 3 ? (
+      {tab === "alerts" ? (
+        <AlertsPanel
+          alerts={alerts}
+          errorCount={alertErrors}
+          warnCount={alertWarns}
+          period={feedPeriod}
+          onPeriod={setFeedPeriod}
+          onClear={mode => setClearOpen({ feed: "alerts", mode })}
+        />
+      ) : null}
+
+      {tab === "signals" ? (
+        <SignalsPanel
+          signals={signals}
+          filters={signalFilters}
+          period={feedPeriod}
+          strategy={signalStrategy}
+          planRef={signalPlan}
+          jobId={signalJob}
+          onPeriod={setFeedPeriod}
+          onStrategy={setSignalStrategy}
+          onPlanRef={setSignalPlan}
+          onJobId={setSignalJob}
+          onClear={mode => setClearOpen({ feed: "signals", mode })}
+        />
+      ) : null}
+
+      {tab === "decisions" ? (
         <Paper>
           <Table size="small">
             <TableHead>
@@ -452,7 +594,7 @@ export default function DeskPage() {
         </Paper>
       ) : null}
 
-      {tab === 4 ? (
+      {tab === "activity" ? (
         <Stack spacing={2}>
           <Paper>
             <Typography variant="subtitle2" sx={{ p: 1.5 }}>
@@ -509,7 +651,7 @@ export default function DeskPage() {
         </Stack>
       ) : null}
 
-      {tab === 5 ? (
+      {tab === "sessions" ? (
         <Paper>
           <Table size="small">
             <TableHead>
@@ -540,7 +682,7 @@ export default function DeskPage() {
         </Paper>
       ) : null}
 
-      {tab === 6 ? (
+      {tab === "risk" ? (
         <Paper>
           <RiskControls
             settings={risk ?? DEFAULT_RISK_SETTINGS}

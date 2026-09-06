@@ -48,7 +48,7 @@ export const withRemoteRetry = async (remoteFn: any, timeoutMs = ms(60)): Promis
       return
     }
     try {
-      const isRemoteFnPromise = remoteFn && typeof (remoteFn as any).then == "function"
+      const isRemoteFnPromise = remoteFn && typeof (remoteFn as any).then === "function"
       return await (isRemoteFnPromise ? remoteFn : remoteFn())
     } catch (e) {
       if (e?.isAxiosError && e?.response?.status === 401) {

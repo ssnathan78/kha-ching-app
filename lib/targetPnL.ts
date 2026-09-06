@@ -49,7 +49,7 @@ const targetPnL = async ({
   const totalPoints = await completedOrders.reduce(
     async (prev, current) => {
       const currentPosition = await prev
-      if (current.quantity == 0) currentPosition.points += current.points
+      if (current.quantity === 0) currentPosition.points += current.points
       else {
         const underlyingLTP = await withRemoteRetry(async () =>
           getInstrumentPrice(kite, current.tradingsymbol, "NFO")

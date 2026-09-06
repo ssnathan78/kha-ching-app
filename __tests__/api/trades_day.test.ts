@@ -1,4 +1,4 @@
-import { USER_OVERRIDE } from "../../lib/constants"
+import { INSTRUMENTS, USER_OVERRIDE } from "../../lib/constants"
 import tradesDayHandler from "../../pages/api/trades_day"
 import { invokeApi } from "../support/apiTestClient"
 import { createTestPool, deleteJobExecutionsByTags, describeDb } from "../support/dbHelpers"
@@ -55,6 +55,42 @@ describeDb("/api/trades_day", () => {
     expect(result.status).toBe(400)
   })
 
+  it("POST without instrument is 400", async () => {
+    const job = baseStraddleJob({ runNow: true, name: "No instrument" })
+    delete (job as { instrument?: string }).instrument
+    const result = await invokeApi(tradesDayHandler, { method: "POST", user, body: job })
+    expect(result.status).toBe(400)
+    expect(String((result.body as { error?: string }).error)).toMatch(/instrument/i)
+  })
+
+  it("POST Nifty then BankNifty creates two jobs", async () => {
+    const nifty = await invokeApi(tradesDayHandler, {
+      method: "POST",
+      user,
+      body: baseStraddleJob({ runNow: true, name: "Multi Nifty", instrument: INSTRUMENTS.NIFTY }),
+    })
+    const bank = await invokeApi(tradesDayHandler, {
+      method: "POST",
+      user,
+      body: baseStraddleJob({
+        runNow: true,
+        name: "Multi Bank",
+        instrument: INSTRUMENTS.BANKNIFTY,
+      }),
+    })
+    expect([200, 409]).toContain(nifty.status)
+    expect([200, 409]).toContain(bank.status)
+    const a = nifty.body as { id?: string; orderTag?: string }
+    const b = bank.body as { id?: string; orderTag?: string }
+    expect(a.id).toBeTruthy()
+    expect(b.id).toBeTruthy()
+    expect(a.id).not.toBe(b.id)
+    if (a.id) jobIds.push(a.id)
+    if (b.id) jobIds.push(b.id)
+    if (a.orderTag) orderTags.push(a.orderTag)
+    if (b.orderTag) orderTags.push(b.orderTag)
+  })
+
   it("POST creates job execution and enqueues (mock)", async () => {
     const job = baseStraddleJob({ runNow: true, name: "API test straddle" })
     const result = await invokeApi(tradesDayHandler, {
@@ -62,13 +98,23 @@ describeDb("/api/trades_day", () => {
       user,
       body: job,
     })
-    expect(result.status).toBe(200)
-    const body = result.body as { id?: string; orderTag?: string; status?: string }
+    expect([200, 409]).toContain(result.status)
+    const body = result.body as {
+      id?: string
+      orderTag?: string
+      status?: string
+      error?: string
+    }
     expect(body.id).toBeTruthy()
     expect(body.orderTag).toBeTruthy()
     if (body.id) jobIds.push(body.id)
     if (body.orderTag) orderTags.push(body.orderTag)
-    expect(["PENDING", "QUEUE", "REJECT"]).toContain(body.status)
+    if (result.status === 409) {
+      expect(body.status).toBe("REJECT")
+      expect(body.error).toBeTruthy()
+    } else {
+      expect(["PENDING", "QUEUE", "REJECT"]).toContain(body.status)
+    }
   })
 
   it("PUT with ABORT sets userOverride", async () => {

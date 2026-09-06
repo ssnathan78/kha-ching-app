@@ -1,16 +1,16 @@
+import { Alert, Link as MuiLink } from "@mui/material"
 import axios from "axios"
-
+import NextLink from "next/link"
 import { useRouter } from "next/router"
-
-import React, { useState } from "react"
-
+import { useState } from "react"
+import { apiErrorMessage } from "../../../lib/apiClientError"
 import {
   commonOnChangeHandler,
   formatFormDataForApi,
   getSchedulingStateProps,
 } from "../../../lib/browserUtils"
-
-import { STRATEGIES, STRATEGIES_DETAILS } from "../../../lib/constants"
+import { INSTRUMENTS, STRATEGIES, STRATEGIES_DETAILS } from "../../../lib/constants"
+import { jobsForPunch } from "../../../lib/punchSchedule"
 
 import Form from "./TradeSetupForm"
 
@@ -27,16 +27,26 @@ const AtmStrangle = ({
 
   const getDefaultState = () => ({
     ...STRATEGIES_DETAILS[strategy].defaultFormState,
-
     ...getSchedulingStateProps(strategy),
+    instruments: {
+      ...STRATEGIES_DETAILS[strategy].defaultFormState.instruments,
+      [INSTRUMENTS.NIFTY]: true,
+    },
   })
 
   const [state, setState] = useState(getDefaultState())
+  const [submitError, setSubmitError] = useState(null)
 
   const onSubmit = async (formattedStateForApiProps = {}, runNow = false) => {
+    const ready = jobsForPunch({ instruments: state.instruments, lots: state.lots })
+    if (!ready.ok) {
+      setSubmitError(ready.error)
+      return
+    }
+    const instruments = ready.instruments
+
     if (runNow) {
       const yes = await window.confirm("This will schedule this trade immediately. Are you sure?")
-
       if (!yes) {
         return
       }
@@ -46,36 +56,27 @@ const AtmStrangle = ({
       return axios.post("/api/trades_day", formatFormDataForApi({ strategy, data: props }))
     }
 
+    setSubmitError(null)
     try {
       await Promise.all(
-        Object.keys(state.instruments)
-
-          .filter(key => state.instruments[key])
-
-          .map(instrument => {
-            const { instruments: _instruments, ...payload } = {
-              ...state,
-
-              ...formattedStateForApiProps,
-
-              runNow,
-            }
-
-            return handleSyncJob({
-              ...payload,
-
-              instrument,
-
-              strategy,
-            })
+        instruments.map(instrument => {
+          const { instruments: _instruments, ...payload } = {
+            ...state,
+            ...formattedStateForApiProps,
+            runNow,
+          }
+          return handleSyncJob({
+            ...payload,
+            instrument,
+            strategy,
           })
+        })
       )
-
       setState(getDefaultState())
-
       router.push("/dashboard?tabId=0")
     } catch (e) {
       console.error(e)
+      setSubmitError(apiErrorMessage(e, "Could not schedule this trade"))
     }
   }
 
@@ -84,17 +85,27 @@ const AtmStrangle = ({
   const handleRunNow = () => onSubmit({}, true)
 
   return (
-    <Form
-      strategy={strategy}
-      state={state}
-      onChange={onChange}
-      onSubmit={onSubmit}
-      onRunNow={handleRunNow}
-      onCancel={() => router.push("/dashboard")}
-      formHeading={heading}
-      enabledInstruments={enabledInstruments}
-      exitStrategies={exitStrategies}
-    />
+    <>
+      {submitError ? (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError(null)}>
+          {submitError}{" "}
+          <MuiLink component={NextLink} href="/desk?tab=alerts" color="inherit">
+            View Desk → Alerts
+          </MuiLink>
+        </Alert>
+      ) : null}
+      <Form
+        strategy={strategy}
+        state={state}
+        onChange={onChange}
+        onSubmit={onSubmit}
+        onRunNow={handleRunNow}
+        onCancel={() => router.push("/dashboard")}
+        formHeading={heading}
+        enabledInstruments={enabledInstruments}
+        exitStrategies={exitStrategies}
+      />
+    </>
   )
 }
 

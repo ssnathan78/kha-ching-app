@@ -52,7 +52,7 @@ Workers are **invoked in-process as the clock advances**. The runner does not wa
 | Market | `lib/simulation/market.ts` | Quotes, spread, liquidity qty, data defects, forced session. |
 | Exchange | `lib/simulation/broker.ts` | MARKET / LIMIT / SL / SL-M / SL-L, faults, idempotent `clientKey`. |
 | Book | `lib/simulation/book.ts` | In-memory positions via production `applyFillToPosition`. |
-| Actors | `lib/simulation/actors.ts` | Strategy steps using `chaseTolerances`, `chaseAllowsNewEntry`, `evaluateOrder`, `isMarketOpen`. |
+| Actors | `lib/simulation/actors.ts` | Thin schedulers using `chaseTolerances`, `chaseAllowsNewEntry`, `evaluateOrder`, `isMarketOpen`. Not `atmStraddle.ts` / `strangle.ts` / Chase queue. |
 | Runner | `lib/simulation/runner.ts` | `simulate({ scenario, seed, … })` advances the clock and records a journal. |
 | Catalog | `lib/simulation/catalog.ts` | Named scenarios from the initial catalog. |
 | Assertions | `lib/simulation/invariants.ts` | Outcome checks, not “function was called”. |

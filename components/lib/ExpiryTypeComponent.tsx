@@ -19,11 +19,12 @@ const ExpiryTypeComponent = ({ state, onChange }) => {
   const instrument = state.instrument as INSTRUMENTS | undefined
   const expiryTypes = expiryTypesForInstrument(instrument)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the instrument's allowed expiries change
   useEffect(() => {
     if (state.expiryType && !expiryTypes.includes(state.expiryType)) {
       onChange({ expiryType: EXPIRY_TYPE.CURRENT })
     }
-  }, [instrument, state.expiryType])
+  }, [instrument, state.expiryType, expiryTypes])
 
   return (
     <Grid size={12}>

@@ -10,6 +10,8 @@ const CORE = [
   "post-market",
   "overnight",
   "weekend",
+  "mock-weekend-entry",
+  "chase-gap-down",
   "holiday",
   "unexpected-closure",
   "market-halt",
@@ -126,5 +128,22 @@ describe("end-to-end outcome scenarios", () => {
     })
     expect(result.riskEvents.some(e => e.code === "MAX_QTY")).toBe(true)
     expect(result.fills.length).toBe(0)
+  })
+
+  it("Scenario I — mock weekend still allows a timed straddle punch", () => {
+    const result = simulate({ scenario: "mock-weekend-entry", seed: 11 })
+    expect(result.assertionResults.every(a => a.ok)).toBe(true)
+    expect(result.orders.filter(o => o.status !== "REJECTED").length).toBeGreaterThan(0)
+  })
+
+  it("Scenario J — Chase through a gap-down keeps the book consistent", () => {
+    const result = simulate({ scenario: "chase-gap-down", seed: 6 })
+    expect(result.invariantViolations).toEqual([])
+    expect(result.assertionResults.every(a => a.ok)).toBe(true)
+    expect(result.orders.every(o => o.filledQty <= o.quantity)).toBe(true)
+    const pos = result.positions.find(p => p.symbol === "NIFTY26SEPFUT")
+    if (pos) {
+      expect(Number.isFinite(pos.quantity)).toBe(true)
+    }
   })
 })

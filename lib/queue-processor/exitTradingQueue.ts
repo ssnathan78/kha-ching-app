@@ -25,6 +25,27 @@ const worker = new Worker(
   }
 )
 
+worker.on("failed", async (job, err) => {
+  logger.error("🔴 [exitTradingQueue] worker failed", {
+    jobId: job?.id,
+    error: err?.message || err,
+  })
+  const maxAttempts = job?.opts?.attempts ?? 0
+  const isFinalFailure = !job || maxAttempts === 0 || job.attemptsMade >= maxAttempts
+  if (!isFinalFailure) return
+  const { recordOperatorAlert } = await import("../trading/alerts")
+  await recordOperatorAlert({
+    source: "JOB",
+    code: "EXIT_JOB_FAILED",
+    severity: "ERROR",
+    summary: err?.message || "Exit job failed",
+    jobId: typeof job?.data?.id === "string" ? job.data.id : null,
+    strategy: typeof job?.data?.strategy === "string" ? job.data.strategy : null,
+    instrument: typeof job?.data?.instrument === "string" ? job.data.instrument : null,
+    idempotencyKey: `alert:exit-fail:${job?.data?.id || job?.id}`,
+  })
+})
+
 worker.on("error", err => {
   logger.error("🔴 [exitTradingQueue] worker error", err)
 })

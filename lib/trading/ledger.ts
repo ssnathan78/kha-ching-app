@@ -130,12 +130,21 @@ export async function recordDecision(input: {
             : input.action === "ENTER" || input.action === "EXIT"
               ? "SIGNAL_GENERATED"
               : "SIGNAL_ACCEPTED"
+      const failed = auditType === "RISK_CHECK_FAILED" || auditType === "SIGNAL_REJECTED"
       await recordAuditEvent({
         eventType: auditType,
         decisionId: id,
         jobId: input.jobId,
+        severity: failed ? "ERROR" : "INFO",
         summary: input.reason || input.intent || input.action,
-        detail: { action: input.action, risk: input.riskResult },
+        detail: {
+          action: input.action,
+          risk: input.riskResult,
+          code: failed ? input.action : undefined,
+          source: failed ? "STRATEGY" : undefined,
+          strategy: input.strategy ?? null,
+          instrument: input.instrument ?? input.tradingsymbol ?? null,
+        },
         idempotencyKey: `decision:${input.idempotencyKey}`,
       })
     }

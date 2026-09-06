@@ -130,6 +130,9 @@ export type AuditEventType =
   | "RECONCILIATION_COMPLETED"
   | "BROKER_ERROR"
   | "MANUAL_INTERVENTION"
+  | "JOB_REJECTED"
+  | "JOB_FAILED"
+  | "JOB_DISCARDED"
 
 export function sideSign(side: Side): 1 | -1 {
   return side === "BUY" ? 1 : -1

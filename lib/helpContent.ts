@@ -34,6 +34,9 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         title: "Desk — orders, positions, history",
         body: [
           "Dashboard Today is still the live punch board. Desk is the application ledger: decisions, order lifecycle, fills, positions, completed round-trips, and audit events.",
+          "Desk → Orders is only the blotter: instructions that reached placeOrder (paper, mock, live, or reconciled). A Sunday or after-hours live “Schedule now” never creates an order. That reject is on Desk → Alerts. Mock punches still need at least one index ticked; otherwise nothing is sent.",
+          "Desk → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, and unresolved recon. The sidebar badge is the unread error count. Filter All / Today / Before today. Clear hides those rows without deleting the ledger.",
+          "Desk → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. Filter by strategy, weekday plan, or a single job. Clear today / before today / all deletes those signal rows.",
           "Kite remains the broker's execution reality. Reconcile with broker compares the ledger to Kite and records mismatches instead of silently rewriting history.",
           "A signal is not an order. An order is not a fill. A fill is not a position. A position is not a completed trade. Desk keeps those records separate so a restart can reconstruct what happened.",
           "Desk → Risk is the only place trading limits live: live-order switch, per-strategy max lots, daily loss, drawdown, and position caps. Strategies do not share P&L for those limits. Halt new entries is still the emergency stop. Flatten and stop-loss orders are still allowed while halted.",

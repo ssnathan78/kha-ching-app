@@ -132,6 +132,27 @@ const NAMED: Record<string, () => SimulateConfig> = {
     ],
     assertions: [{ type: "closed_market_no_live_entries" }],
   }),
+  "live-weekend-block": () => NAMED.weekend(),
+  "mock-weekend-entry": () => ({
+    scenario: "mock-weekend-entry",
+    start: "2026-09-05 10:00",
+    end: "2026-09-05 12:00",
+    seed: 11,
+    instruments: [NIFTY],
+    pricePath: "sideways",
+    stepMinutes: 10,
+    paperRisk: true,
+    actors: [
+      {
+        kind: "straddle",
+        strategy: "ATM_STRADDLE",
+        symbol: NIFTY.symbol,
+        lots: 1,
+        fireAt: "10:20",
+      },
+    ],
+    assertions: [{ type: "order_count", min: 1 }],
+  }),
   holiday: () =>
     day("2026-01-26", "09:00", "16:00", {
       scenario: "holiday",
@@ -232,6 +253,27 @@ const NAMED: Record<string, () => SimulateConfig> = {
     instruments: [NIFTY],
     pricePath: "gap_down",
     stepMinutes: 20,
+  }),
+  "chase-gap-down": () => ({
+    scenario: "chase-gap-down",
+    start: `${MON} 14:00`,
+    end: "2026-09-08 10:30",
+    seed: 6,
+    instruments: [NIFTY],
+    pricePath: "gap_down",
+    stepMinutes: 15,
+    paperRisk: true,
+    actors: [
+      {
+        kind: "chase",
+        strategy: "SUBSCRIBE_CHASE",
+        symbol: NIFTY.symbol,
+        lots: 1,
+        ema: 20000,
+        bufferPercent: 0.2,
+      },
+    ],
+    assertions: [{ type: "max_exposure", maxAbsQty: 130 }],
   }),
   "flash-crash": () =>
     day(MON, "09:20", "12:00", {

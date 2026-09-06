@@ -56,6 +56,16 @@ async function processCalculateEMA(job: Job) {
     const futuresInstruments = await getFnOExpiries(nfoSymbol, "FUT")
     if (!futuresInstruments.length) {
       logger.warn(`[processCalculateEMA] no FUT instruments found for ${nfoSymbol}`)
+      const { recordOperatorAlert } = await import("../trading/alerts")
+      await recordOperatorAlert({
+        source: "CHASE",
+        code: "CHASE_NO_FUT",
+        severity: "WARN",
+        summary: `Chase EMA: no FUT instruments found for ${nfoSymbol}`,
+        strategy: "SUBSCRIBE_CHASE",
+        instrument: nfoSymbol,
+        idempotencyKey: `alert:chase-nofut:${nfoSymbol}:${now.format("YYYY-MM-DD")}`,
+      })
       continue
     }
 
@@ -600,6 +610,16 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
     )) as HistoricalData[]
     if (!Array.isArray(candles) || !candles.length) {
       logger.warn(`[processUpdateSL] no 2-min candles for ${tradingsymbol}`)
+      const { recordOperatorAlert } = await import("../trading/alerts")
+      await recordOperatorAlert({
+        source: "CHASE",
+        code: "CHASE_NO_CANDLES",
+        severity: "WARN",
+        summary: `Chase SL: no 2-min candles for ${tradingsymbol}`,
+        strategy: "SUBSCRIBE_CHASE",
+        instrument: tradingsymbol,
+        idempotencyKey: `alert:chase-nocandle:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
+      })
       return null
     }
 
@@ -617,6 +637,16 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       candle.close <= 0
     ) {
       logger.warn(`[processUpdateSL] invalid candle for ${tradingsymbol} — fail closed`)
+      const { recordOperatorAlert } = await import("../trading/alerts")
+      await recordOperatorAlert({
+        source: "CHASE",
+        code: "CHASE_INVALID_CANDLE",
+        severity: "ERROR",
+        summary: `Chase SL: invalid candle for ${tradingsymbol} — fail closed`,
+        strategy: "SUBSCRIBE_CHASE",
+        instrument: tradingsymbol,
+        idempotencyKey: `alert:chase-badcandle:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
+      })
       return null
     }
     const candleAgeSec = (nowIst.valueOf() - dayjs(candle.date).valueOf()) / 1000
@@ -632,6 +662,16 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       const netQty = await getNetPositionQty(kite, tradingsymbol)
       if (netQty === 0) {
         logger.info(`[processUpdateSL] SL breach but no broker position for ${tradingsymbol}`)
+        const { recordOperatorAlert } = await import("../trading/alerts")
+        await recordOperatorAlert({
+          source: "CHASE",
+          code: "CHASE_SL_NO_POSITION",
+          severity: "WARN",
+          summary: `Chase SL breached but no broker position for ${tradingsymbol}`,
+          strategy: "SUBSCRIBE_CHASE",
+          instrument: tradingsymbol,
+          idempotencyKey: `alert:chase-sl-flat:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
+        })
         return
       }
       await placeKiteOrder(accessToken, {

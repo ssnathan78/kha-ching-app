@@ -107,6 +107,14 @@ yarn simulate -- --scenario random --seed 12345
 
 `paperRisk: false` evaluates `evaluateOrder` as **live** (market-hours and `LIVE_BLOCKED` apply) while still using the simulated exchange. Default `paperRisk: true` matches `MOCK_ORDERS=true` (paper entries can be placed for execution tests).
 
+## What sim proves / does not prove
+
+**Proves:** NSE calendar and session bounds, injected clock, `evaluateOrder` risk, simulated fills/faults, in-memory book invariants, Chase *buffer* + Chase window, mock-hours skip for timed entries (`paperRisk: true` ≈ `MOCK_ORDERS=true`).
+
+**Does not prove:** Desk punch UI, `/api/trades_day`, BullMQ workers, Postgres ledger, CE+PE strike/skew in `atmStraddle.ts` / `strangle.ts`, or Chase EMA computed from candles. Actors place a single futures MARKET/SL-M on a synthetic symbol. Price paths (gap, crash, trend) move the tape; they are not a PnL backtest of the live option strategies.
+
+If you expected “Sunday Schedule now on the straddle form,” that is unit + API + E2E. `mock-weekend-entry` only shows the **actor** can punch when paper/mock risk is on.
+
 ## Isolation
 
 Simulation tests set `SIMULATION=true` and `MOCK_ORDERS=true`. Do not point `KITE_API_ENDPOINT` at `api.kite.trade` in this process.

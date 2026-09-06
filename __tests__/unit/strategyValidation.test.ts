@@ -6,11 +6,13 @@ import {
 } from "../../lib/constants"
 import {
   EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE,
+  selectedTradeInstruments,
   shouldEnqueueExitQueue,
   validateExitStrategy,
   validateInstrumentForStrategy,
   validateLots,
   validateNoSlExit,
+  validateSelectedInstruments,
   validateSlmPercent,
   validateStrangleEntry,
   validateStrategyEnum,
@@ -138,6 +140,18 @@ describe("validateTradeJobPayload", () => {
   it("rejects inverted skew thresholds", () => {
     const job = baseStraddleJob({ maxSkewPercent: 30, thresholdSkewPercent: 10 })
     expect(validateTradeJobPayload(job).ok).toBe(false)
+  })
+
+  it("rejects a straddle without an instrument", () => {
+    const job = baseStraddleJob()
+    delete (job as { instrument?: string }).instrument
+    expect(validateTradeJobPayload(job).ok).toBe(false)
+  })
+
+  it("requires at least one ticked index", () => {
+    expect(validateSelectedInstruments({ NIFTY: false, BANKNIFTY: false }).ok).toBe(false)
+    expect(validateSelectedInstruments({ NIFTY: true }).ok).toBe(true)
+    expect(selectedTradeInstruments({ NIFTY: true, BANKNIFTY: false })).toEqual(["NIFTY"])
   })
 })
 

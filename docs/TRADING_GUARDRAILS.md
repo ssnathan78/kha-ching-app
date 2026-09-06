@@ -140,6 +140,16 @@ Uses ledger P&L, not `targetPnL` points.
 | Trigger | Entries rejected |
 | Tests | Implicit via fail-closed defaults |
 
+## Operator alerts (not the Orders blotter)
+
+| | |
+|--|--|
+| Protects | Believing a confirmed “Schedule now” punched when the job was rejected |
+| Enforced | Live `trades_day` returns **409** + writes `audit_events` / Desk → Alerts. Queue final failures, stale discards, risk blocks, broker `placeOrder` failures, Chase data miss, unresolved recon are the same feed |
+| Trigger | Sunday / after-hours live schedule, job fail, `RiskRejectedError`, Kite error, discarded square-off |
+| Config | None. Orders tab stays ledger/broker instructions only |
+| Tests | `__tests__/unit/trading/alerts.test.ts`, `__tests__/api/desk.test.ts` |
+
 ## Paper ledger vs broker
 
 | | |

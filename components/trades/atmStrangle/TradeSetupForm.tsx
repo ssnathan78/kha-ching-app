@@ -26,7 +26,7 @@ import {
   STRATEGIES_DETAILS,
 } from "../../../lib/constants"
 import { coerceLots } from "../../../lib/planMapper"
-import { validateLots } from "../../../lib/strategyValidation"
+import { validateLots, validateSelectedInstruments } from "../../../lib/strategyValidation"
 import type { ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
 import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 import FormSection from "../../lib/FormSection"
@@ -81,6 +81,7 @@ const TradeSetupForm = ({
   ]
 
   const [lotsError, setLotsError] = React.useState<string | null>(null)
+  const [instrumentError, setInstrumentError] = React.useState<string | null>(null)
 
   const handleFormSubmit = e => {
     e.preventDefault()
@@ -89,7 +90,13 @@ const TradeSetupForm = ({
       setLotsError(lotsCheck.error)
       return
     }
+    const instrumentsCheck = validateSelectedInstruments(state.instruments)
+    if (!instrumentsCheck.ok) {
+      setInstrumentError(instrumentsCheck.error)
+      return
+    }
     setLotsError(null)
+    setInstrumentError(null)
     onSubmit(formatFormDataForApi({ strategy, data: state }))
   }
 
@@ -130,7 +137,11 @@ const TradeSetupForm = ({
                 instruments={state.instruments}
                 enabledInstruments={enabledInstruments}
                 disabled={state.disableInstrumentChange}
-                onChange={next => onChange({ instruments: next })}
+                error={instrumentError}
+                onChange={next => {
+                  setInstrumentError(null)
+                  onChange({ instruments: next })
+                }}
               />
             </Grid>
             <VolatilityTypeComponent state={state} onChange={onChange} />

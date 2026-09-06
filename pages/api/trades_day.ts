@@ -14,6 +14,11 @@ import { jobExecutions } from "../../lib/schema"
 
 import withSession from "../../lib/session"
 import { validateTradeJobPayload } from "../../lib/strategyValidation"
+import {
+  liveScheduleRejectReason,
+  recordOperatorAlert,
+  scheduleRejectCode,
+} from "../../lib/trading/alerts"
 import { isMarketOpen, isMockOrder } from "../../lib/utils"
 import type { KiteUser } from "../../types/misc"
 import type { SUPPORTED_TRADE_CONFIG } from "../../types/trade"
@@ -31,14 +36,19 @@ function logJobSchedule(body: Record<string, unknown>) {
 }
 
 async function createJob({ jobData, user }: { jobData: SUPPORTED_TRADE_CONFIG; user: KiteUser }) {
-  const { runAt, runNow, strategy } = jobData
+  const { runAt, runNow } = jobData
 
-  if (!isMockOrder() && runNow && !isMarketOpen()) {
-    return Promise.reject(new Error("Exchange is offline right now."))
-  }
-
-  if (!isMockOrder() && !runNow && runAt && !isMarketOpen(dayjs(runAt))) {
-    return Promise.reject(new Error("Exchange would be offline at the scheduled time."))
+  const scheduleReject = liveScheduleRejectReason({
+    isMock: isMockOrder(),
+    runNow: Boolean(runNow),
+    runAt,
+    marketOpenNow: isMarketOpen(),
+    marketOpenAtRunAt: runAt ? isMarketOpen(dayjs(runAt)) : true,
+  })
+  if (scheduleReject) {
+    return Promise.reject(
+      Object.assign(new Error(scheduleReject.message), { code: scheduleReject.code })
+    )
   }
 
   return addToNextQueue(
@@ -137,15 +147,37 @@ export default withSession(async (req, res) => {
       return res.json(executionData)
     } catch (e) {
       logger.error("[trades_day] job creation failed", e)
+      const message = e instanceof Error ? e.message : String(e)
+      const code =
+        e && typeof e === "object" && "code" in e && typeof e.code === "string"
+          ? e.code
+          : scheduleRejectCode(message)
       await db
         .update(jobExecutions)
         .set({
           status: JOB_EXECUTION_STATUS.REJECT,
-          queue: { error: e instanceof Error ? e.message : String(e) },
+          queue: { error: message, code },
         })
         .where(eq(jobExecutions.id, executionData.id as string))
 
-      return res.json(executionData)
+      await recordOperatorAlert({
+        source: "SCHEDULE",
+        code,
+        severity: "ERROR",
+        summary: message,
+        jobId: executionData.id as string,
+        strategy: typeof executionData.strategy === "string" ? executionData.strategy : null,
+        instrument: typeof executionData.instrument === "string" ? executionData.instrument : null,
+        idempotencyKey: `alert:schedule:${executionData.id}`,
+      })
+
+      return res.status(409).json({
+        id: executionData.id,
+        orderTag: executionData.orderTag,
+        status: JOB_EXECUTION_STATUS.REJECT,
+        error: message,
+        code,
+      })
     }
   }
 

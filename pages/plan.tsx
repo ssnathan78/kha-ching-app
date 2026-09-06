@@ -159,7 +159,7 @@ const Plan = () => {
           productType: PRODUCT_TYPE.NRML,
         } as any)
 
-        let chaseUpdatedConfig
+        let chaseUpdatedConfig: Record<string, unknown>
         if (selectedConfig.id) {
           await axios.put("/api/plan", {
             id: selectedConfig.id,
@@ -189,7 +189,7 @@ const Plan = () => {
         return
       }
 
-      let updatedConfig
+      let updatedConfig: Record<string, unknown>
       if (selectedConfig.id) {
         await axios.put("/api/plan", {
           id: selectedConfig.id,
@@ -319,6 +319,7 @@ const Plan = () => {
     setDayState(groupPlansByDay(data, emptyDayState()))
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: load weekday plans once on mount
   useEffect(() => {
     reloadPlans().catch(() => undefined)
   }, [])

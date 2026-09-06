@@ -32,7 +32,7 @@ const worker = new Worker(
       logger.info(
         `[tradingQueue] Discarding stale job ${job.id} scheduled for ${scheduledAt.toISOString()}`
       )
-      return
+      throw new Error(`Stale trading job discarded — scheduled for ${scheduledAt.toISOString()}`)
     }
     const result = await processJob(job)
     // console.log(`processed tradingQueue id ${job.id}`, result)
@@ -51,6 +51,17 @@ const worker = new Worker(
         // console.log('🟢 success enable auto square off', { data, name })
       } catch (e) {
         logger.error("🔴 failed to enable auto square off", e)
+        const { recordOperatorAlert } = await import("../trading/alerts")
+        await recordOperatorAlert({
+          source: "JOB",
+          code: "ASO_ENABLE_FAILED",
+          severity: "WARN",
+          summary: e instanceof Error ? e.message : "Failed to enable auto square off",
+          jobId: typeof job.data?.id === "string" ? job.data.id : null,
+          strategy: typeof job.data?.strategy === "string" ? job.data.strategy : null,
+          instrument: typeof job.data?.instrument === "string" ? job.data.instrument : null,
+          idempotencyKey: `alert:aso:${job.data?.id || job.id}`,
+        })
       }
     }
     return result
@@ -138,6 +149,19 @@ worker.on("failed", async (job, err) => {
         },
       })
       .where(eq(jobExecutions.id, jobExecutionId))
+
+    const { recordOperatorAlert } = await import("../trading/alerts")
+    const stale = String(err?.message || "").includes("Stale trading job discarded")
+    await recordOperatorAlert({
+      source: "JOB",
+      code: stale ? "JOB_DISCARDED" : "JOB_FAILED",
+      severity: "ERROR",
+      summary: err?.message || "Trading job failed",
+      jobId: jobExecutionId,
+      strategy: typeof job.data?.strategy === "string" ? job.data.strategy : null,
+      instrument: typeof job.data?.instrument === "string" ? job.data.instrument : null,
+      idempotencyKey: `alert:job-fail:${jobExecutionId}`,
+    })
   } catch (updateError) {
     logger.error("🔴 failed to update job_executions status on queue failure", updateError)
   }

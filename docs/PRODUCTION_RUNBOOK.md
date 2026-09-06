@@ -185,20 +185,24 @@ docker compose restart app
 
 **CAUTION** / **DANGEROUS** during market hours.
 
-Documented manual path ([DEPLOYMENT.md](./DEPLOYMENT.md)):
+This Droplet is **Docker** at `/srv/khaching/app`. CI does **not** deploy.
+
+Preferred on 1 GB RAM: build the production image on the laptop and `docker load` on the Droplet ([DEPLOYMENT.md](./DEPLOYMENT.md) option B). Alternative: `git pull` + `docker compose build app` on the server (option A). Do **not** overwrite the Droplet `docker-compose.yml` with the laptop file (it publishes Postgres/Redis).
+
+systemd path (other hosts only):
 
 ```bash
-cd /opt/kha-ching-app   # or the real app dir
+cd /opt/kha-ching-app
 sudo systemctl stop kha-ching
 git pull
-yarn install --immutable    # repo uses Yarn 4; older doc said frozen-lockfile
+yarn install --immutable
 yarn build
-yarn migrate                # read new SQL first
+yarn migrate
 sudo systemctl start kha-ching
 curl -fsS https://YOUR_HOST/api/health
 ```
 
-CI does **not** deploy. Do not hotfix files on the Droplet as the permanent fix — commit in git.
+Do not hotfix files on the Droplet as the permanent fix — commit in git.
 
 ---
 

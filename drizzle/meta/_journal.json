@@ -71,6 +71,13 @@
       "when": 1756980000009,
       "tag": "0008_position_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1756980000010,
+      "tag": "0009_strategy_signals",
+      "breakpoints": true
     }
   ]
 }

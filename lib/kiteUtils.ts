@@ -365,10 +365,22 @@ export async function placeOrder(
     })
     return result
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
     await markOrderSubmitted({
       orderId: ledgerOrderId,
       status: "FAILED",
-      errorInfo: e instanceof Error ? e.message : String(e),
+      errorInfo: message,
+    })
+    const { recordOperatorAlert } = await import("./trading/alerts")
+    await recordOperatorAlert({
+      source: "ORDER",
+      code: "BROKER_ERROR",
+      severity: "ERROR",
+      summary: message,
+      orderId: ledgerOrderId,
+      strategy,
+      instrument: kiteOrder.tradingsymbol,
+      idempotencyKey: ledgerOrderId ? `alert:order-fail:${ledgerOrderId}` : undefined,
     })
     throw e
   }

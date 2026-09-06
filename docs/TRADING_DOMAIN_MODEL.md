@@ -36,6 +36,17 @@ order was placed or *how* a position got to its current quantity.
 Kite orders (one row per `order_id`). It has no partial fills, no rejected
 orders, no positions, no fees, and no decision context.
 
+A `job_executions` row with status `REJECT` or `FAILED` is **not** an order.
+Desk → Orders is the blotter. Desk → Alerts (`/api/desk/alerts`) is the
+operator log for schedule rejects, worker failures, risk blocks, and broker
+errors that never created (or failed) a ledger order.
+
+Desk → Signals (`strategy_signals`) is the persisted evaluation log: Chase
+hourly EMA vs close (including wait), sampled straddle skew, strangle strike
+selection. It is not an order. Clear today/before today/all deletes signal
+rows. Alert clears hide rows via `operator_feed_clears` and do not delete the
+ledger.
+
 ## 2. Entities we adopted
 
 Chosen because they are required for a trustworthy lifecycle. Rejected entities

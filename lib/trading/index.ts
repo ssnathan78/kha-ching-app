@@ -1,4 +1,11 @@
 export * from "./accounting"
+export {
+  listOperatorAlerts,
+  liveScheduleRejectReason,
+  recordOperatorAlert,
+  scheduleRejectCode,
+} from "./alerts"
+export { parseFeedPeriod, periodBounds } from "./feedWindow"
 export * from "./kiteMap"
 export {
   applyBrokerOrderSnapshot,
@@ -48,5 +55,6 @@ export {
   resumeDesk,
   saveRiskSettings,
 } from "./riskSettings"
+export { listStrategySignals, recordStrategySignal } from "./signals"
 export * from "./stateMachine"
 export * from "./types"

@@ -25,6 +25,7 @@ import {
 import logger from "../logger"
 import { orderQuantity } from "../pnl"
 import { EXIT_TRADING_Q_NAME } from "../queue"
+import { shouldAbortStraddleForClosedMarket } from "../strategyHours"
 import { shouldEnqueueExitQueue } from "../strategyValidation"
 import {
   attemptBrokerOrders,
@@ -38,10 +39,13 @@ import { computeUpdatedSkewPercent, isSkewAcceptable } from "./skewMath"
 
 dayjs.extend(isSameOrBefore)
 
+export { shouldAbortStraddleForClosedMarket } from "../strategyHours"
+
 interface GET_ATM_STRADDLE_ARGS extends ATM_STRADDLE_TRADE, INSTRUMENT_PROPERTIES {
   startTime: ConfigType
   attempt?: number
   instrumentsData: Record<string, unknown>[]
+  skipSignalLog?: boolean
 }
 
 export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Promise<{
@@ -64,12 +68,43 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
     expiresAt,
     expiryType,
     attempt = 0,
+    skipSignalLog,
+    instrument,
+    orderTag,
   } = args
+
+  const persistSkew = async (
+    outcome: "WAIT" | "ENTER" | "REJECT" | "SKIP",
+    summary: string,
+    features: Record<string, unknown>,
+    suffix: string
+  ) => {
+    if (skipSignalLog) return
+    const { recordStrategySignal } = await import("../trading/signals")
+    await recordStrategySignal({
+      strategy: "ATM_STRADDLE",
+      instrument,
+      orderTag,
+      kind: "SKEW_SAMPLE",
+      outcome,
+      summary,
+      features,
+      idempotencyKey: `straddle:${orderTag || "notag"}:${suffix}`,
+    })
+  }
   const MAX_ATM_STRADDLE_ATTEMPTS = 250
   if (attempt >= MAX_ATM_STRADDLE_ATTEMPTS) {
+    await persistSkew(
+      "REJECT",
+      "Too many skew/network retries — fail closed",
+      { attempt },
+      `retries:${attempt}`
+    )
     return Promise.reject(new Error("[atmStraddle] too many skew/network retries — fail closed"))
   }
-  if (!isMockOrder() && !isMarketOpen()) {
+  const isMock = isMockOrder()
+  if (shouldAbortStraddleForClosedMarket(isMock, isMock ? true : isMarketOpen())) {
+    await persistSkew("REJECT", "Market is closed — skew checker stopped", {}, "market-closed")
     return Promise.reject(new Error("[atmStraddle] market is closed"))
   }
   try {
@@ -118,6 +153,12 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
         `🔔 [atmStraddle] time has run out! takeTradeIrrespectiveSkew = ${takeTradeIrrespectiveSkew!.toString()}`
       )
       if (takeTradeIrrespectiveSkew) {
+        await persistSkew(
+          "ENTER",
+          "Skew checker expired — entering anyway",
+          { atmStrike, PE_STRING, CE_STRING, takeTradeIrrespectiveSkew: true },
+          `skew-force:${atmStrike}`
+        )
         return {
           PE_STRING,
           CE_STRING,
@@ -126,6 +167,12 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
         }
       }
 
+      await persistSkew(
+        "REJECT",
+        "Skew never converged before the checker expired",
+        { atmStrike, PE_STRING, CE_STRING, takeTradeIrrespectiveSkew },
+        "skew-expired"
+      )
       return Promise.reject(
         new Error("[atmStraddle] time expired and takeTradeIrrespectiveSkew is false")
       )
@@ -140,6 +187,24 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
           updatedSkewPercent
         )}%)`
       )
+      const { shouldSampleSkewAttempt } = await import("../trading/signals")
+      if (shouldSampleSkewAttempt(attempt)) {
+        await persistSkew(
+          "WAIT",
+          `Skew ${skew}% still above ${updatedSkewPercent}% — waiting`,
+          {
+            attempt,
+            skew,
+            updatedSkewPercent,
+            maxSkewPercent,
+            thresholdSkewPercent,
+            atmStrike,
+            PE_STRING,
+            CE_STRING,
+          },
+          `skew:${attempt}`
+        )
+      }
       await delay(ms(2))
       return getATMStraddle({ ...args, attempt: attempt + 1 })
     }
@@ -150,7 +215,20 @@ export async function getATMStraddle(args: Partial<GET_ATM_STRADDLE_ARGS>): Prom
       )}%, and last skew threshold was ${String(updatedSkewPercent)}`
     )
 
-    // if skew is fitting in, return
+    await persistSkew(
+      "ENTER",
+      `Skew ${String(skew)}% accepted (threshold ${String(updatedSkewPercent)}%)`,
+      {
+        attempt,
+        skew,
+        updatedSkewPercent,
+        atmStrike,
+        PE_STRING,
+        CE_STRING,
+        LOT_SIZE,
+      },
+      `skew-ok:${atmStrike}:${PE_STRING}:${CE_STRING}`
+    )
     return {
       PE_STRING,
       CE_STRING,

@@ -66,6 +66,16 @@ export async function assertOrderAllowed(input: {
     settings = await getRiskSettings()
   } catch (e) {
     logger.error("[riskGate] settings unavailable", e)
+    const { recordOperatorAlert } = await import("./alerts")
+    await recordOperatorAlert({
+      source: "RISK",
+      code: "RISK_UNAVAILABLE",
+      severity: "ERROR",
+      summary: "Risk engine unavailable — fail closed",
+      strategy: intent.strategy,
+      instrument: intent.tradingsymbol,
+      idempotencyKey: `alert:risk-unavailable:${intent.tag || intent.tradingsymbol}:${now().toISOString().slice(0, 16)}`,
+    })
     throw new RiskRejectedError({
       ok: false,
       code: "RISK_UNAVAILABLE",
@@ -177,10 +187,13 @@ export async function assertOrderAllowed(input: {
         decision.code === "STRATEGY_HALTED"
           ? "RISK_LIMIT_TRIGGERED"
           : "RISK_CHECK_FAILED",
+      severity: "ERROR",
       summary: decision.message,
       detail: {
         code: decision.code,
+        source: "RISK",
         symbol: intent.tradingsymbol,
+        instrument: intent.tradingsymbol,
         role,
         strategy: intent.strategy,
       },

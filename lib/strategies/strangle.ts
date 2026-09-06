@@ -73,8 +73,8 @@ const getStrangleStrikes = async ({
 }) => {
   const { nfoSymbol, strikeStepSize } = INSTRUMENT_DETAILS[instrument]
 
-  let lowerLegPEStrike
-  let higherLegCEStrike
+  let lowerLegPEStrike: number
+  let higherLegCEStrike: number
   if (entryStrategy === STRANGLE_ENTRY_STRATEGIES.PERCENT_FROM_ATM) {
     const strikes = computeStrikesFromPercent(atmStrike, strikeStepSize!, percentfromAtm!)
     lowerLegPEStrike = strikes.lowerLegPEStrike
@@ -235,6 +235,7 @@ async function atmStrangle(args: ATM_STRANGLE_TRADE) {
     const { atmStrike, CE_STRING: atmCEString } = await getATMStrikes({
       ...args,
       takeTradeIrrespectiveSkew: true,
+      skipSignalLog: true,
       instrumentsData: sourceData,
       startTime: dayjs(),
       expiresAt: dayjs().subtract(1, "seconds").format(),
@@ -259,6 +260,19 @@ async function atmStrangle(args: ATM_STRANGLE_TRADE) {
       price: optionPrice,
     })
 
+    const { recordStrategySignal } = await import("../trading/signals")
+    await recordStrategySignal({
+      strategy: "ATM_STRANGLE",
+      instrument,
+      orderTag,
+      tradingsymbol: `${PE_STRING} / ${CE_STRING}`,
+      kind: "STRIKE_SELECT",
+      outcome: "ENTER",
+      summary: `Strikes ${PE_STRING} / ${CE_STRING} via ${entryStrategy || "distance"}`,
+      features: { atmStrike, peStrike, ceStrike, PE_STRING, CE_STRING, entryStrategy },
+      idempotencyKey: `strangle-signal:${orderTag || "notag"}:${PE_STRING}:${CE_STRING}`,
+    })
+
     const { recordDecision } = await import("../trading/ledger")
     await recordDecision({
       strategy: "ATM_STRANGLE",
@@ -274,6 +288,16 @@ async function atmStrangle(args: ATM_STRANGLE_TRADE) {
 
     const kite = syncGetKiteInstance(user)
     if (!isMarketOpen()) {
+      await recordStrategySignal({
+        strategy: "ATM_STRANGLE",
+        instrument,
+        orderTag,
+        kind: "STRIKE_SELECT",
+        outcome: "REJECT",
+        summary: "Strikes chosen but market is closed",
+        features: { atmStrike, PE_STRING, CE_STRING },
+        idempotencyKey: `strangle-closed:${orderTag || "notag"}`,
+      })
       throw new Error("Market is closed now")
     }
 

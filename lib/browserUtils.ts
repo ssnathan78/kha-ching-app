@@ -69,7 +69,7 @@ export function commonOnChangeHandler(
   }
 }
 
-const getSchedulingApiProps = ({
+export const getSchedulingApiProps = ({
   isAutoSquareOffEnabled,
   squareOffTime,
   runAt,

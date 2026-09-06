@@ -73,9 +73,9 @@ Details and findings: [PRODUCTION_HEALTH.md](./PRODUCTION_HEALTH.md).
 | Broker | Zerodha Kite (`lib/kiteUtils.ts`) |
 | Risk | Desk → Risk in Postgres (`lib/trading/riskEngine.ts`) |
 | Observability | Winston + optional OpenTelemetry → Grafana Cloud |
-| CI | `.github/workflows/ci.yml` — lint, tests, build. **CI does not deploy.** |
+| CI | `.github/workflows/ci.yml` on GitHub-hosted Ubuntu — lint, unit, sim, migrate, int, api, build, audit, e2e. **CI does not deploy.** Public repo: Actions minutes are free on standard runners. |
 
-`docs/DEPLOYMENT.md` still mentions Node 20 and Yarn Classic 1.22. **The current repo and CI use Node 22 and Yarn 4.9.1.** After SSH, record which stack the Droplet actually has.
+The current repo, CI, and Docker image use **Node 22** and **Yarn Berry 4.9.1**. Deploy paths (Docker rebuild on the Droplet, **laptop image → `docker load`**, systemd) are in [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Two documented install styles
 

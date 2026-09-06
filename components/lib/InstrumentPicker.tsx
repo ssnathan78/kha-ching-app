@@ -8,7 +8,6 @@ import {
   Radio,
   RadioGroup,
 } from "@mui/material"
-import React from "react"
 
 import { INSTRUMENT_DETAILS, type INSTRUMENTS } from "../../lib/constants"
 
@@ -18,6 +17,7 @@ export default function InstrumentPicker({
   disabled,
   single,
   hint,
+  error,
   onChange,
 }: {
   instruments: Record<INSTRUMENTS, boolean>
@@ -25,6 +25,7 @@ export default function InstrumentPicker({
   disabled?: boolean
   single?: boolean
   hint?: string
+  error?: string | null
   onChange: (instruments: Record<INSTRUMENTS, boolean>) => void
 }) {
   const selected =
@@ -34,8 +35,9 @@ export default function InstrumentPicker({
   return (
     <FormControl component="fieldset">
       <FormLabel component="legend">Index</FormLabel>
-      <FormHelperText sx={{ mx: 0, mt: 0, mb: 1 }}>
-        {hint ??
+      <FormHelperText error={Boolean(error)} sx={{ mx: 0, mt: 0, mb: 1 }}>
+        {error ??
+          hint ??
           (single
             ? "The weekday template is for one index. Name above is only a label in the plan list."
             : "Tick every index you want to punch now. Each tick becomes its own order. Name above is only a label.")}

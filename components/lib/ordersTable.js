@@ -15,12 +15,13 @@ export default function OrdersTable({ rows = [] }) {
         <TableBody>
           {safeRows.map((row, idx) => {
             const cells = Array.isArray(row) ? row : [{ value: row }]
+            const rowKey = String(cells[0]?.value ?? `row-${idx}`)
 
             return (
-              <TableRow key={idx}>
+              <TableRow key={rowKey}>
                 {cells.map((cell, rIdx) => (
                   <TableCell
-                    key={rIdx}
+                    key={`${rowKey}-${cell?.value ?? rIdx}`}
                     align={(cell && cell.align) || "left"}
                     style={idx === 0 ? { fontWeight: 900 } : null}
                   >

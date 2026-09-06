@@ -13,6 +13,29 @@ import {
 import logger from "./logger"
 import { postToSlack, toIst } from "./utils"
 
+async function persistChaseSignal(input: {
+  outcome: "HOLD" | "WAIT" | "ENTER" | "REJECT" | "SKIP" | "ADJUST" | "INVALID"
+  kind?: "EMA_COMPARE" | "STATE" | "SL_UPDATE" | "ENTRY"
+  summary: string
+  instrument?: string
+  tradingsymbol?: string | null
+  features?: Record<string, unknown>
+  key: string
+}) {
+  const { recordStrategySignal } = await import("./trading/signals")
+  await recordStrategySignal({
+    strategy: "SUBSCRIBE_CHASE",
+    instrument: input.instrument,
+    tradingsymbol: input.tradingsymbol,
+    orderTag: "chase",
+    kind: input.kind ?? "EMA_COMPARE",
+    outcome: input.outcome,
+    summary: input.summary,
+    features: input.features,
+    idempotencyKey: input.key,
+  })
+}
+
 export type ChaseInstrument = {
   tradingsymbol: string
   instrumentToken: number
@@ -173,9 +196,26 @@ export const generateSignal = async (
         isSignalBreachingTolerance: false,
       })
       logger.info("[generateSignal] paused — cancelled pending entry, waiting until resume")
+      await persistChaseSignal({
+        outcome: "SKIP",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol,
+        summary: "Paused — cancelled pending entry, waiting until resume",
+        features: { status: currentStatus },
+        key: `chase:paused-cancel:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       return
     }
     logger.info("[generateSignal] Chase is paused — not opening a new trade")
+    await persistChaseSignal({
+      outcome: "SKIP",
+      kind: "STATE",
+      instrument: nfoSymbol,
+      summary: "Paused — not opening a new trade",
+      features: { status: currentStatus },
+      key: `chase:paused:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+    })
     return
   }
 
@@ -195,6 +235,21 @@ export const generateSignal = async (
     hour !== 13
   ) {
     logger.info("[generateSignal] chase already long/short, skipping")
+    await persistChaseSignal({
+      outcome: "HOLD",
+      kind: "STATE",
+      instrument: nfoSymbol,
+      tradingsymbol: instrument.tradingsymbol,
+      summary: `Already ${currentStatus} — hourly EMA stored, no new entry`,
+      features: {
+        status: currentStatus,
+        ema: instrument.ema,
+        lastClose: instrument.lastClose,
+        highestHigh: instrument.highestHigh,
+        lowestLow: instrument.lowestLow,
+      },
+      key: `chase:inpos:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+    })
   } else if (
     (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
     hour === 13 &&
@@ -206,6 +261,20 @@ export const generateSignal = async (
         ? Math.max(instrument.ema, stoploss ?? 0)
         : Math.min(instrument.ema, stoploss ?? 0)
     logger.info(`[generateSignal] updating SL to ${stoploss} for ${instrument.tradingsymbol}`)
+    await persistChaseSignal({
+      outcome: "ADJUST",
+      kind: "SL_UPDATE",
+      instrument: nfoSymbol,
+      tradingsymbol: instrument.tradingsymbol,
+      summary: `13:00 IST trail — SL to ${stoploss}`,
+      features: {
+        status: currentStatus,
+        ema: instrument.ema,
+        lastClose: instrument.lastClose,
+        stoploss,
+      },
+      key: `chase:sl13:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
+    })
     await postToSlack(
       `:shield: Action $chase: Chase is currently ${currentStatus}, update the stoploss to ${stoploss} for symbol:${instrument.tradingsymbol}`
     )
@@ -225,6 +294,15 @@ export const generateSignal = async (
     }
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL && hour === 16) {
     logger.info("[generateSignal] 4:15 PM EOD run — EMA stored, skipping signal generation")
+    await persistChaseSignal({
+      outcome: "SKIP",
+      kind: "EMA_COMPARE",
+      instrument: nfoSymbol,
+      tradingsymbol: instrument.tradingsymbol,
+      summary: "16:15 IST — EMA stored, no new signal",
+      features: { ema: instrument.ema, lastClose: instrument.lastClose, status: currentStatus },
+      key: `chase:eod:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
+    })
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
     const { bufferPercent } = await getChaseEngineConfig()
     const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
@@ -233,6 +311,23 @@ export const generateSignal = async (
     )
 
     if (instrument.lastClose > longTolerance) {
+      await persistChaseSignal({
+        outcome: "ENTER",
+        kind: "EMA_COMPARE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `Close ${instrument.lastClose} above long ${longTolerance} — AWAITING_LONG`,
+        features: {
+          ema: instrument.ema,
+          lastClose: instrument.lastClose,
+          longTolerance,
+          shortTolerance,
+          highestHigh: instrument.highestHigh,
+          lowestLow: instrument.lowestLow,
+          bufferPercent,
+        },
+        key: `chase:long:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       stoploss = Math.round(Math.min(instrument.ema, instrument.lowestLow))
       await postToSlack(
         `:rocket: Action $chase: Chase is AWAITING_LONG. 🚀 Enter on crossing ${instrument.highestHigh} for symbol: ${instrument.tradingsymbol}, stoploss ${stoploss} :shield:`
@@ -254,6 +349,23 @@ export const generateSignal = async (
         await placeEntryTriggerOrder(instrument, "BUY", instrument.highestHigh, accessToken)
       }
     } else if (instrument.lastClose < shortTolerance) {
+      await persistChaseSignal({
+        outcome: "ENTER",
+        kind: "EMA_COMPARE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `Close ${instrument.lastClose} below short ${shortTolerance} — AWAITING_SHORT`,
+        features: {
+          ema: instrument.ema,
+          lastClose: instrument.lastClose,
+          longTolerance,
+          shortTolerance,
+          highestHigh: instrument.highestHigh,
+          lowestLow: instrument.lowestLow,
+          bufferPercent,
+        },
+        key: `chase:short:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       stoploss = Math.round(Math.max(instrument.ema, instrument.highestHigh))
       await postToSlack(
         `:rotating_light: Action $chase: Chase is AWAITING_SHORT. 🔻 Enter on crossing ${instrument.lowestLow} for symbol: ${instrument.tradingsymbol}, stoploss ${stoploss} :shield:`
@@ -275,6 +387,24 @@ export const generateSignal = async (
         await placeEntryTriggerOrder(instrument, "SELL", instrument.lowestLow, accessToken)
       }
     } else {
+      await persistChaseSignal({
+        outcome: "WAIT",
+        kind: "EMA_COMPARE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `Waiting for signal — close ${instrument.lastClose} inside ${shortTolerance}–${longTolerance}`,
+        features: {
+          ema: instrument.ema,
+          lastClose: instrument.lastClose,
+          highestHigh: instrument.highestHigh,
+          lowestLow: instrument.lowestLow,
+          longTolerance,
+          shortTolerance,
+          bufferPercent,
+          status: currentStatus,
+        },
+        key: `chase:wait:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       await postToSlack(
         `:grey_question: Entry Signal Not Found. :hourglass_flowing_sand: Chase is AwaitingSignal`
       )
@@ -290,6 +420,15 @@ export const generateSignal = async (
 
     if (hour === 16) {
       logger.info("[generateSignal] EOD — resetting to AWAITING_SIGNAL")
+      await persistChaseSignal({
+        outcome: "SKIP",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: "EOD — reset pending entry to AWAITING_SIGNAL",
+        features: { status: currentStatus },
+        key: `chase:reset-eod:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
+      })
       const { success, error } = await updateChaseStatus({
         instrument: nfoSymbol,
         updatedAt: new Date(),
@@ -304,6 +443,20 @@ export const generateSignal = async (
       currentStatus === CHASE_STATUS.AWAITING_LONG &&
       (instrument.lastClose < (stoploss ?? 0) || isSignalBreachingTolerance)
     ) {
+      await persistChaseSignal({
+        outcome: "INVALID",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: "AWAITING_LONG invalidated — back to AWAITING_SIGNAL",
+        features: {
+          lastClose: instrument.lastClose,
+          stoploss,
+          shortTolerance,
+          isSignalBreachingTolerance,
+        },
+        key: `chase:invalid-long:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       await postToSlack(
         `:x: Action $chase: Signal Invalid. :no_entry_sign: Chase is now AwaitingSignal :hourglass_flowing_sand:`
       )
@@ -325,6 +478,15 @@ export const generateSignal = async (
       instrument.lastClose < shortTolerance
     ) {
       logger.info("[generateSignal] awaiting long but below short tolerance — marking breach")
+      await persistChaseSignal({
+        outcome: "INVALID",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `AWAITING_LONG — close ${instrument.lastClose} crossed short ${shortTolerance}`,
+        features: { lastClose: instrument.lastClose, shortTolerance },
+        key: `chase:breach-long:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       const { success, error } = await updateChaseStatus({
         instrument: nfoSymbol,
         updatedAt: new Date(),
@@ -337,6 +499,20 @@ export const generateSignal = async (
       currentStatus === CHASE_STATUS.AWAITING_SHORT &&
       (instrument.lastClose > (stoploss ?? 0) || isSignalBreachingTolerance)
     ) {
+      await persistChaseSignal({
+        outcome: "INVALID",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: "AWAITING_SHORT invalidated — back to AWAITING_SIGNAL",
+        features: {
+          lastClose: instrument.lastClose,
+          stoploss,
+          longTolerance,
+          isSignalBreachingTolerance,
+        },
+        key: `chase:invalid-short:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       await postToSlack(
         `:x: Action $chase: Signal Invalid. :no_entry_sign: Chase is now AwaitingSignal :hourglass_flowing_sand:`
       )
@@ -358,6 +534,15 @@ export const generateSignal = async (
       instrument.lastClose > longTolerance
     ) {
       logger.info("[generateSignal] awaiting short but above long tolerance — marking breach")
+      await persistChaseSignal({
+        outcome: "INVALID",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `AWAITING_SHORT — close ${instrument.lastClose} crossed long ${longTolerance}`,
+        features: { lastClose: instrument.lastClose, longTolerance },
+        key: `chase:breach-short:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
       const { success, error } = await updateChaseStatus({
         instrument: nfoSymbol,
         isSignalBreachingTolerance: true,

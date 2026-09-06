@@ -54,8 +54,8 @@ async function individualLegExitOrders({
     } = order
     // if (isMaxLossEnabled ||isMaxProfitEnabled)
     // totalOrders.push (order);
-    let exitOrderTransactionType
-    let exitOrderTriggerPrice
+    let exitOrderTransactionType: string
+    let exitOrderTriggerPrice: number
 
     const absoluteSl: number = (slmPercent / 100) * avgOrderPrice!
     if (transactionType === kite.TRANSACTION_TYPE_SELL) {

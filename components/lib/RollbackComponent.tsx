@@ -14,6 +14,7 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
     getIsSomeRollbackOptionEnabled()
   )
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: recompute from rollback object identity
   useEffect(() => {
     setIsSomeRollbackOptionEnabled(getIsSomeRollbackOptionEnabled())
   }, [rollback])

@@ -1,18 +1,21 @@
-import { Button, Grid, Paper, Typography } from "@mui/material"
-
+import { Alert, Button, Grid, Link as MuiLink, Paper, Typography } from "@mui/material"
 import axios from "axios"
 import dayjs from "dayjs"
-import React, { useEffect, useState } from "react"
+import NextLink from "next/link"
+import { useEffect, useState } from "react"
 import useSWR, { mutate } from "swr"
+import { apiErrorMessage } from "../lib/apiClientError"
 import { formatFormDataForApi } from "../lib/browserUtils"
 
 import { STRATEGIES_DETAILS } from "../lib/constants"
+import { futurePlansToSchedule, PAST_PLAN_SCHEDULE_ERROR } from "../lib/planDashSchedule"
 import type { SUPPORTED_TRADE_CONFIG } from "../types/trade"
 import ActionButtonOrLoader from "./lib/ActionButtonOrLoader"
 import TradeDetails from "./lib/tradeDetails"
 
 const PlanDash = () => {
   const [plans, setPlans] = useState({})
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
   const { data: tradesDay } = useSWR("/api/trades_day")
   const dayOfWeekHuman = dayjs().format("dddd")
   const dayOfWeek = dayOfWeekHuman.toUpperCase()
@@ -91,6 +94,15 @@ const PlanDash = () => {
     })
   }
 
+  const scheduleErrorBanner = scheduleError ? (
+    <Alert severity="error" sx={{ mb: 2 }} onClose={() => setScheduleError(null)}>
+      {scheduleError}{" "}
+      <MuiLink component={NextLink} href="/desk?tab=alerts" color="inherit">
+        View Desk → Alerts
+      </MuiLink>
+    </Alert>
+  ) : null
+
   const getPendingTrades = () =>
     plans[dayOfWeek]
       ?.filter(
@@ -99,14 +111,18 @@ const PlanDash = () => {
       .filter(plan => STRATEGIES_DETAILS[plan.strategy])
 
   async function handleScheduleEverything() {
-    const pendingTrades = getPendingTrades()?.filter((plan: SUPPORTED_TRADE_CONFIG) =>
-      dayjs(plan.runAt).isAfter(dayjs())
-    )
-    if (!(Array.isArray(pendingTrades) && pendingTrades.length)) {
+    const pendingTrades = futurePlansToSchedule(getPendingTrades())
+    if (!pendingTrades.length) {
+      setScheduleError(PAST_PLAN_SCHEDULE_ERROR)
       return
     }
-    await Promise.all(pendingTrades.map(handleScheduleJob))
-    await mutate("/api/trades_day")
+    setScheduleError(null)
+    try {
+      await Promise.all(pendingTrades.map(handleScheduleJob))
+      await mutate("/api/trades_day")
+    } catch (e) {
+      setScheduleError(apiErrorMessage(e, "Could not schedule plan trades"))
+    }
   }
 
   const pendingTrades = getPendingTrades()
@@ -137,6 +153,7 @@ const PlanDash = () => {
 
   return (
     <div>
+      {scheduleErrorBanner}
       {plans[dayOfWeek] && pendingTrades?.length ? (
         <ActionButtonOrLoader>
           {({ setLoading }) => (
@@ -174,8 +191,13 @@ const PlanDash = () => {
                       type="button"
                       onClick={async () => {
                         setLoading(true)
-                        await handleScheduleJob(plan)
-                        await mutate("/api/trades_day")
+                        setScheduleError(null)
+                        try {
+                          await handleScheduleJob(plan)
+                          await mutate("/api/trades_day")
+                        } catch (e) {
+                          setScheduleError(apiErrorMessage(e, "Could not schedule this plan"))
+                        }
                         setLoading(false)
                       }}
                     >

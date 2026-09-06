@@ -641,3 +641,41 @@ export const riskSettings = pgTable("risk_settings", {
   strategyLimits: jsonb("strategy_limits").notNull().default({}),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const strategySignals = pgTable(
+  "strategy_signals",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    strategy: text("strategy"),
+    instrument: text("instrument"),
+    tradingsymbol: text("tradingsymbol"),
+    jobId: text("job_id").references(() => jobExecutions.id),
+    planRef: text("plan_ref"),
+    orderTag: text("order_tag"),
+    jobName: text("job_name"),
+    kind: text("kind").notNull(),
+    outcome: text("outcome").notNull(),
+    summary: text("summary").notNull(),
+    features: jsonb("features").notNull().default({}),
+    idempotencyKey: text("idempotency_key").notNull(),
+  },
+  table => [
+    uniqueIndex("strategy_signals_idempotency_uidx").on(table.idempotencyKey),
+    index("idx_strategy_signals_occurred").on(table.occurredAt),
+    index("idx_strategy_signals_strategy").on(table.strategy),
+    index("idx_strategy_signals_job").on(table.jobId),
+    index("idx_strategy_signals_plan").on(table.planRef),
+    index("idx_strategy_signals_tag").on(table.orderTag),
+  ]
+)
+
+export const operatorFeedClears = pgTable("operator_feed_clears", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+  feed: text("feed").notNull(),
+  mode: text("mode").notNull(),
+  istDate: date("ist_date"),
+  before: timestamp("before", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})

@@ -53,6 +53,24 @@ export function validateInstrumentForStrategy(
   return { ok: true }
 }
 
+export function selectedTradeInstruments(
+  instruments?: Record<string, boolean | undefined> | null
+): string[] {
+  if (!instruments) return []
+  return Object.entries(instruments)
+    .filter(([, on]) => Boolean(on))
+    .map(([key]) => key)
+}
+
+export function validateSelectedInstruments(
+  instruments?: Record<string, boolean | undefined> | null
+): TradeValidationResult {
+  if (selectedTradeInstruments(instruments).length === 0) {
+    return { ok: false, error: "Tick at least one index before scheduling." }
+  }
+  return { ok: true }
+}
+
 export function validateLots(lots: unknown, maxLots?: number): TradeValidationResult {
   const n = Number(lots)
   if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
@@ -202,6 +220,12 @@ export function validateTradeJobPayload(
   if (!strategyCheck.ok || !strategy) return strategyCheck
 
   const instrument = (body as { instrument?: string }).instrument
+  if (
+    (strategy === STRATEGIES.ATM_STRADDLE || strategy === STRATEGIES.ATM_STRANGLE) &&
+    !instrument
+  ) {
+    return { ok: false, error: "instrument is required" }
+  }
   if (instrument) {
     const inst = validateInstrumentForStrategy(strategy, instrument)
     if (!inst.ok) return inst

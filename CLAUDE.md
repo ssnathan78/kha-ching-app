@@ -60,6 +60,8 @@ Defined in `lib/queue.ts`:
 | `transactions` | Completed Kite orders (`order_id` unique) |
 | `accesstoken` | Today's access token |
 | `ema` / `chase_status` / `chase_log` | Chase strategy |
+| `strategy_signals` | Persisted Chase/skew/strike evaluations (Desk → Signals) |
+| `operator_feed_clears` | Hide Alerts without deleting ledger/audit |
 
 Helpers: `lib/drizzleDbUtils.ts`. Init SQL: `drizzle/0000_init.sql`.
 

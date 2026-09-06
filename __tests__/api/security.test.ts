@@ -88,7 +88,7 @@ describeDb("security API routes", () => {
       user,
       body: job,
     })
-    expect(result.status).toBe(200)
+    expect([200, 409]).toContain(result.status)
     const body = result.body as { id: string; orderTag: string }
     jobIds.push(body.id)
     orderTags.push(body.orderTag)

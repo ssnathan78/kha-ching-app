@@ -222,6 +222,8 @@ See also [DEVELOPMENT.md](./DEVELOPMENT.md) (mixed host/Docker dev) and [LOCAL.m
 
 **Do not** mock business invariants (dual P&amp;L, plan uniqueness, points-based targets).
 
+Punch-form orchestration (`jobsForPunch`, `futurePlansToSchedule`) is unit-tested. An empty index list must fail — never `Promise.all([])` plus a dashboard redirect. `/api/trades_day` tests pin **mock + closed = 200** and **live + closed = 409**; do not treat 200-or-409 as success for that matrix. E2E must click **Schedule now** with and without an index ticked.
+
 ## Test data
 
 - Fixtures in `jobFixtures.ts` — typed from `SUPPORTED_TRADE_CONFIG`
@@ -241,12 +243,16 @@ Real Kite OAuth is not used in CI. Playwright:
 
 1. `yarn lint`
 2. `yarn unit-test`
-3. `yarn migrate`
-4. `yarn int-test --runInBand --forceExit`
-5. `yarn api-test --runInBand --forceExit`
-6. `yarn build`
-7. `npx playwright install --with-deps chromium`
-8. `yarn e2e-test`
+3. `yarn sim-test`
+4. `yarn migrate`
+5. `yarn int-test --runInBand --forceExit`
+6. `yarn api-test --runInBand --forceExit`
+7. `yarn build`
+8. `yarn npm audit --environment production --severity moderate`
+9. `npx playwright install --with-deps chromium`
+10. `yarn e2e-test`
+
+Runs on GitHub-hosted Ubuntu ([Actions](https://github.com/ssnathan78/kha-ching-app/actions)). **Does not deploy.** Public repo: standard runners are free.
 
 Services: Postgres 16, Redis 7. Env: `MOCK_ORDERS=true`, test Kite keys.
 
@@ -279,5 +285,7 @@ npx playwright test --headed --debug auth.spec.ts
 - Job create/abort/delete
 - Kill-desk scopes
 - `MOCK_ORDERS` default in CI
+- Punch requires at least one index
+- Live closed-market schedule is 409 + Alerts; mock may enqueue
 
 See [TEST_COVERAGE.md](./TEST_COVERAGE.md) for the matrix and [TEST_DISCOVERED_BUGS.md](./TEST_DISCOVERED_BUGS.md) for known issues.

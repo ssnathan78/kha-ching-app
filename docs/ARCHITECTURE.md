@@ -90,6 +90,8 @@ All routes except `/api/health` require session unless noted.
 | `/api/desk/positions` | GET | Attributed positions |
 | `/api/desk/trades` | GET | Round-trip trades |
 | `/api/desk/activity` | GET | Decisions, audit, recon events |
+| `/api/desk/alerts` | GET/DELETE | Operator failures; DELETE `{ period }` hides rows |
+| `/api/desk/signals` | GET/DELETE | Persisted Chase/skew evaluations; DELETE `{ period }` removes rows |
 | `/api/desk/reconcile` | POST | Sync ledger with Kite (does not place orders) |
 | `/api/desk/risk` | GET/PUT/POST | Risk limits; POST `halt` \| `resume` |
 
@@ -145,6 +147,8 @@ Postgres via Drizzle (`lib/schema.ts`). Migrations in `drizzle/`.
 | `orders`, `order_events`, `fills` | Local order book and executions |
 | `positions`, `position_events`, `trades` | Attributed book and round-trips |
 | `trading_decisions`, `audit_events` | Why we acted |
+| `strategy_signals` | Persisted Chase/skew/strike evaluations (Desk → Signals) |
+| `operator_feed_clears` | Hide Alerts without deleting ledger/audit |
 | `portfolio_snapshots`, `daily_sessions` | Equity, drawdown, session stats |
 | `reconciliation_events` | Ledger vs Kite disagreements |
 

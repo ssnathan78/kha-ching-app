@@ -21,6 +21,8 @@ Implemented in `lib/simulation/catalog.ts`. IDs are CLI names (`yarn simulate --
 | `post-market` | Chase after 15:30 does not order |
 | `overnight` | Close → next open with a gap-down path |
 | `weekend` | Friday → Monday, live entries only in session |
+| `live-weekend-block` | Same as `weekend` (live risk, no entries after close) |
+| `mock-weekend-entry` | Saturday mock/paper timed straddle **does** create an order |
 | `holiday` | 2026-01-26 Republic Day |
 | `unexpected-closure` | Weekday forced closed |
 | `market-halt` | OPEN → HALTED → resume |
@@ -40,7 +42,7 @@ Implemented in `lib/simulation/catalog.ts`. IDs are CLI names (`yarn simulate --
 
 ### Strategy
 
-`normal-signal`, `repeated-signal`, `signal-oscillation`, `conflicting-signals`, `entry-exit-collision`, `strategy-disabled`, `strategy-paused`, `risk-limit-reached`, `drawdown-reached`
+`normal-signal`, `repeated-signal`, `signal-oscillation`, `conflicting-signals`, `entry-exit-collision`, `strategy-disabled`, `strategy-paused`, `risk-limit-reached`, `drawdown-reached`, `chase-gap-down` (Chase actor across an overnight gap; book qty stays consistent, not a PnL check)
 
 Chase actors use production `chaseTolerances` / `chaseAllowsNewEntry`. They do not invent a different indicator.
 

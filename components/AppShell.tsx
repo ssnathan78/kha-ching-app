@@ -12,6 +12,7 @@ import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined"
 import {
   AppBar,
   Avatar,
+  Badge,
   Box,
   Chip,
   Divider,
@@ -31,6 +32,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import type React from "react"
 import { useState } from "react"
+import useSWR from "swr"
 
 import fetchJson from "../lib/fetchJson"
 import useUser from "../lib/useUser"
@@ -77,6 +79,8 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
   const compact = useMediaQuery(theme.breakpoints.down("md"))
   const [mobileOpen, setMobileOpen] = useState(false)
   const asPath = router.asPath
+  const { data: alertSummary } = useSWR(user?.isLoggedIn ? "/api/desk/alerts?summary=1" : null)
+  const alertCount = Number(alertSummary?.errorCount ?? 0)
 
   const close = () => setMobileOpen(false)
 
@@ -186,15 +190,24 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListSubheader>
         <ListItemButton
           component={Link}
-          href="/desk"
+          href={alertCount ? "/desk?tab=alerts" : "/desk"}
           selected={selected(asPath, "/desk")}
           onClick={close}
           sx={{ ...itemSx, pl: 1.5 }}
         >
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <AccountBalanceWalletOutlinedIcon fontSize="small" />
+            <Badge color="error" badgeContent={alertCount} max={9}>
+              <AccountBalanceWalletOutlinedIcon fontSize="small" />
+            </Badge>
           </ListItemIcon>
-          <ListItemText primary="Desk" secondary="Orders, positions, P&L" />
+          <ListItemText
+            primary="Desk"
+            secondary={
+              alertCount
+                ? `${alertCount} alert${alertCount === 1 ? "" : "s"}`
+                : "Orders, signals, alerts"
+            }
+          />
         </ListItemButton>
         <ListItemButton
           component="a"
