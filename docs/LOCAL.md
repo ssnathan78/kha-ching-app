@@ -71,9 +71,11 @@ Compose starts three containers:
 
 | Container | Port on your PC | Role |
 |---|---|---|
-| `kha-ching-postgres` | 5432 | Database |
-| `kha-ching-redis` | 6379 | BullMQ / cache |
-| `kha-ching-app` | 3000 | Website + workers |
+| `kha-ching-postgres` | 127.0.0.1:5432 | Database |
+| `kha-ching-redis` | 127.0.0.1:6379 | BullMQ / cache |
+| `kha-ching-app` | 127.0.0.1:3000 | Website + workers |
+
+The same compose file is used on the Droplet. Binding to `127.0.0.1` does not change local use; it only stops Docker publishing those ports on every network interface.
 
 On **first start**, the app entrypoint runs `yarn migrate`:
 

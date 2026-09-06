@@ -187,7 +187,7 @@ docker compose restart app
 
 This Droplet is **Docker** at `/srv/khaching/app`. CI does **not** deploy.
 
-Preferred on 1 GB RAM: build the production image on the laptop and `docker load` on the Droplet ([DEPLOYMENT.md](./DEPLOYMENT.md) option B). Alternative: `git pull` + `docker compose build app` on the server (option A). Do **not** overwrite the Droplet `docker-compose.yml` with the laptop file (it publishes Postgres/Redis).
+Preferred on 1 GB RAM: build the production image on the laptop and `docker load` on the Droplet ([DEPLOYMENT.md](./DEPLOYMENT.md) option B). Alternative: `git pull` + `docker compose build app` on the server (option A). Compose is the git file (ports on `127.0.0.1` only); keep a Droplet-only **`.env`**.
 
 systemd path (other hosts only):
 

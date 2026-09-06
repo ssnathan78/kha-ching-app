@@ -14,13 +14,13 @@ Why one VM: BullMQ **workers run in the same Node process** as `server.js`. A pl
 |---|---|
 | Layout | **Docker Compose**, not systemd |
 | App tree | `/srv/khaching/app` |
-| Containers | `kha-ching-app`, `kha-ching-db`, `kha-ching-redis` |
+| Containers | `kha-ching-app`, `kha-ching-postgres`, `kha-ching-redis` (older installs used `kha-ching-db`) |
 | Image name | `app-app` (Compose project `app` + service `app`, production target) |
 | Proxy | Host **nginx** → `127.0.0.1:3000` |
 | App port | Bind **localhost only** (`127.0.0.1:3000:3000`) |
 | systemd unit | **Not used** (`kha-ching.service` / `/opt/kha-ching-app` are the alternate install) |
 
-The Droplet keeps a **local** `docker-compose.yml` (db container name, no public 5432/6379, localhost-only 3000). Do **not** overwrite it with the laptop compose file, which publishes Postgres/Redis for local development.
+**Same `docker-compose.yml` as the laptop.** All published ports bind to `127.0.0.1` (app 3000, Postgres 5432, Redis 6379). That is safe on a public Droplet: the internet cannot hit them; nginx still reaches the app on localhost. What differs is **`.env`** (`NEXT_PUBLIC_APP_URL=https://…`, `SESSION_COOKIE_SECURE=true`, production Kite keys). Compose still forces `DATABASE_URL` / `REDIS_URL` to the Docker hostnames `postgres` and `redis`.
 
 ---
 
@@ -62,8 +62,8 @@ ssh -o BatchMode=yes kha-ching-prod -- 'docker ps --format "table {{.Names}}\t{{
 
 | Option | When to use | Build happens | What to keep on the Droplet |
 |---|---|---|---|
-| **A. Git pull + rebuild in Docker** | You are on the server, or the image is small enough | **On the Droplet** (`docker compose build app`) | Local `docker-compose.yml` and `.env` |
-| **B. Build image on the laptop, load on the Droplet** | **Preferred on a 1 GB Droplet** — Next `yarn build` is heavy | **On the laptop** | Same compose + `.env`; only the **image** is replaced |
+| **A. Git pull + rebuild in Docker** | You are on the server, or the image is small enough | **On the Droplet** (`docker compose build app`) | `.env` (compose is the git file) |
+| **B. Build image on the laptop, load on the Droplet** | **Preferred on a 1 GB Droplet** — Next `yarn build` is heavy | **On the laptop** | `.env`; recreate app from the loaded image |
 | **C. systemd, no Docker** | Fresh VM you install that way (not this Droplet) | On the VM (`yarn build`) | `/opt/kha-ching-app/.env` + unit file |
 
 All Docker options still run **`yarn migrate` inside the app container** on start (`scripts/docker-entrypoint.sh`). Read new files in `drizzle/` before you ship.
@@ -78,16 +78,9 @@ Use this when you are happy compiling on the VM (needs RAM/swap; this box is tig
 ssh -o BatchMode=yes kha-ching-prod
 cd /srv/khaching/app
 
-# Keep the production compose (localhost 3000, kha-ching-db, unpublished DB/Redis)
-cp docker-compose.yml docker-compose.yml.bak
-
 git fetch origin
 git rev-parse HEAD                    # note rollback SHA
 git pull origin master
-
-# If git restored the repo compose, put production compose back
-# (diff first; never copy laptop compose that publishes 5432/6379)
-cp docker-compose.yml.bak docker-compose.yml
 
 docker compose build app
 docker compose up -d --no-deps app    # recreate app only; leave db/redis
@@ -253,7 +246,7 @@ Cron example (as the postgres-capable user, systemd layout):
 15 16 * * 1-5 /opt/kha-ching-app/scripts/backup-db.sh
 ```
 
-On Docker, run dump via `docker compose exec` against `kha-ching-db` (do not log the password). Copy dumps **off** the Droplet. A snapshot + dump is better than dump alone.
+On Docker, run dump via `docker compose exec postgres` against `kha-ching-postgres` (do not log the password). Copy dumps **off** the Droplet. A snapshot + dump is better than dump alone.
 
 ## Docker rollback
 
@@ -275,4 +268,4 @@ Ignore for production. Those templates would run Next without `server.js`.
 - [ ] `MOCK_ORDERS=false` only when you mean it
 - [ ] Redirect URL on kite.trade matches HTTPS
 - [ ] After any secret leak: rotate Kite secret, cookie password, DB password
-- [ ] Production `docker-compose.yml` not replaced by the laptop compose file
+- [ ] Compose ports bind `127.0.0.1` only (not `0.0.0.0`)

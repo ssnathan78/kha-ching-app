@@ -1,3 +1,14 @@
+# Same file on the laptop and on the Droplet.
+# Differences live in `.env` (Kite keys, cookie password, NEXT_PUBLIC_APP_URL).
+#
+# Ports are bound to 127.0.0.1 only:
+#   - Laptop: browser and Jest still use localhost:3000 / 5432 / 6379
+#   - Droplet: nginx proxies to 127.0.0.1:3000; Postgres/Redis are not on the internet
+#     (Docker used to publish 0.0.0.0:3000 and bypass UFW)
+#
+# Inside the app container, DATABASE_URL / REDIS_URL always use Docker DNS
+# (`postgres`, `redis`), not localhost from `.env`.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,7 +18,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +31,7 @@ services:
     image: redis:7-alpine
     container_name: kha-ching-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -40,17 +51,17 @@ services:
         required: true
     environment:
       NODE_ENV: production
-      MOCK_ORDERS: "true"
-      SESSION_COOKIE_SECURE: "false"
       TZ: Asia/Kolkata
       PORT: "3000"
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/trading_db
       REDIS_URL: redis://redis:6379
-      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      MOCK_ORDERS: ${MOCK_ORDERS:-true}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://127.0.0.1:3000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,17 +80,17 @@ services:
         required: true
     environment:
       NODE_ENV: development
-      MOCK_ORDERS: "true"
-      SESSION_COOKIE_SECURE: "false"
       TZ: Asia/Kolkata
       PORT: "3000"
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/trading_db
       REDIS_URL: redis://redis:6379
-      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      MOCK_ORDERS: ${MOCK_ORDERS:-true}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://127.0.0.1:3000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     volumes:
       - .:/app
       - /app/node_modules

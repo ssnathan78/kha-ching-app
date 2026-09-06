@@ -93,8 +93,8 @@ The repo describes both. **Do not assume which one the Droplet uses.**
 
 - `Dockerfile` production stage: Node 22, entrypoint `yarn migrate` then `yarn start`
 - Compose services: `app`, `postgres`, `redis`
-- **Default compose publishes 5432 and 6379 to the host.** That is for local development. On a public Droplet those ports must not be reachable from the internet.
-- Default compose also sets `MOCK_ORDERS=true` and `SESSION_COOKIE_SECURE=false`. Production HTTPS + live trading must override those in the server `.env` / compose override — not by editing this file casually.
+- Compose publishes 3000 / 5432 / 6379 on **`127.0.0.1` only** (laptop and Droplet share this file). That is not reachable from the internet; nginx still talks to `127.0.0.1:3000`.
+- `MOCK_ORDERS`, `SESSION_COOKIE_SECURE`, and `NEXT_PUBLIC_APP_URL` come from the server **`.env`**. Do not force live orders in the yaml.
 
 `.do/` App Platform templates are **not** for production.
 
