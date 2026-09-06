@@ -49,7 +49,7 @@ export type ChaseInstrument = {
 export type ChasePrevEmaResolution =
   | { action: "seed"; prevEma: null }
   | { action: "continue"; prevEma: number }
-  | { action: "gap"; prevEma: null; expectedLabel: string }
+  | { action: "gap"; prevEma: number; expectedLabel: string }
 
 function chaseEmaCutoff(nowIst: dayjs.Dayjs): dayjs.Dayjs {
   return nowIst.set("hour", 10).set("minute", 15).set("second", 0).set("millisecond", 0)
@@ -90,7 +90,10 @@ export const getAcceptedPrevEma = async (
   return null
 }
 
-/** First contract may seed from history. A stale row must not silently rebuild the 0.2% band. */
+/**
+ * First contract may seed from history.
+ * If the accepted prior bar is missing, reuse the last stored EMA (do not rebuild).
+ */
 export const resolveChasePrevEma = async (
   prevRow: any,
   now: dayjs.Dayjs,
@@ -105,6 +108,11 @@ export const resolveChasePrevEma = async (
     return { action: "continue", prevEma: Number(accepted) }
   }
 
+  const lastEma = Number(prevRow.ema)
+  if (!Number.isFinite(lastEma)) {
+    return { action: "seed", prevEma: null }
+  }
+
   const nowIst = toIst(now)
   const currentMinute = nowIst.startOf("minute")
   const cutoff = chaseEmaCutoff(nowIst)
@@ -115,7 +123,7 @@ export const resolveChasePrevEma = async (
     expectedLabel = `the ${currentMinute.subtract(1, "hour").format("HH:mm")} EMA row`
   }
 
-  return { action: "gap", prevEma: null, expectedLabel }
+  return { action: "gap", prevEma: lastEma, expectedLabel }
 }
 
 async function placeEntryTriggerOrder(

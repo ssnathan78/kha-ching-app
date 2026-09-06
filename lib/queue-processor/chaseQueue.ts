@@ -86,21 +86,23 @@ async function processCalculateEMA(job: Job) {
             `[processCalculateEMA] ${instrument.tradingsymbol} prevEma=${prevRow?.ema ?? "null"} resolution=${prevEmaResolution.action}`
           )
           if (prevEmaResolution.action === "gap") {
-            logger.error(
-              `[processCalculateEMA] EMA gap for ${instrument.tradingsymbol}: missing ${prevEmaResolution.expectedLabel}; skip rebuild`
+            logger.warn(
+              `[processCalculateEMA] EMA gap for ${instrument.tradingsymbol}: missing ${prevEmaResolution.expectedLabel}; continue from last stored EMA ${prevEmaResolution.prevEma}`
             )
             const { recordOperatorAlert } = await import("../trading/alerts")
             await recordOperatorAlert({
               source: "CHASE",
               code: "CHASE_EMA_GAP",
-              severity: "ERROR",
-              summary: `Chase EMA: missing ${prevEmaResolution.expectedLabel} for ${instrument.tradingsymbol}. Skipped history rebuild so the 0.2% band does not jump.`,
+              severity: "WARN",
+              summary: `Chase EMA: missing ${prevEmaResolution.expectedLabel} for ${instrument.tradingsymbol}. Updating from last stored EMA (no history rebuild).`,
               strategy: "CHASE",
               instrument: nfoSymbol,
-              detail: { tradingsymbol: instrument.tradingsymbol },
+              detail: {
+                tradingsymbol: instrument.tradingsymbol,
+                lastStoredEma: prevEmaResolution.prevEma,
+              },
               idempotencyKey: `alert:chase-ema-gap:${instrument.tradingsymbol}:${now.format("YYYY-MM-DD-HH:mm")}`,
             })
-            return null
           }
           const emaResult = await calculateEma(instrument, prevEmaResolution.prevEma, accessToken)
           if (!emaResult) {

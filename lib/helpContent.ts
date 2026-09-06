@@ -191,6 +191,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Length of the exponential moving average on hourly typical price (H+L+C)/3. Shipped value is 40.",
           "A longer period is slower and filters noise; a shorter period turns more often.",
+          "If an hourly EMA job was missed, the next hour continues from the last stored EMA rather than rebuilding from history. Desk shows CHASE_EMA_GAP. New entries that hour still run.",
         ],
       },
       {

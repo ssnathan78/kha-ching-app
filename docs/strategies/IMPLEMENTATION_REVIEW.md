@@ -74,7 +74,7 @@ flowchart TB
 
 **Not copied (intentional ops):** Telegram, Prometheus, SQLite, Python `holidays` list. This desk uses Slack, Postgres, Desk alerts, Kite calendar.
 
-**EMA seed:** Incremental EMA depends on accepting the previous row’s timestamp. If yesterday’s 16:15 row is missing but some older `ema` row exists, 10:15 **skips** (alert `CHASE_EMA_GAP`) rather than reseeding from history. First seed is only when that contract has **no** `ema` row.
+**EMA seed:** Incremental EMA prefers the accepted prior timestamp. If that bar is missing but an older `ema` row exists, the job **continues from the last stored EMA** (alert `CHASE_EMA_GAP`, still writes this hour and still signals). It does **not** reseed from a long history. First seed is only when that contract has **no** `ema` row.
 
 **Instrument pick:** `instruments.length === 1 ? [0] : [1]` (`chaseSignal.ts`). Off expiry this is the only contract. On expiry day, while **flat**, new work is the next month so the book stays continuous. An open LONG/SHORT keeps `chase_status.tradingsymbol` until 15:00 rollover.
 

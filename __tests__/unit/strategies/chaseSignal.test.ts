@@ -82,19 +82,19 @@ describe("resolveChasePrevEma", () => {
     })
   })
 
-  it("fails closed at 10:15 when yesterday 16:15 is missing", async () => {
+  it("reuses last stored EMA at 10:15 when yesterday 16:15 is missing", async () => {
     const prevRow = {
       ema: 24850,
       createdAt: dayjs.tz("2026-09-04 15:15", "Asia/Kolkata").toDate(),
     }
     await expect(resolveChasePrevEma(prevRow, at1015, "tok")).resolves.toEqual({
       action: "gap",
-      prevEma: null,
+      prevEma: 24850,
       expectedLabel: "yesterday's 16:15 EMA row",
     })
   })
 
-  it("fails closed at 11:15 when the 10:15 row is missing", async () => {
+  it("reuses last stored EMA at 11:15 when the 10:15 row is missing", async () => {
     const prevRow = {
       ema: 24850,
       createdAt: dayjs.tz("2026-09-04 16:15", "Asia/Kolkata").toDate(),
@@ -103,7 +103,7 @@ describe("resolveChasePrevEma", () => {
       resolveChasePrevEma(prevRow, dayjs.tz("2026-09-05 11:15", "Asia/Kolkata"), "tok")
     ).resolves.toEqual({
       action: "gap",
-      prevEma: null,
+      prevEma: 24850,
       expectedLabel: "the 10:15 EMA row",
     })
   })
