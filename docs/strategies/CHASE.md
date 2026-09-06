@@ -46,7 +46,7 @@ Shipped engine (`CHASE_MASTER_DEFAULTS` / `/chase`):
 
 Helper: `chaseTolerances(ema, bufferPercent)` in `lib/chaseDefaults.ts`.
 
-**Rounding (this app):** EMA, day’s high, day’s low, and last close are `Math.round` to whole rupees. The operator rule book says **ceil** day’s high / **floor** day’s low. See the review doc.
+**Rounding:** day’s high is **ceiled**, day’s low is **floored**, to whole rupees. EMA and last close stay `Math.round`.
 
 **Incremental EMA:** After the first seed, each hourly job applies `new = hlc3 * k + prev * (1-k)` with `k = 2/(period+1)`, using the **previous hour’s stored EMA** when `getAcceptedPrevEma` accepts it (10:15 IST requires yesterday’s **16:15** row; later hours require the prior hour on the minute).
 
@@ -141,9 +141,10 @@ Rule book: adjust at **09:16 and 13:15**, not on T-day. This app’s 13:15 path 
 
 ### Expiry 15:00
 
-If LONG/SHORT and the **current** futures expiry is **today**, at 15:00 IST flatten the front month and open the next month MARKET, SL = next contract’s EMA.
+Chase is a continuous futures book:
 
-Rule book: if SL already hit on expiry, do not re-enter the dying contract; the next signal is on the next month. This app’s signal path on expiry day currently prefers `instruments[1]` when two contracts are loaded — see review.
+- If already LONG/SHORT in the **front** month on expiry day, flatten that contract at **15:00 IST** and reopen the **next** month MARKET, SL = next contract’s EMA.
+- If still **flat** (AWAITING_SIGNAL) on expiry day, new signals evaluate and enter the **next** month immediately (`instruments[1]`). Do not open the dying front month only to roll it a few hours later.
 
 ---
 

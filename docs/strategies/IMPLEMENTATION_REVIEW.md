@@ -58,7 +58,7 @@ flowchart TB
 | EMA(40) on HLC3, hourly | Yes (`lib/ema.ts`) | OK |
 | Long if hourly close &gt; EMA+0.2% | Yes (`bufferPercent` 0.2 → `/100`) | OK |
 | Short if close &lt; EMA−0.2% | Yes | OK |
-| Entry = day’s high (ceil) / low (floor), **after** the signal, on a later bar | SL/MARKET at `highestHigh` / `lowestLow`; minute bars confirm | **Minor**: `Math.round` not ceil/floor |
+| Entry = day’s high (ceil) / low (floor), **after** the signal, on a later bar | SL/MARKET at ceiled high / floored low; minute bars confirm | OK |
 | Long SL = **lower** of day low and EMA | `Math.min(ema, lowestLow)` | OK (rounding) |
 | Short SL = **higher** of day high and EMA | `Math.max(ema, highestHigh)` | OK |
 | Invalidate pending if close beyond that SL | Yes | OK |
@@ -68,7 +68,7 @@ flowchart TB
 | Also adjust at **13:15** | EMA job at `:15` of hour 13 | OK |
 | T1 0.4% only for that morning (and charts) | Hard-coded 1.004 / 0.996 in `updateSL` | OK |
 | Expiry 15:00 roll to next month, SL = new EMA | Yes | OK |
-| New signal **day before** expiry: enter **front** month, roll tomorrow | On expiry **day**, `generateSignal` uses `instruments[1]` when two FUTs are loaded | **Material** — new signals that hour may target **next** month instead of front |
+| New signal **day before** expiry: enter **front** month, roll tomorrow | Day-before expiry is a normal session (one FUT). On **expiry day**, a still-flat book signals/enters **next** month; an open book rolls at 15:00 | **Intentional** — continuous Chase should not open the dying contract |
 | One position; no pyramid | Status machine | OK |
 | Hourly evaluation | 10:15–15:15 signals; 16:15 store-only | **Minor** vs “every hour including 09:15 close” — first signal bar is **10:15**, not 09:15/10:15 list in the article (article examples start 10:15) |
 
@@ -76,7 +76,7 @@ flowchart TB
 
 **EMA seed:** Incremental EMA depends on accepting the previous row’s timestamp. If 16:15 yesterday is missing, 10:15 **recomputes** from a long history (`prevEma = null`). That can **jump** vs a continuous 40-EMA. **Material** on days after a missed job, not on a clean week.
 
-**Instrument pick:** `instruments.length === 1 ? [0] : [1]` (`chaseSignal.ts`). Off expiry this is a single contract (OK). On expiry this is the **second** future. **Material** on expiry day.
+**Instrument pick:** `instruments.length === 1 ? [0] : [1]` (`chaseSignal.ts`). Off expiry this is the only contract. On expiry day, while **flat**, new work is the next month so the book stays continuous. An open LONG/SHORT keeps `chase_status.tradingsymbol` until 15:00 rollover.
 
 ---
 
@@ -135,11 +135,10 @@ None of these make a short ATM straddle into a different *strategy*; they are pr
 
 ## 5. What to change (if you want rule-book-faithful Chase)
 
-Priority if you ever patch Chase (not done in this docs-only change):
+Priority if you ever patch Chase further:
 
-1. **Expiry-day signal contract** — always signal/enter the **front** month until the 15:00 rollover (`instruments[0]`), not `[1]`.
-2. **Ceil/floor** day’s high/low (and maybe SL) per the published Chase wording.
-3. **Harden EMA continuity** — fail the 10:15 signal (alert) rather than silently reseeding if yesterday 16:15 is missing, unless you explicitly want a rebuild.
-4. Leave chase-bot’s T1-first-SL-on-entry **out** of this codebase.
+1. **Harden EMA continuity** — fail the 10:15 signal (alert) rather than silently reseeding if yesterday 16:15 is missing, unless you explicitly want a rebuild.
+2. Leave chase-bot’s T1-first-SL-on-entry **out** of this codebase.
+3. Do **not** force expiry-day new entries onto the front month: a flat book should take next-month futures.
 
 Straddle/strangle: hide or disable unimplemented exit enums in the form so the operator cannot schedule a no-op exit name (validation already rejects).

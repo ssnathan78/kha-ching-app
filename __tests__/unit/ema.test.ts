@@ -42,6 +42,13 @@ describe("calculateEmaFromCandles", () => {
     expect(result?.lastClose).toBe(18)
   })
 
+  it("ceils the day's high and floors the day's low", () => {
+    const bars = [candle({ high: 19.1, low: 8.9, close: 14 })]
+    const result = calculateEmaFromCandles(bars, 14, 40)
+    expect(result?.highestHigh).toBe(20)
+    expect(result?.lowestLow).toBe(8)
+  })
+
   it("updates from prevEMA with the last typical price", () => {
     const bars = [candle({ high: 101, low: 99, close: 100 })]
     const period = 40

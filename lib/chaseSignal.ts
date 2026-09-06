@@ -224,6 +224,10 @@ export const generateSignal = async (
     return
   }
 
+  // Off expiry there is one FUT. On expiry day the EMA job also loads next month
+  // (`instruments[1]`). New entries use that contract so a still-flat Chase book
+  // does not open the dying front month. An existing LONG/SHORT stays on
+  // chase_status.tradingsymbol until the 15:00 IST rollover.
   let instrument = instruments.length === 1 ? instruments[0] : instruments[1]
 
   const [currentDate, timePart] = todaysDate.split(" ")

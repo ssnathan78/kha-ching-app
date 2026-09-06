@@ -6,6 +6,7 @@ import logger from "./logger"
 /**
  * EMA of typical price (H+L+C)/3 over `period` hourly bars.
  * High/low/close stats are taken from candles whose UTC date matches today.
+ * Day's high is ceiled and day's low is floored (whole rupees).
  */
 export const calculateEmaFromCandles = (
   candles: HistoricalData[],
@@ -38,8 +39,8 @@ export const calculateEmaFromCandles = (
     return null
   }
 
-  const highestHigh = Math.round(Math.max(...filteredCandles.map(candle => candle.high)))
-  const lowestLow = Math.round(Math.min(...filteredCandles.map(candle => candle.low)))
+  const highestHigh = Math.ceil(Math.max(...filteredCandles.map(candle => candle.high)))
+  const lowestLow = Math.floor(Math.min(...filteredCandles.map(candle => candle.low)))
   const lastClose = Math.round(filteredCandles[filteredCandles.length - 1].close)
 
   const hlcValues = candles.map(candle => (candle.high + candle.low + candle.close) / 3)
