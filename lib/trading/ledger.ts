@@ -1111,7 +1111,12 @@ export async function safeRecordOrderFromKiteProps(
     tag?: string
     validity?: string
   },
-  extras?: { purpose?: OrderPurpose; provenance?: Provenance; decisionId?: string | null }
+  extras?: {
+    purpose?: OrderPurpose
+    provenance?: Provenance
+    decisionId?: string | null
+    strategy?: string | null
+  }
 ): Promise<string | null> {
   if (!orderProps.tradingsymbol || !orderProps.quantity || !orderProps.transaction_type) return null
   try {
@@ -1129,6 +1134,7 @@ export async function safeRecordOrderFromKiteProps(
       validity: orderProps.validity,
       provenance: extras?.provenance,
       decisionId: extras?.decisionId,
+      strategy: extras?.strategy,
     })
     return recorded?.id ?? null
   } catch (e) {

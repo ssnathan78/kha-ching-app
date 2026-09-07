@@ -23,7 +23,7 @@ Flatten / SL / EXIT roles **skip** halt, trading-disabled, daily-loss, drawdown,
 | Protects | Accidental real-money orders; new strategies in production with live quotes |
 | Enforced | Triple gate: process `MOCK_ORDERS=false` **and** Desk `allowLiveOrders` **and** per-strategy `executionMode=LIVE`. Unknown strategies default PAPER. Paper still uses live LTP and writes the ledger (`provenance` PAPER or MOCK). |
 | Trigger | `LIVE_BLOCKED` |
-| Config | `.env` + Desk → Risk execution select (default PAPER) + `allowLiveOrders=false` |
+| Config | Desk → Risk execution select (default PAPER) + `allowLiveOrders=false`. Saved to `risk_settings`; the next `placeOrder` reads the DB — no restart. Process `MOCK_ORDERS` still blocks Kite for the whole process. Ledger provenance includes `PAPER` (`drizzle/0011_paper_provenance.sql`). |
 | Tests | `riskEngine.test.ts` live-gate and `isPaperStrategy` cases |
 
 ## Desk halt / kill switch

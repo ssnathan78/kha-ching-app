@@ -6,6 +6,7 @@ import {
   applyUnappliedFills,
   bookTestFill,
   recordDecision,
+  recordOrderIntent,
 } from "../../lib/trading/ledger"
 import { backfillFromTransactions } from "../../lib/trading/migrateHistory"
 import { computePortfolio } from "../../lib/trading/portfolio"
@@ -265,6 +266,37 @@ describeDb("trading ledger lifecycle", () => {
     const view = await computePortfolio()
     expect(view.openPositionCount).toBeGreaterThanOrEqual(0)
     expect(Number(view.grossExposure)).toBeGreaterThanOrEqual(0)
+    const paper = await computePortfolio(undefined, "PAPER")
+    const live = await computePortfolio(undefined, "LIVE")
+    expect(paper.openPositionCount).toBeGreaterThanOrEqual(0)
+    expect(live.openPositionCount).toBeGreaterThanOrEqual(0)
+  })
+
+  it("accepts PAPER provenance on order submit", async () => {
+    const { markOrderSubmitted } = await import("../../lib/trading/ledger")
+    const recorded = await recordOrderIntent({
+      side: "SELL",
+      tradingsymbol: `${symbol}PAPER`,
+      requestedQty: 65,
+      exchange: "NFO",
+      product: "NRML",
+      orderType: "MARKET",
+      purpose: "ENTRY",
+      provenance: "PAPER",
+      strategy: "CHASE",
+    })
+    expect(recorded?.id).toBeTruthy()
+    await markOrderSubmitted({
+      orderId: recorded!.id,
+      brokerOrderId: `paper:${recorded!.id}`,
+      status: "SUBMITTED",
+      provenance: "PAPER",
+    })
+    const { rows } = await pool.query(`SELECT provenance, status FROM orders WHERE id = $1`, [
+      recorded!.id,
+    ])
+    expect(rows[0].provenance).toBe("PAPER")
+    expect(rows[0].status).toBe("SUBMITTED")
   })
 
   it("reconcile matching broker qty records no position mismatch for that symbol", async () => {

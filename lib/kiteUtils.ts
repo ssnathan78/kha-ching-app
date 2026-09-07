@@ -32,7 +32,7 @@ import {
   markOrderSubmitted,
   safeRecordOrderFromKiteProps,
 } from "./trading/ledger"
-import { inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
+import { executionProvenance, inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
 import { assertOrderAllowed } from "./trading/riskGate"
 import { getRiskSettings } from "./trading/riskSettings"
 import {
@@ -282,7 +282,7 @@ export async function placeOrder(
   const paperStrategy = isPaperStrategy(riskSettings, strategy)
   const processMock = isMockOrder()
   const paperExecution = processMock || paperStrategy
-  const provenance = processMock ? "MOCK" : paperStrategy ? "PAPER" : "LIVE"
+  const provenance = executionProvenance({ processMock, settings: riskSettings, strategy })
   await assertOrderAllowed({
     tradingsymbol: kiteOrder.tradingsymbol,
     exchange: kiteOrder.exchange,
@@ -311,7 +311,11 @@ export async function placeOrder(
       tag?: string
       validity?: string
     },
-    purpose ? { purpose: purpose as any } : undefined
+    {
+      purpose: purpose as any,
+      provenance,
+      strategy: strategy ?? null,
+    }
   )
   try {
     if (paperExecution) {
@@ -370,6 +374,7 @@ export async function placeOrder(
       orderId: ledgerOrderId,
       status: "FAILED",
       errorInfo: message,
+      provenance,
     })
     const { recordOperatorAlert } = await import("./trading/alerts")
     await recordOperatorAlert({

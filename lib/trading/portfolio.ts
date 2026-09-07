@@ -43,7 +43,10 @@ export type PortfolioView = {
   strategyPnl: { strategy: string; realized: string; unrealized: string }[]
 }
 
-export async function computePortfolio(marks?: Map<string, string>): Promise<PortfolioView> {
+export async function computePortfolio(
+  marks?: Map<string, string>,
+  book: TradeBookFilter = "ALL"
+): Promise<PortfolioView> {
   const open = await db.select().from(positions)
   let realized = moneyZero()
   let unrealized = moneyZero()
@@ -54,6 +57,7 @@ export async function computePortfolio(marks?: Map<string, string>): Promise<Por
   const byStrategy = new Map<string, { realized: Money; unrealized: Money }>()
 
   for (const pos of open) {
+    if (book !== "ALL" && !provenanceInBook(pos.provenance, book)) continue
     realized = moneyAdd(realized, moneyFromUnknown(pos.realizedPnl))
     fees = moneyAdd(fees, moneyFromUnknown(pos.fees))
     const mark =
@@ -311,19 +315,6 @@ function positionBookClause(book?: TradeBookFilter): SQL | undefined {
   return undefined
 }
 
-export async function listOrders(limitOrQuery: number | TradeListQuery = 100) {
-  const opts: TradeListQuery =
-    typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
-  const limit = opts.limit ?? 200
-  const bookClause = orderBookClause(opts.book)
-  return db.select().from(orders).where(bookClause).orderBy(desc(orders.createdAt)).limit(limit)
-}
-
-export async function listPositions(book: TradeBookFilter = "ALL") {
-  const bookClause = positionBookClause(book)
-  return db.select().from(positions).where(bookClause).orderBy(desc(positions.updatedAt))
-}
-
 function tradeBookClause(book?: TradeBookFilter): SQL | undefined {
   if (book === "PAPER") {
     return or(eq(trades.provenance, "PAPER"), eq(trades.provenance, "MOCK"))
@@ -338,6 +329,33 @@ function tradeBookClause(book?: TradeBookFilter): SQL | undefined {
   return undefined
 }
 
+function decisionBookClause(book?: TradeBookFilter): SQL | undefined {
+  if (book === "PAPER") {
+    return or(eq(tradingDecisions.provenance, "PAPER"), eq(tradingDecisions.provenance, "MOCK"))
+  }
+  if (book === "LIVE") {
+    return or(
+      eq(tradingDecisions.provenance, "LIVE"),
+      eq(tradingDecisions.provenance, "RECONCILED"),
+      eq(tradingDecisions.provenance, "MIGRATED")
+    )
+  }
+  return undefined
+}
+
+export async function listOrders(limitOrQuery: number | TradeListQuery = 100) {
+  const opts: TradeListQuery =
+    typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
+  const limit = opts.limit ?? 200
+  const bookClause = orderBookClause(opts.book)
+  return db.select().from(orders).where(bookClause).orderBy(desc(orders.createdAt)).limit(limit)
+}
+
+export async function listPositions(book: TradeBookFilter = "ALL") {
+  const bookClause = positionBookClause(book)
+  return db.select().from(positions).where(bookClause).orderBy(desc(positions.updatedAt))
+}
+
 export async function listTrades(query: number | TradeListQuery = 100) {
   const opts: TradeListQuery = typeof query === "number" ? { limit: query } : query
   const limit = opts.limit ?? 200
@@ -350,8 +368,16 @@ export async function listTrades(query: number | TradeListQuery = 100) {
   return db.select().from(trades).where(where).orderBy(desc(trades.entryAt)).limit(limit)
 }
 
-export async function listDecisions(limit = 100) {
-  return db.select().from(tradingDecisions).orderBy(desc(tradingDecisions.occurredAt)).limit(limit)
+export async function listDecisions(query: number | TradeListQuery = 100) {
+  const opts: TradeListQuery = typeof query === "number" ? { limit: query } : query
+  const limit = opts.limit ?? 100
+  const bookClause = decisionBookClause(opts.book)
+  return db
+    .select()
+    .from(tradingDecisions)
+    .where(bookClause)
+    .orderBy(desc(tradingDecisions.occurredAt))
+    .limit(limit)
 }
 
 export async function listAudit(limit = 150) {

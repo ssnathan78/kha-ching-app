@@ -78,6 +78,17 @@ export function isPaperStrategy(settings: RiskSettings, strategy?: string | null
   return limitsFor(settings, strategy).executionMode !== "LIVE"
 }
 
+/** Ledger book for this process + Desk executionMode. Read from DB on every order — no restart. */
+export function executionProvenance(args: {
+  processMock: boolean
+  settings: RiskSettings
+  strategy?: string | null
+}): "MOCK" | "PAPER" | "LIVE" {
+  if (args.processMock) return "MOCK"
+  if (isPaperStrategy(args.settings, args.strategy)) return "PAPER"
+  return "LIVE"
+}
+
 export type RiskIntent = {
   role: OrderRole
   tradingsymbol: string

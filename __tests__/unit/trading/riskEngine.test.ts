@@ -1,6 +1,7 @@
 import {
   DEFAULT_RISK_SETTINGS,
   evaluateOrder,
+  executionProvenance,
   inferOrderRole,
   isPaperStrategy,
   type RiskContext,
@@ -200,5 +201,41 @@ describe("evaluateOrder", () => {
     expect(
       evaluateOrder(intent({ strategy: "CHASE", lots: 3 }), ctx({ settings })).ok
     ).toBe(true)
+  })
+})
+
+describe("executionProvenance", () => {
+  it("uses MOCK when the process flag is on", () => {
+    expect(
+      executionProvenance({
+        processMock: true,
+        settings: DEFAULT_RISK_SETTINGS,
+        strategy: "CHASE",
+      })
+    ).toBe("MOCK")
+  })
+
+  it("uses PAPER for default Desk executionMode without a restart", () => {
+    expect(
+      executionProvenance({
+        processMock: false,
+        settings: DEFAULT_RISK_SETTINGS,
+        strategy: "CHASE",
+      })
+    ).toBe("PAPER")
+  })
+
+  it("uses LIVE only when that strategy is LIVE in the DB settings", () => {
+    const settings = {
+      ...DEFAULT_RISK_SETTINGS,
+      strategies: {
+        ...DEFAULT_RISK_SETTINGS.strategies,
+        CHASE: { ...DEFAULT_RISK_SETTINGS.strategies.CHASE, executionMode: "LIVE" as const },
+      },
+    }
+    expect(executionProvenance({ processMock: false, settings, strategy: "CHASE" })).toBe("LIVE")
+    expect(executionProvenance({ processMock: false, settings, strategy: "ATM_STRADDLE" })).toBe(
+      "PAPER"
+    )
   })
 })

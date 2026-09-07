@@ -6,13 +6,15 @@ dayjs.extend(utc)
 dayjs.extend(tz)
 
 import { chaseAllowsNewEntry, chaseTolerances } from "../../../lib/chaseDefaults"
-import { getAcceptedPrevEma, resolveChasePrevEma } from "../../../lib/chaseSignal"
+import { decideChaseEntryAction, getAcceptedPrevEma, resolveChasePrevEma } from "../../../lib/chaseSignal"
 import { CHASE_STATUS } from "../../../lib/constants"
 
 jest.mock("../../../lib/kiteUtils", () => ({
   getPreviousTradingDay: jest.fn().mockResolvedValue(new Date("2026-09-04T06:30:00.000Z")),
   placeKiteOrder: jest.fn(),
-  getKiteInstance: jest.fn(),
+  getKiteInstance: jest.fn().mockReturnValue({
+    getLTP: jest.fn().mockResolvedValue({ "NFO:NIFTY25SEPFUT": { last_price: 24900 } }),
+  }),
   cancelOrder: jest.fn(),
   placeSL: jest.fn(),
 }))
@@ -31,6 +33,18 @@ jest.mock("../../../lib/chaseSettings", () => ({
 jest.mock("../../../lib/utils", () => ({
   toIst: (value: dayjs.Dayjs | Date | string) => dayjs(value).tz("Asia/Kolkata"),
   postToSlack: jest.fn(),
+  isMockOrder: jest.fn().mockReturnValue(false),
+}))
+
+jest.mock("../../../lib/trading/riskSettings", () => ({
+  getRiskSettings: jest.fn().mockResolvedValue({
+    allowLiveOrders: false,
+    strategies: { CHASE: { executionMode: "PAPER" } },
+  }),
+}))
+
+jest.mock("../../../lib/trading/ledger", () => ({
+  recordDecision: jest.fn().mockResolvedValue("decision-1"),
 }))
 
 describe("chaseTolerances trader bands", () => {
@@ -140,5 +154,83 @@ describe("generateSignal pause cancels pending", () => {
     expect(updateChaseStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: CHASE_STATUS.AWAITING_SIGNAL })
     )
+  })
+})
+
+describe("decideChaseEntryAction", () => {
+  it("does not mark a fill when automated qty is flat and no working order", () => {
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 130,
+        netQty: 0,
+        side: "SHORT",
+        hasOpenEntryOrder: false,
+      })
+    ).toBe("place_entry")
+  })
+
+  it("waits when an entry order is already working", () => {
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 130,
+        netQty: 0,
+        side: "SHORT",
+        hasOpenEntryOrder: true,
+      })
+    ).toBe("wait_open_order")
+  })
+
+  it("treats a short book as filled", () => {
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 130,
+        netQty: -130,
+        side: "SHORT",
+        hasOpenEntryOrder: false,
+      })
+    ).toBe("already_filled")
+  })
+})
+
+describe("generateSignal entry order failure stays awaiting", () => {
+  it("keeps AWAITING_SHORT and does not throw when the entry order fails", async () => {
+    const { getChaseStatus, updateChaseStatus } = require("../../../lib/drizzleDbUtils")
+    const { getChaseSettings } = require("../../../lib/chaseSettings")
+    const { placeKiteOrder, getKiteInstance } = require("../../../lib/kiteUtils")
+    getChaseSettings.mockResolvedValue({ lots: 2, paused: false })
+    getChaseStatus.mockResolvedValue({
+      status: CHASE_STATUS.AWAITING_SIGNAL,
+      tradingsymbol: null,
+    })
+    getKiteInstance.mockReturnValue({
+      getLTP: jest.fn().mockResolvedValue({ "NFO:NIFTY26SEPFUT": { last_price: 23916.8 } }),
+    })
+    placeKiteOrder.mockRejectedValue(new Error("orders_provenance_chk"))
+
+    const { generateSignal } = await import("../../../lib/chaseSignal")
+    await expect(
+      generateSignal(
+        [
+          {
+            tradingsymbol: "NIFTY26SEPFUT",
+            instrumentToken: 1,
+            ema: 24116.93,
+            highestHigh: 24000,
+            lowestLow: 23920,
+            lastClose: 23921,
+            lotSize: 65,
+          },
+        ],
+        "2026-09-07 10:15:00",
+        "token"
+      )
+    ).resolves.toBeUndefined()
+    expect(updateChaseStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: CHASE_STATUS.AWAITING_SHORT })
+    )
+    expect(placeKiteOrder).toHaveBeenCalled()
   })
 })

@@ -11,7 +11,9 @@ import {
   placeSL,
 } from "./kiteUtils"
 import logger from "./logger"
-import { postToSlack, toIst } from "./utils"
+import { executionProvenance } from "./trading/riskEngine"
+import { getRiskSettings } from "./trading/riskSettings"
+import { isMockOrder, postToSlack, toIst } from "./utils"
 
 async function persistChaseSignal(input: {
   outcome: "HOLD" | "WAIT" | "ENTER" | "REJECT" | "SKIP" | "ADJUST" | "INVALID"
@@ -44,6 +46,22 @@ export type ChaseInstrument = {
   lowestLow: number
   lastClose: number
   lotSize: number
+}
+
+export type ChaseFillDecision = "already_filled" | "wait_open_order" | "place_entry" | "signal_only"
+
+export function decideChaseEntryAction(input: {
+  automated: boolean
+  quantity: number
+  netQty: number
+  side: "LONG" | "SHORT"
+  hasOpenEntryOrder: boolean
+}): ChaseFillDecision {
+  if (!input.automated || input.quantity <= 0) return "signal_only"
+  const hasPosition = input.side === "LONG" ? input.netQty > 0 : input.netQty < 0
+  if (hasPosition) return "already_filled"
+  if (input.hasOpenEntryOrder) return "wait_open_order"
+  return "place_entry"
 }
 
 export type ChasePrevEmaResolution =
@@ -151,6 +169,12 @@ async function placeEntryTriggerOrder(
   const alreadyBreached = side === "BUY" ? ltp >= triggerPrice : ltp <= triggerPrice
 
   const { recordDecision } = await import("./trading/ledger")
+  const riskSettings = await getRiskSettings()
+  const provenance = executionProvenance({
+    processMock: isMockOrder(),
+    settings: riskSettings,
+    strategy: "CHASE",
+  })
   await recordDecision({
     strategy: "CHASE",
     tradingsymbol: instrument.tradingsymbol,
@@ -163,6 +187,7 @@ async function placeEntryTriggerOrder(
     features: { ema: instrument.ema, lastClose: instrument.lastClose, triggerPrice, ltp },
     proposedQty: quantity,
     proposedPrice: triggerPrice,
+    provenance,
     idempotencyKey: `chase-enter:${instrument.tradingsymbol}:${side}:${triggerPrice}:${quantity}:${alreadyBreached ? "mkt" : "sl"}`,
   })
 
@@ -178,6 +203,8 @@ async function placeEntryTriggerOrder(
       order_type: "MARKET",
       product: "NRML",
       tag: "chase",
+      purpose: "ENTRY",
+      ltp,
     } as any)
   } else {
     logger.info(
@@ -193,6 +220,8 @@ async function placeEntryTriggerOrder(
       trigger_price: triggerPrice,
       price: side === "BUY" ? triggerPrice + entryLimitOffset : triggerPrice - entryLimitOffset,
       tag: "chase",
+      purpose: "ENTRY",
+      ltp,
     } as any)
   }
 }
@@ -395,7 +424,22 @@ export const generateSignal = async (
       if (!success) {
         logger.error("[generateSignal] error updating chase_status:", error)
       } else {
-        await placeEntryTriggerOrder(instrument, "BUY", instrument.highestHigh, accessToken)
+        try {
+          await placeEntryTriggerOrder(instrument, "BUY", instrument.highestHigh, accessToken)
+        } catch (entryErr) {
+          logger.error("[generateSignal] long entry order failed — staying AWAITING_LONG", entryErr)
+          await persistChaseSignal({
+            outcome: "REJECT",
+            kind: "ENTRY",
+            instrument: nfoSymbol,
+            tradingsymbol: instrument.tradingsymbol,
+            summary: `Entry order failed — staying AWAITING_LONG so Chase can retry: ${
+              entryErr instanceof Error ? entryErr.message : String(entryErr)
+            }`,
+            features: { status: CHASE_STATUS.AWAITING_LONG },
+            key: `chase:entry-fail:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+          })
+        }
       }
     } else if (instrument.lastClose < shortTolerance) {
       await persistChaseSignal({
@@ -433,7 +477,25 @@ export const generateSignal = async (
       if (!success) {
         logger.error("[generateSignal] error updating chase_status:", error)
       } else {
-        await placeEntryTriggerOrder(instrument, "SELL", instrument.lowestLow, accessToken)
+        try {
+          await placeEntryTriggerOrder(instrument, "SELL", instrument.lowestLow, accessToken)
+        } catch (entryErr) {
+          logger.error(
+            "[generateSignal] short entry order failed — staying AWAITING_SHORT",
+            entryErr
+          )
+          await persistChaseSignal({
+            outcome: "REJECT",
+            kind: "ENTRY",
+            instrument: nfoSymbol,
+            tradingsymbol: instrument.tradingsymbol,
+            summary: `Entry order failed — staying AWAITING_SHORT so Chase can retry: ${
+              entryErr instanceof Error ? entryErr.message : String(entryErr)
+            }`,
+            features: { status: CHASE_STATUS.AWAITING_SHORT },
+            key: `chase:entry-fail:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+          })
+        }
       }
     } else {
       await persistChaseSignal({
@@ -600,6 +662,16 @@ export const generateSignal = async (
       if (!success) {
         logger.error("[generateSignal] error updating chase_status:", error)
       }
+    } else {
+      await persistChaseSignal({
+        outcome: "WAIT",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `Still ${currentStatus} — entry not filled, Chase will retry`,
+        features: { status: currentStatus, lastClose: instrument.lastClose },
+        key: `chase:pending-entry:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
     }
   }
 }

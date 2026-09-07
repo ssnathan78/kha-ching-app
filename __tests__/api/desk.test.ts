@@ -158,6 +158,53 @@ describeDb("desk API session", () => {
     expect(Array.isArray((result.body as { orders?: unknown[] }).orders)).toBe(true)
   })
 
+  it("filters orders by paper vs live book", async () => {
+    const { recordOrderIntent } = await import("../../lib/trading/ledger")
+    const symbol = `BOOK${Date.now()}`
+    await recordOrderIntent({
+      side: "SELL",
+      tradingsymbol: symbol,
+      requestedQty: 65,
+      exchange: "NFO",
+      product: "NRML",
+      orderType: "MARKET",
+      purpose: "ENTRY",
+      provenance: "PAPER",
+      strategy: "CHASE",
+    })
+    const paper = await invokeApi(ordersHandler, {
+      method: "GET",
+      user,
+      query: { book: "PAPER" },
+    })
+    const live = await invokeApi(ordersHandler, {
+      method: "GET",
+      user,
+      query: { book: "LIVE" },
+    })
+    expect(paper.status).toBe(200)
+    expect(live.status).toBe(200)
+    const paperRows = (paper.body as { orders: { tradingsymbol: string; provenance: string }[] })
+      .orders
+    const liveRows = (live.body as { orders: { tradingsymbol: string; provenance: string }[] })
+      .orders
+    expect(paperRows.some(row => row.tradingsymbol === symbol && row.provenance === "PAPER")).toBe(
+      true
+    )
+    expect(liveRows.some(row => row.tradingsymbol === symbol)).toBe(false)
+    expect(paperRows.every(row => row.provenance === "PAPER" || row.provenance === "MOCK")).toBe(
+      true
+    )
+    expect(
+      liveRows.every(
+        row =>
+          row.provenance === "LIVE" ||
+          row.provenance === "RECONCILED" ||
+          row.provenance === "MIGRATED"
+      )
+    ).toBe(true)
+  })
+
   it("returns risk settings and persists a halt/resume", async () => {
     const get = await invokeApi(riskHandler, { method: "GET", user })
     expect(get.status).toBe(200)

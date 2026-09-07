@@ -2,7 +2,7 @@ import { type Job, Worker } from "bullmq"
 import dayjs from "dayjs"
 import type { HistoricalData, Order } from "kiteconnect"
 import { getChaseSettings } from "../chaseSettings"
-import { generateSignal, resolveChasePrevEma } from "../chaseSignal"
+import { decideChaseEntryAction, generateSignal, resolveChasePrevEma } from "../chaseSignal"
 import { nowDayjs } from "../clock"
 import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "../constants"
 import {
@@ -26,11 +26,76 @@ import {
 } from "../kiteUtils"
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
+import { getOpenOrders } from "../trading/ledger"
+import { recordStrategySignal } from "../trading/signals"
 import { ms, postToSlack, toIst, withRemoteRetry } from "../utils"
 
 const OPEN_MINUTES = 9 * 60 + 16 // 9:16 AM IST
 const CLOSE_MINUTES = 15 * 60 + 29 // 3:29 PM IST
 const ROLLOVER_MINUTES = 15 * 60 // 3:00 PM IST
+
+async function ensureChaseEntryFilled(args: {
+  side: "LONG" | "SHORT"
+  tradingsymbol: string
+  quantity: number
+  isAutomated: boolean
+  accessToken: string
+  kite: ReturnType<typeof getKiteInstance>
+  ltp: number
+}): Promise<"ok" | "placed" | "wait" | "failed"> {
+  const netQty =
+    args.isAutomated && args.quantity > 0
+      ? await getNetPositionQty(args.kite, args.tradingsymbol)
+      : 0
+  const entrySide = args.side === "LONG" ? "BUY" : "SELL"
+  const open = (await getOpenOrders()).filter(
+    o => o.tradingsymbol === args.tradingsymbol && o.purpose === "ENTRY" && o.side === entrySide
+  )
+  const action = decideChaseEntryAction({
+    automated: args.isAutomated,
+    quantity: args.quantity,
+    netQty,
+    side: args.side,
+    hasOpenEntryOrder: open.length > 0,
+  })
+  if (action === "already_filled" || action === "signal_only") return "ok"
+  if (action === "wait_open_order") {
+    logger.info(
+      `[processUpdateSL] ${args.side} entry still working for ${args.tradingsymbol} — not flipping status`
+    )
+    return "wait"
+  }
+  try {
+    logger.info(
+      `[processUpdateSL] placing MARKET ${entrySide} entry for ${args.tradingsymbol} qty=${args.quantity}`
+    )
+    await placeKiteOrder(args.accessToken, {
+      tradingsymbol: args.tradingsymbol,
+      exchange: "NFO",
+      transaction_type: entrySide,
+      quantity: args.quantity,
+      order_type: "MARKET",
+      product: "NRML",
+      tag: "chase",
+      purpose: "ENTRY",
+      ltp: args.ltp,
+    } as any)
+    return "placed"
+  } catch (e) {
+    logger.error(`[processUpdateSL] ${args.side} entry order failed`, e)
+    await recordStrategySignal({
+      strategy: "CHASE",
+      tradingsymbol: args.tradingsymbol,
+      orderTag: "chase",
+      kind: "ENTRY",
+      outcome: "REJECT",
+      summary: `Entry retry failed — ${e instanceof Error ? e.message : String(e)}`,
+      features: { side: args.side },
+      idempotencyKey: `chase:entry-retry-fail:${args.tradingsymbol}:${new Date().toISOString().slice(0, 16)}`,
+    })
+    return "failed"
+  }
+}
 
 async function processCalculateEMA(job: Job) {
   const { user } = job.data as any
@@ -741,6 +806,19 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       return { signal: "TRANSACTION_ALERT", stoploss }
     } else if (currentStatus === CHASE_STATUS.AWAITING_LONG && candle.high >= (entryPoint ?? 0)) {
       logger.info(`[processUpdateSL] Entry triggered AWAITING_LONG for ${tradingsymbol}`)
+      const fill = await ensureChaseEntryFilled({
+        side: "LONG",
+        tradingsymbol,
+        quantity,
+        isAutomated,
+        accessToken,
+        kite,
+        ltp: candle.close,
+      })
+      if (fill !== "ok" && fill !== "placed") {
+        logger.info(`[processUpdateSL] AWAITING_LONG trigger but entry ${fill} — not marking LONG`)
+        return null
+      }
       await postToSlack(`:rocket: Transaction Alert enter_long. Chase is now *Long* :arrow_up:`)
       const { success, error } = await updateChaseStatus({
         instrument: nfoSymbol,
@@ -754,7 +832,6 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           transactionType: "BUY",
           averagePrice: entryPoint ?? 0,
         })
-        // Entry was placed as SL-M in generateSignal; only place the stop-loss order here
         if (isAutomated && quantity > 0) {
           const entryNetQty = await getNetPositionQty(kite, tradingsymbol)
           if (entryNetQty > 0) {
@@ -766,12 +843,13 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
               order_type: "SL",
               product: "NRML",
               tag: "chase",
+              purpose: "SL",
               trigger_price: stoploss ?? 0,
               price: (stoploss ?? 0) - 5,
             } as any)
           } else {
             logger.info(
-              `[processUpdateSL] no long position for ${tradingsymbol} — entry SL-M may not have filled yet, skipping SL order`
+              `[processUpdateSL] no long position for ${tradingsymbol} — skipping SL order`
             )
           }
         }
@@ -779,6 +857,21 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       return { signal: "TRANSACTION_ALERT", stoploss }
     } else if (currentStatus === CHASE_STATUS.AWAITING_SHORT && candle.low <= (entryPoint ?? 0)) {
       logger.info(`[processUpdateSL] Entry triggered AWAITING_SHORT for ${tradingsymbol}`)
+      const fill = await ensureChaseEntryFilled({
+        side: "SHORT",
+        tradingsymbol,
+        quantity,
+        isAutomated,
+        accessToken,
+        kite,
+        ltp: candle.close,
+      })
+      if (fill !== "ok" && fill !== "placed") {
+        logger.info(
+          `[processUpdateSL] AWAITING_SHORT trigger but entry ${fill} — not marking SHORT`
+        )
+        return null
+      }
       await postToSlack(`:rocket: Transaction Alert enter_short. Chase is now *Short* :arrow_down:`)
       const { success, error } = await updateChaseStatus({
         instrument: nfoSymbol,
@@ -792,7 +885,6 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           transactionType: "SELL",
           averagePrice: entryPoint ?? 0,
         })
-        // Entry was placed as SL-M in generateSignal; only place the stop-loss order here
         if (isAutomated && quantity > 0) {
           const entryNetQty = await getNetPositionQty(kite, tradingsymbol)
           if (entryNetQty < 0) {
@@ -804,17 +896,38 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
               order_type: "SL",
               product: "NRML",
               tag: "chase",
+              purpose: "SL",
               trigger_price: stoploss ?? 0,
               price: (stoploss ?? 0) + 5,
             } as any)
           } else {
             logger.info(
-              `[processUpdateSL] no short position for ${tradingsymbol} — entry SL-M may not have filled yet, skipping SL order`
+              `[processUpdateSL] no short position for ${tradingsymbol} — skipping SL order`
             )
           }
         }
       } else logger.error("[processUpdateSL] error updating chase_status:", error)
       return { signal: "TRANSACTION_ALERT", stoploss }
+    } else if (
+      (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
+      isAutomated &&
+      quantity > 0
+    ) {
+      const side = currentStatus === CHASE_STATUS.LONG ? "LONG" : "SHORT"
+      const fill = await ensureChaseEntryFilled({
+        side,
+        tradingsymbol,
+        quantity,
+        isAutomated,
+        accessToken,
+        kite,
+        ltp: candle.close,
+      })
+      if (fill === "placed") {
+        logger.info(
+          `[processUpdateSL] ${side} book was flat — entry retry filled for ${tradingsymbol}`
+        )
+      }
     }
   }
 

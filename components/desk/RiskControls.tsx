@@ -68,9 +68,9 @@ export default function RiskControls({
     <Stack spacing={2} sx={{ p: 2 }}>
       <Typography variant="h6">Risk limits</Typography>
       <Typography color="text.secondary">
-        These are the only trading risk controls. Change them here; they live in the database. .env
-        is for infrastructure only (database, Redis, Kite keys, cookie secret, and MOCK_ORDERS for
-        this process).
+        These are the only trading risk controls. Change them here; they live in the database and
+        apply on the next order — no process restart. .env is for infrastructure only (database,
+        Redis, Kite keys, cookie secret, and MOCK_ORDERS for this process).
       </Typography>
       {mockOrders ? (
         <Alert severity="info">

@@ -41,6 +41,7 @@ export { fetchBrokerSnapshot, reconcileWithBroker } from "./reconcile"
 export {
   DEFAULT_RISK_SETTINGS,
   evaluateOrder,
+  executionProvenance,
   inferOrderRole,
   isPaperStrategy,
   limitsFor,

@@ -111,10 +111,10 @@ export default function DeskPage() {
     mode: FeedClearMode
   } | null>(null)
 
-  const { data: portfolioData, mutate: mutatePortfolio } = useSWR(
-    user?.isLoggedIn ? "/api/desk/portfolio" : null
-  )
   const bookQs = tradeBook === "ALL" ? "" : `?book=${tradeBook}`
+  const { data: portfolioData, mutate: mutatePortfolio } = useSWR(
+    user?.isLoggedIn ? `/api/desk/portfolio${bookQs}` : null
+  )
   const { data: positionData } = useSWR(user?.isLoggedIn ? `/api/desk/positions${bookQs}` : null)
   const { data: orderData } = useSWR(user?.isLoggedIn ? `/api/desk/orders${bookQs}` : null)
   const tradeRange =
@@ -132,7 +132,7 @@ export default function DeskPage() {
   const { data: tradeData } = useSWR(
     user?.isLoggedIn ? `/api/desk/trades${tradeQs ? `?${tradeQs}` : ""}` : null
   )
-  const { data: activityData } = useSWR(user?.isLoggedIn ? "/api/desk/activity" : null)
+  const { data: activityData } = useSWR(user?.isLoggedIn ? `/api/desk/activity${bookQs}` : null)
   const alertQs = new URLSearchParams({ period: feedPeriod })
   const signalQs = new URLSearchParams({ period: feedPeriod })
   if (signalStrategy) signalQs.set("strategy", signalStrategy)
@@ -312,7 +312,11 @@ export default function DeskPage() {
           color={deskHalted ? "error" : "success"}
           variant={deskHalted ? "filled" : "outlined"}
         />
-        <Chip label={`Portfolio ${money(p?.portfolioValue)}`} color="primary" variant="outlined" />
+        <Chip
+          label={`${tradeBook === "ALL" ? "Portfolio" : tradeBook === "PAPER" ? "Paper portfolio" : "Live portfolio"} ${money(p?.portfolioValue)}`}
+          color="primary"
+          variant="outlined"
+        />
         <Chip label={`Cash ${money(p?.availableCash)}`} variant="outlined" />
         <Chip label={`Realized ${money(p?.realizedPnl)}`} variant="outlined" />
         <Chip label={`Unrealized ${money(p?.unrealizedPnl)}`} variant="outlined" />
@@ -351,7 +355,7 @@ export default function DeskPage() {
         </Tabs>
       </Paper>
 
-      {tab === "positions" || tab === "orders" || tab === "trades" ? (
+      {tab === "positions" || tab === "orders" || tab === "trades" || tab === "decisions" ? (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Book</InputLabel>
@@ -574,6 +578,7 @@ export default function DeskPage() {
                 <TableCell>Action</TableCell>
                 <TableCell>Strategy</TableCell>
                 <TableCell>Symbol</TableCell>
+                <TableCell>Book</TableCell>
                 <TableCell>Risk</TableCell>
                 <TableCell>Reason</TableCell>
               </TableRow>
@@ -585,6 +590,7 @@ export default function DeskPage() {
                   <TableCell>{String(row.action)}</TableCell>
                   <TableCell>{String(row.strategy || "—")}</TableCell>
                   <TableCell>{String(row.tradingsymbol || row.instrument || "—")}</TableCell>
+                  <TableCell>{String(row.provenance || "—")}</TableCell>
                   <TableCell>{String(row.riskResult || "—")}</TableCell>
                   <TableCell>{String(row.reason || row.intent || "—")}</TableCell>
                 </TableRow>

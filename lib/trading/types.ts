@@ -82,6 +82,10 @@ export type Provenance = "LIVE" | "MIGRATED" | "RECONCILED" | "MOCK" | "PAPER"
 
 export type TradeBookFilter = "ALL" | "PAPER" | "LIVE"
 
+export function parseTradeBook(value: unknown): TradeBookFilter {
+  return value === "PAPER" || value === "LIVE" ? value : "ALL"
+}
+
 export function isSyntheticProvenance(provenance: string | null | undefined): boolean {
   return provenance === "PAPER" || provenance === "MOCK"
 }
