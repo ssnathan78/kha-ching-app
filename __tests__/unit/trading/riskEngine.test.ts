@@ -179,6 +179,16 @@ describe("evaluateOrder", () => {
         intent(),
         ctx({
           isMock: false,
+          isPaper: true,
+          marketOpen: false,
+        })
+      )
+    ).toEqual({ ok: true })
+    expect(
+      evaluateOrder(
+        intent(),
+        ctx({
+          isMock: false,
           marketOpen: false,
           settings: { ...DEFAULT_RISK_SETTINGS, allowLiveOrders: true },
         })

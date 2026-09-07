@@ -225,6 +225,38 @@ describeDb("desk API session", () => {
     ).toBe(true)
   })
 
+  it("records an order without provenance as PAPER, not LIVE", async () => {
+    const { recordOrderIntent } = await import("../../lib/trading/ledger")
+    const symbol = `DEF${Date.now()}`
+    await recordOrderIntent({
+      side: "BUY",
+      tradingsymbol: symbol,
+      requestedQty: 65,
+      exchange: "NFO",
+      product: "NRML",
+      orderType: "MARKET",
+      purpose: "ENTRY",
+      strategy: "CHASE",
+    })
+    const paper = await invokeApi(ordersHandler, {
+      method: "GET",
+      user,
+      query: { book: "PAPER" },
+    })
+    const live = await invokeApi(ordersHandler, {
+      method: "GET",
+      user,
+      query: { book: "LIVE" },
+    })
+    const paperRows = (paper.body as { orders: { tradingsymbol: string; provenance: string }[] })
+      .orders
+    const liveRows = (live.body as { orders: { tradingsymbol: string }[] }).orders
+    expect(paperRows.some(row => row.tradingsymbol === symbol && row.provenance === "PAPER")).toBe(
+      true
+    )
+    expect(liveRows.some(row => row.tradingsymbol === symbol)).toBe(false)
+  })
+
   it("returns risk settings and persists a halt/resume", async () => {
     const get = await invokeApi(riskHandler, { method: "GET", user })
     expect(get.status).toBe(200)

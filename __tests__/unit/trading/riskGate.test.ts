@@ -91,6 +91,14 @@ describe("triple gate (evaluateOrder)", () => {
     expect(decision.ok).toBe(false)
     if (!decision.ok) expect(decision.code).toBe("MARKET_CLOSED")
   })
+
+  it("allows paper entries when the session is closed", () => {
+    const decision = evaluateOrder(
+      intent(),
+      ctx({ isMock: false, isPaper: true, marketOpen: false })
+    )
+    expect(decision).toEqual({ ok: true })
+  })
 })
 
 describe("shouldAbortStraddleForClosedMarket", () => {

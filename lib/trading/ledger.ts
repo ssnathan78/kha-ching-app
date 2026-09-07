@@ -30,6 +30,7 @@ import {
   type DecisionAction,
   directionFromQty,
   type ExitReason,
+  ledgerProvenance,
   type OrderPurpose,
   type OrderStatus,
   type Provenance,
@@ -116,7 +117,7 @@ export async function recordDecision(input: {
         proposedPrice: input.proposedPrice == null ? null : String(input.proposedPrice),
         idempotencyKey: input.idempotencyKey,
         occurredAt: input.occurredAt ?? new Date(),
-        provenance: input.provenance ?? "LIVE",
+        provenance: ledgerProvenance(input.provenance),
       })
       .onConflictDoNothing()
       .returning({ id: tradingDecisions.id })
@@ -263,7 +264,7 @@ export async function recordOrderIntent(input: {
         stopPrice: input.stopPrice == null ? null : String(input.stopPrice),
         status: "PENDING",
         idempotencyKey: key,
-        provenance: input.provenance ?? "LIVE",
+        provenance: ledgerProvenance(input.provenance),
         metadata: input.metadata ?? {},
       })
       .onConflictDoNothing()
@@ -451,7 +452,7 @@ export async function applyBrokerOrderSnapshot(
       requestedQty: requested,
       limitPrice: kiteOrder.price,
       stopPrice: kiteOrder.trigger_price,
-      provenance: context?.provenance ?? (brokerOrderId ? "RECONCILED" : "LIVE"),
+      provenance: context?.provenance ?? (brokerOrderId ? "RECONCILED" : "PAPER"),
       idempotencyKey: brokerOrderId ? `broker:${brokerOrderId}` : undefined,
     })
     if (created) {
@@ -583,7 +584,7 @@ export async function applyBrokerOrderSnapshot(
           price: String(kiteOrder.average_price ?? moneyToString(incremental.price)),
         }),
         occurredAt: occurred,
-        provenance: context?.provenance ?? "LIVE",
+        provenance: ledgerProvenance(context?.provenance ?? (row.provenance as Provenance | null)),
         raw: kiteOrder as Record<string, unknown>,
       })
       if (fillId) {
@@ -1183,7 +1184,9 @@ export async function bookTestFill(input: {
   fingerprint?: string
   exitReason?: ExitReason
   occurredAt?: Date
+  provenance?: Provenance
 }): Promise<{ orderId: string; fillId: string; positionQty: number }> {
+  const provenance = ledgerProvenance(input.provenance)
   const recorded = await recordOrderIntent({
     jobId: input.jobId,
     strategy: input.strategy,
@@ -1195,13 +1198,14 @@ export async function bookTestFill(input: {
     tradingsymbol: input.tradingsymbol,
     requestedQty: input.quantity,
     idempotencyKey: `test:${randomUUID()}`,
-    provenance: "LIVE",
+    provenance,
   })
   if (!recorded) throw new Error("failed to create test order")
   await markOrderSubmitted({
     orderId: recorded.id,
     brokerOrderId: `test-broker-${recorded.id}`,
     status: "SUBMITTED",
+    provenance,
   })
   const fillId = await insertFill({
     orderId: recorded.id,
@@ -1216,7 +1220,7 @@ export async function bookTestFill(input: {
     price: String(input.price),
     fingerprint: input.fingerprint ?? `test-fill:${randomUUID()}`,
     occurredAt: input.occurredAt ?? new Date(),
-    provenance: "LIVE",
+    provenance,
   })
   if (!fillId) throw new Error("failed to insert test fill")
   await db

@@ -188,7 +188,13 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
     return fail("JOB_ABORTED", "Job is aborted; new entries rejected")
   }
 
-  if (isEntry(intent.role) && settings.requireMarketHours && !ctx.isMock && !ctx.marketOpen) {
+  if (
+    isEntry(intent.role) &&
+    settings.requireMarketHours &&
+    !ctx.isMock &&
+    !ctx.isPaper &&
+    !ctx.marketOpen
+  ) {
     return fail("MARKET_CLOSED", "Market is closed (Desk → Risk can turn this check off)")
   }
 

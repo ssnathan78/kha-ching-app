@@ -1,4 +1,4 @@
-import { parseTradeBook, provenanceInBook } from "../../../lib/trading/types"
+import { ledgerProvenance, parseTradeBook, provenanceInBook } from "../../../lib/trading/types"
 
 describe("parseTradeBook", () => {
   it("accepts PAPER and LIVE and defaults the rest to ALL", () => {
@@ -23,5 +23,14 @@ describe("provenanceInBook", () => {
     expect(provenanceInBook("MIGRATED", "LIVE")).toBe(true)
     expect(provenanceInBook("PAPER", "LIVE")).toBe(false)
     expect(provenanceInBook("MOCK", "LIVE")).toBe(false)
+  })
+})
+
+describe("ledgerProvenance", () => {
+  it("defaults missing provenance to PAPER, never LIVE", () => {
+    expect(ledgerProvenance(undefined)).toBe("PAPER")
+    expect(ledgerProvenance(null)).toBe("PAPER")
+    expect(ledgerProvenance("LIVE")).toBe("LIVE")
+    expect(ledgerProvenance("MOCK")).toBe("MOCK")
   })
 })
