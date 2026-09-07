@@ -17,12 +17,15 @@ import {
   TableRow,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material"
+import Link from "next/link"
 import { useRouter } from "next/router"
 import { useState } from "react"
 import useSWR from "swr"
 import AlertsPanel from "../components/desk/AlertsPanel"
+import ContractsPanel from "../components/desk/ContractsPanel"
 import RiskControls from "../components/desk/RiskControls"
 import SignalsPanel from "../components/desk/SignalsPanel"
 import Layout from "../components/Layout"
@@ -74,6 +77,7 @@ const DESK_TABS = [
   "decisions",
   "activity",
   "sessions",
+  "contracts",
   "risk",
 ] as const
 type DeskTab = (typeof DESK_TABS)[number]
@@ -145,6 +149,9 @@ export default function DeskPage() {
     user?.isLoggedIn ? `/api/desk/signals?${signalQs}` : null
   )
   const { data: riskData, mutate: mutateRisk } = useSWR(user?.isLoggedIn ? "/api/desk/risk" : null)
+  const { data: instrumentData } = useSWR(
+    user?.isLoggedIn && tab === "contracts" ? "/api/desk/instruments" : null
+  )
 
   if (!user?.isLoggedIn) {
     return <Layout title="Desk" loading />
@@ -177,41 +184,50 @@ export default function DeskPage() {
           <Typography variant="h5">Trading desk</Typography>
           <Typography color="text.secondary">
             Ledger view of orders, positions, round-trips, and why they happened. Kite remains live
-            execution reality; this page is the application record.
+            execution reality; this page is the application record.{" "}
+            <Link href="/help/desk#risk-flags">Risk flags</Link>
           </Typography>
         </Box>
         {deskHalted ? (
-          <Button
-            color="warning"
-            variant="contained"
-            disabled={riskBusy}
-            onClick={() => setResumeOpen(true)}
-          >
-            Resume trading
-          </Button>
+          <Tooltip title="Clears the desk halt and turns Trading enabled back on. New entries can open again. Per-strategy halt is a separate checkbox on Risk.">
+            <span>
+              <Button
+                color="warning"
+                variant="contained"
+                disabled={riskBusy}
+                onClick={() => setResumeOpen(true)}
+              >
+                Resume trading
+              </Button>
+            </span>
+          </Tooltip>
         ) : (
-          <Button
-            color="error"
-            variant="outlined"
-            disabled={riskBusy}
-            onClick={async () => {
-              setRiskBusy(true)
-              try {
-                await fetchJson("/api/desk/risk", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "halt", reason: "Manual halt from desk" }),
-                })
-                await mutateRisk()
-              } catch (e) {
-                setReconMsg(e instanceof Error ? e.message : "Halt failed")
-              } finally {
-                setRiskBusy(false)
-              }
-            }}
-          >
-            Halt new entries
-          </Button>
+          <Tooltip title="Stops new entries desk-wide (same idea as turning off Trading enabled, with a stored reason). Flatten and stop-loss still work.">
+            <span>
+              <Button
+                color="error"
+                variant="outlined"
+                disabled={riskBusy}
+                onClick={async () => {
+                  setRiskBusy(true)
+                  try {
+                    await fetchJson("/api/desk/risk", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "halt", reason: "Manual halt from desk" }),
+                    })
+                    await mutateRisk()
+                  } catch (e) {
+                    setReconMsg(e instanceof Error ? e.message : "Halt failed")
+                  } finally {
+                    setRiskBusy(false)
+                  }
+                }}
+              >
+                Halt new entries
+              </Button>
+            </span>
+          </Tooltip>
         )}
         <Button
           variant="outlined"
@@ -351,6 +367,7 @@ export default function DeskPage() {
           <Tab label="Decisions" />
           <Tab label="Activity" />
           <Tab label="Sessions" />
+          <Tab label="Contracts" />
           <Tab label="Risk" />
         </Tabs>
       </Paper>
@@ -687,6 +704,8 @@ export default function DeskPage() {
           </Table>
         </Paper>
       ) : null}
+
+      {tab === "contracts" ? <ContractsPanel data={instrumentData} /> : null}
 
       {tab === "risk" ? (
         <Paper>

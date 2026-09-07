@@ -30,6 +30,15 @@ describe("help content", () => {
     expect(HELP_PAGES.strangle.sections.some(s => s.id === "contract")).toBe(true)
   })
 
+  it("explains live-orders vs trading-enabled and strategy enabled vs halt", () => {
+    const flags = HELP_PAGES.desk.sections.find(s => s.id === "risk-flags")
+    const text = flags?.body.join(" ") ?? ""
+    expect(text).toMatch(/Allow live orders is the Zerodha master switch/i)
+    expect(text).toMatch(/Trading enabled is desk-wide new entries/i)
+    expect(text).toMatch(/Strategy enabled is that book's on\/off/i)
+    expect(text).toMatch(/Not halted only blocks new entries/i)
+  })
+
   it("does not present Combined, Supertrend, or OBS as usable straddle exits", () => {
     const risk = HELP_PAGES.straddle.sections.find(s => s.id === "risk")
     expect(risk?.body.join(" ")).toMatch(/not available/i)

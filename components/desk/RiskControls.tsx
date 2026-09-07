@@ -13,6 +13,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import fetchJson from "../../lib/fetchJson"
@@ -22,6 +23,17 @@ const LABELS: Record<(typeof RISK_STRATEGY_KEYS)[number], string> = {
   ATM_STRADDLE: "ATM Straddle",
   ATM_STRANGLE: "ATM Strangle",
   CHASE: "Chase",
+}
+
+function FlagLabel({ title, hint }: { title: string; hint: string }) {
+  return (
+    <span>
+      {title}{" "}
+      <Typography component="span" variant="body2" color="text.secondary">
+        ({hint})
+      </Typography>
+    </span>
+  )
 }
 
 function num(value: string, fallback: number) {
@@ -81,24 +93,41 @@ export default function RiskControls({
 
       <Paper sx={{ p: 2 }}>
         <Typography sx={{ fontWeight: 600, mb: 1 }}>Desk</Typography>
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>
+          Allow live orders is live vs paper. Trading enabled is whether new entries may open.
+          Flatten and stop-loss still work when trading is off. See{" "}
+          <Link href="/help/desk#risk-flags">Help → Desk → Risk flags</Link>.
+        </Typography>
         <Stack spacing={1}>
           <FormControlLabel
+            sx={{ alignItems: "flex-start" }}
             control={
               <Checkbox
                 checked={settings.allowLiveOrders}
                 onChange={e => setSettings({ ...settings, allowLiveOrders: e.target.checked })}
               />
             }
-            label="Allow live orders (requires MOCK_ORDERS=false in .env)"
+            label={
+              <FlagLabel
+                title="Allow live orders"
+                hint="Zerodha master switch; off = paper/mock only. Live also needs MOCK_ORDERS=false and that strategy's Execution = Live"
+              />
+            }
           />
           <FormControlLabel
+            sx={{ alignItems: "flex-start" }}
             control={
               <Checkbox
                 checked={settings.tradingEnabled}
                 onChange={e => setSettings({ ...settings, tradingEnabled: e.target.checked })}
               />
             }
-            label="Trading enabled"
+            label={
+              <FlagLabel
+                title="Trading enabled"
+                hint="desk-wide new entries; off still allows flatten and stop-loss"
+              />
+            }
           />
           <FormControlLabel
             control={
@@ -173,10 +202,12 @@ export default function RiskControls({
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{LABELS[key]}</Typography>
             <Typography color="text.secondary" sx={{ mb: 1 }}>
               Daily loss and drawdown use this strategy&apos;s book only. A straddle loss does not
-              halt Chase, and the reverse.
+              halt Chase, and the reverse. Strategy enabled is on/off for every order; Not halted
+              only blocks new entries.
             </Typography>
             <Stack spacing={1}>
               <FormControlLabel
+                sx={{ alignItems: "flex-start" }}
                 control={
                   <Checkbox
                     checked={row.enabled}
@@ -191,7 +222,12 @@ export default function RiskControls({
                     }
                   />
                 }
-                label="Strategy enabled"
+                label={
+                  <FlagLabel
+                    title="Strategy enabled"
+                    hint="off rejects every order for this strategy, including SL and flatten"
+                  />
+                }
               />
               <FormControl size="small" sx={{ maxWidth: 360 }}>
                 <InputLabel id={`exec-${key}`}>Execution</InputLabel>
@@ -227,6 +263,7 @@ export default function RiskControls({
                 </Typography>
               )}
               <FormControlLabel
+                sx={{ alignItems: "flex-start" }}
                 control={
                   <Checkbox
                     checked={!row.halted}
@@ -246,9 +283,17 @@ export default function RiskControls({
                   />
                 }
                 label={
-                  row.halted
-                    ? `Halted${row.haltReason ? `: ${row.haltReason}` : ""} — uncheck to resume`
-                    : "Not halted"
+                  row.halted ? (
+                    <FlagLabel
+                      title={`Halted${row.haltReason ? `: ${row.haltReason}` : ""}`}
+                      hint="uncheck to resume entries; flatten and stop-loss still work"
+                    />
+                  ) : (
+                    <FlagLabel
+                      title="Not halted"
+                      hint="checked = new entries allowed. Uncheck blocks entries only; flatten and SL still work"
+                    />
+                  )
                 }
               />
               <Stack direction={{ xs: "column", md: "row" }} spacing={1}>

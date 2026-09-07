@@ -1,4 +1,5 @@
 import alertsHandler from "../../pages/api/desk/alerts"
+import instrumentsHandler from "../../pages/api/desk/instruments"
 import ordersHandler from "../../pages/api/desk/orders"
 import portfolioHandler from "../../pages/api/desk/portfolio"
 import reconcileHandler from "../../pages/api/desk/reconcile"
@@ -18,6 +19,11 @@ describe("desk API auth", () => {
 
   it("rejects anonymous alerts", async () => {
     const result = await invokeApi(alertsHandler, { method: "GET", user: null })
+    expect(result.status).toBe(401)
+  })
+
+  it("rejects anonymous instruments", async () => {
+    const result = await invokeApi(instrumentsHandler, { method: "GET", user: null })
     expect(result.status).toBe(401)
   })
 
@@ -156,6 +162,20 @@ describeDb("desk API session", () => {
     const result = await invokeApi(ordersHandler, { method: "GET", user })
     expect(result.status).toBe(200)
     expect(Array.isArray((result.body as { orders?: unknown[] }).orders)).toBe(true)
+  })
+
+  it("returns instrument contracts for a logged-in user", async () => {
+    const result = await invokeApi(instrumentsHandler, { method: "GET", user })
+    expect(result.status).toBe(200)
+    const body = result.body as {
+      indexes?: { index?: string; frontFut?: unknown }[]
+      chase?: { instruments?: string[] }
+      cacheNote?: string
+    }
+    expect(Array.isArray(body.indexes)).toBe(true)
+    expect(body.indexes?.some(row => row.index === "NIFTY")).toBe(true)
+    expect(body.chase?.instruments?.length).toBeGreaterThan(0)
+    expect(body.cacheNote).toMatch(/Kite NFO/)
   })
 
   it("filters orders by paper vs live book", async () => {

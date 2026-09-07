@@ -14,7 +14,19 @@ Resume after a halt is **always manual**. Nothing in workers auto-clears `desk_h
 | Config | Desk → Risk (`risk_settings` + per-strategy limits). Env is infra only (`MOCK_ORDERS` = this process does not call Kite). |
 | Tests | `__tests__/unit/trading/riskEngine.test.ts`, `__tests__/api/desk.test.ts` |
 
-Flatten / SL / EXIT roles **skip** halt, trading-disabled, daily-loss, drawdown, duplicate, rate, and open-position caps so a kill can still reduce risk.
+Flatten / SL / EXIT roles **skip** desk halt, trading-disabled, strategy halt, daily-loss, drawdown, duplicate, rate, and open-position caps so a kill can still reduce risk. They do **not** skip `STRATEGY_DISABLED` — turning a strategy off rejects every order for that book, including flatten.
+
+## Operator flags (Desk → Risk)
+
+| Flag | Blocks | Still allowed |
+|--|--|--|
+| Allow live orders (off) | Real Kite orders (`LIVE_BLOCKED`) unless `MOCK_ORDERS` or PAPER | Paper/mock entries and exits |
+| Trading enabled (off) | New **entries** desk-wide (`TRADING_DISABLED`) | Flatten / SL / EXIT |
+| Desk Halt | New **entries** desk-wide (`DESK_HALTED`), with a stored reason | Flatten / SL / EXIT |
+| Strategy enabled (off) | **Every** order for that strategy (`STRATEGY_DISABLED`) | Nothing for that strategy |
+| Not halted (unchecked) | New **entries** for that strategy (`STRATEGY_HALTED`) | Flatten / SL / EXIT |
+
+Live Kite still needs the triple gate: `MOCK_ORDERS=false` + Allow live orders + that strategy's Execution = Live.
 
 ## Live vs paper
 

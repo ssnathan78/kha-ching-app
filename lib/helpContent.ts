@@ -35,11 +35,22 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Dashboard Today is still the live punch board. Desk is the application ledger: decisions, order lifecycle, fills, positions, completed round-trips, and audit events.",
           "Desk → Orders is only the blotter: instructions that reached placeOrder (paper, mock, live, or reconciled). A Sunday or after-hours live “Schedule now” never creates an order. That reject is on Desk → Alerts. Mock punches still need at least one index ticked; otherwise nothing is sent.",
+          "Desk → Contracts shows the Kite NFO futures and option expiries the strategies will use today (front/next month FUT for Chase, current/next/monthly option dates for straddles and strangles). The contract list is fetched from Kite and cached until 07:00 IST — it is not a Postgres table. Chase stores only the selected indexes and, once in a trade, the tradingsymbol on chase_status.",
           "Desk → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, and unresolved recon. The sidebar badge is the unread error count. Filter All / Today / Before today. Clear hides those rows without deleting the ledger.",
           "Desk → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. Filter by strategy, weekday plan, or a single job. Clear today / before today / all deletes those signal rows.",
           "Kite remains the broker's execution reality. Reconcile with broker compares the ledger to Kite and records mismatches instead of silently rewriting history.",
           "A signal is not an order. An order is not a fill. A fill is not a position. A position is not a completed trade. Desk keeps those records separate so a restart can reconstruct what happened.",
-          "Desk → Risk is the only place trading limits live: live-order switch, per-strategy max lots, daily loss, drawdown, and position caps. Strategies do not share P&L for those limits. Halt new entries is still the emergency stop. Flatten and stop-loss orders are still allowed while halted.",
+          "Desk → Risk is the only place trading limits live. Strategies do not share P&L for those limits. See Risk flags below for Allow live orders vs Trading enabled, and Strategy enabled vs Not halted.",
+        ],
+      },
+      {
+        id: "risk-flags",
+        title: "Risk flags — live, trading, enabled, halt",
+        body: [
+          "Allow live orders is the Zerodha master switch. Off means paper and mock still work (quotes and the ledger). A live punch also needs MOCK_ORDERS=false in .env and that strategy's Execution set to Live.",
+          "Trading enabled is desk-wide new entries. Turn it off to stop straddles, strangles, and Chase from opening. Flatten and stop-loss still go through. Halt new entries on the desk header is the same idea with a stored reason; Resume is explicit and also turns trading back on.",
+          "Strategy enabled is that book's on/off. Off rejects every order for that strategy, including stop-loss and flatten. Use this when you want that book completely dark.",
+          "Not halted only blocks new entries (after a daily-loss or drawdown trip, or you halt it). Flatten and stop-loss still work. Halt never auto-clears — uncheck Not halted, or Resume on the desk header for a desk-wide halt.",
         ],
       },
       {
