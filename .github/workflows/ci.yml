@@ -1,9 +1,9 @@
 name: CI
 
+# Not used as a deploy gate. Production is the Droplet (`docs/DEPLOYMENT.md`).
+# Keep the job for a manual run from the Actions tab.
 on:
-  push:
-    branches: [master, main, modernize/**]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   verify:

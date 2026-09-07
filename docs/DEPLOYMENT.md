@@ -24,20 +24,11 @@ Why one VM: BullMQ **workers run in the same Node process** as `server.js`. A pl
 
 ---
 
-## GitHub Actions (CI, not CD)
+## GitHub Actions (optional, not CD)
 
-Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Runs: [github.com/ssnathan78/kha-ching-app/actions](https://github.com/ssnathan78/kha-ching-app/actions).
+Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). **Does not run on push.** Trigger it manually from [Actions](https://github.com/ssnathan78/kha-ching-app/actions) if you want a hosted lint/test/build/e2e pass. Production deploys are the Droplet only.
 
-| | |
-|---|---|
-| When | Push to `master` / `main` / `modernize/**`, and every pull request |
-| Where | GitHub-hosted `ubuntu-latest` (not the Droplet, not `kha-ching-dev`) |
-| Cost | **Free** while the repo is **public** and the job uses standard GitHub-hosted Linux runners. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions). Private repos use the plan’s monthly minutes. |
-| Deploys? | **No.** Green CI does not update the Droplet. |
-
-Job `verify` (in order): install → `yarn lint` → unit → sim → migrate → int → api → `yarn build` → production npm audit → Playwright Chromium → e2e. Sidecars: Postgres 16, Redis 7. `MOCK_ORDERS=true`. Live Kite tests are **not** in CI.
-
-Dependabot opens weekly npm PRs; those also run this workflow.
+Job `verify` (in order): install → `yarn lint` → unit → sim → migrate → int → api → `yarn build` → production npm audit → Playwright Chromium → e2e. Sidecars: Postgres 16, Redis 7. `MOCK_ORDERS=true`. Live Kite tests are **not** in CI. Dependabot PRs do not start this job.
 
 ---
 

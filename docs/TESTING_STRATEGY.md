@@ -252,7 +252,7 @@ Real Kite OAuth is not used in CI. Playwright:
 9. `npx playwright install --with-deps chromium`
 10. `yarn e2e-test`
 
-Runs on GitHub-hosted Ubuntu ([Actions](https://github.com/ssnathan78/kha-ching-app/actions)). **Does not deploy.** Public repo: standard runners are free.
+Runs on GitHub-hosted Ubuntu only when you start the workflow by hand ([Actions](https://github.com/ssnathan78/kha-ching-app/actions)). **Does not deploy.** Push to `master` does not start it. Public repo: standard runners are free.
 
 Services: Postgres 16, Redis 7. Env: `MOCK_ORDERS=true`, test Kite keys.
 
