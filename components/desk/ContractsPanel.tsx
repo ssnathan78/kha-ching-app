@@ -70,7 +70,7 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
               <TableRow key={row.index}>
                 <TableCell>
                   {row.displayName}
-                  <Typography variant="caption" display="block" color="text.secondary">
+                  <Typography variant="caption" component="p" color="text.secondary">
                     {row.underlyingSymbol}
                     {row.hasWeeklyExpiry ? " · weekly options" : ""}
                   </Typography>
@@ -78,7 +78,7 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
                 <TableCell>
                   {row.chaseEnabled ? row.chaseStatus || "on" : "off"}
                   {row.chaseTradingsymbol ? (
-                    <Typography variant="caption" display="block" color="text.secondary">
+                    <Typography variant="caption" component="p" color="text.secondary">
                       book {row.chaseTradingsymbol}
                       {row.chaseStoploss != null ? ` · SL ${row.chaseStoploss}` : ""}
                     </Typography>
@@ -90,12 +90,12 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
                 <TableCell>
                   {row.optionCurrentExpiry ? `current ${row.optionCurrentExpiry}` : "—"}
                   {row.optionNextExpiry ? (
-                    <Typography variant="caption" display="block">
+                    <Typography variant="caption" component="p">
                       next {row.optionNextExpiry}
                     </Typography>
                   ) : null}
                   {row.optionMonthlyExpiry ? (
-                    <Typography variant="caption" display="block">
+                    <Typography variant="caption" component="p">
                       monthly {row.optionMonthlyExpiry}
                     </Typography>
                   ) : null}
