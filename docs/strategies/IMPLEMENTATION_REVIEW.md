@@ -112,7 +112,7 @@ These are **intraday option structures**. There was no attached straddle/strangl
 - Straddle **skew wait** with time decay toward `thresholdSkewPercent`, then enter-or-reject
 - Strangle **does not** use that skew wait (ATM helper forced expired + `takeTradeIrrespectiveSkew`)
 - Distance / percent strike math is pure and tested
-- Per-leg SL% + time square-off + point max loss/profit (straddle defaults)
+- Per-leg SL% + time square-off + point max loss/profit (straddle defaults). **9:20 rule:** one SL does not flatten the other wing.
 - Rollback flatten on broken hedge/primary
 - Live closed-market abort for straddle skew; strangle throws if closed after strike pick
 - Independent risk engine in front of `placeOrder`
@@ -129,7 +129,7 @@ These are **intraday option structures**. There was no attached straddle/strangl
 | Mock orders skip live `isMarketOpen` on straddle | Intentional | Documented in simulation guide |
 | Dual P&amp;L (rupees vs points) | Intentional | Do not “fix” `targetPnL` to rupees |
 
-None of these make a short ATM straddle into a different *strategy*; they are product/UI holes around a real short-vol implementation.
+None of these make a short ATM straddle into a different *strategy*; they are product/UI holes around a real 9:20 short-vol implementation (delta-neutral entry, independent stops, leftover wing until ASO).
 
 ---
 

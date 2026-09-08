@@ -109,7 +109,7 @@ Open-position count is an **execution cap** (do not open another book when this 
 
 | | |
 |--|--|
-| Protects | Operator accepting factory defaults that leave naked risk |
+| Protects | Operator accepting factory defaults that skip SL **and** time square-off (true naked hold). A leftover 9:20 wing after one SL is **not** this. |
 | Enforced | `lib/constants.ts` — strangle exit `INDIVIDUAL_LEG_SLM_1X`; rollback flags true |
 | Trigger | New forms only; saved plans unchanged |
 | Tests | Defaults used by `planMapper` / form tests still valid |

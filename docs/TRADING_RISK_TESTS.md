@@ -59,6 +59,10 @@ Files: `__tests__/simulation/chaseAdversarial.test.ts`, `__tests__/simulation/st
 | `straddle-*-` / `strangle-*-` (reject, lots, positions, live-blocked, halted) | Matching risk code, empty book, no flatten |
 | `straddle-paper-to-live-open` / `strangle-paper-to-live-open` | `OTHER_BOOK`, live qty 0, paper lot remains |
 | `straddle-live-to-paper-open` / `strangle-live-to-paper-open` | `OTHER_BOOK`, paper qty 0, live book remains |
+| `straddle-920-one-way-holds-other-leg` / `strangle-920-one-way-holds-other-leg` | CE SL only; PE held until ASO; both flat at end |
+| `straddle-920-chop-stops-both-legs` / `strangle-920-chop-stops-both-legs` | SL on both wings; no invented square-off size |
+
+Hermetic 9:20 plan: `__tests__/unit/exitStrategies/individualLegPlan.test.ts` — two independent stops; closing CE leaves PE.
 
 `yarn sim-test` is required after strategy/risk/ledger changes. See [AGENTS.md](../AGENTS.md#adversarial-testing-required--this-is-a-live-desk).
 

@@ -121,10 +121,10 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
       for (const inst of config.instruments) {
         let mid = inst.startPrice
         if (crossed && (config.pricePath === "gap_up" || config.pricePath === "gap_down")) {
-          mid = applyOvernightGap(inst.startPrice, config.pricePath, rng)
+          mid = applyOvernightGap(inst.startPrice, inst.pricePath ?? config.pricePath, rng)
         } else {
           mid = samplePricePath({
-            kind: config.pricePath ?? "sideways",
+            kind: inst.pricePath ?? config.pricePath ?? "sideways",
             progress,
             start: inst.startPrice,
             rng,

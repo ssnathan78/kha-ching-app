@@ -6,11 +6,13 @@
 
 ## 1. Strategy overview
 
-Sell (default) or buy the **at-the-money call and put** on the same index expiry. Short volatility by default: collect both premiums, lose if the underlying moves enough that one leg runs.
+Sell (default) or buy the **at-the-money call and put** on the same index expiry. Short by default: the structure is **delta-neutral at entry** (short CE + short PE). This is the classic Indian **9:20 straddle** mechanic, even when `runAt` is not exactly 09:20.
 
-This is a **same-session** structure. It is not Chase. Positions are **MIS** by default and are meant to be flat before the close via per-leg stops, point targets, and/or auto square-off.
+This is a **same-session** structure. It is not Chase. Positions are **MIS** by default and must be flat before the close via **independent per-leg stops**, optional point targets, and auto square-off (default 15:20 IST).
 
-**Edge hypothesis (operator intent):** ATM call and put are mispriced relative to each other for a short window (skew). Wait until that gap is small enough, then sell both. This is **not** a directional view on Nifty.
+**9:20 intent (operator):** on a one-way Nifty day, **only the losing wing’s SL hits**. The other wing is left on as a **trend trade until auto square-off**. That leftover is the design, not a miss, not a naked short, and not a desk failure. Chop that tags **both** stops is the contained worst case (two SL hits). Flattening the leftover wing just because the first SL fired would **break** the strategy.
+
+**Edge hypothesis:** ATM call and put can be mispriced relative to each other for a short window (skew). Wait until that gap is small enough, then sell both. Entry is not a directional view; the leftover wing after one SL *becomes* directional until EOD.
 
 ---
 
@@ -108,16 +110,22 @@ Hedges are placed **before** the short legs. If hedge fails and `onBrokenHedgeOr
 
 ## 6. Exits
 
+Stops are **per fill**, not per structure. Hitting the CE stop does **not** cancel or flatten the PE (and the reverse). Planner: `lib/exit-strategies/individualLegPlan.ts`.
+
 | Exit | When | Notes |
 |---|---|---|
-| Per-leg SL | Premium moves `slmPercent` against the fill | Implemented. SL-M converted to SL-Limit (`slLimitPricePercent`) |
+| Per-leg SL | Premium moves `slmPercent` against **that** fill | Implemented. SL-M converted to SL-Limit (`slLimitPricePercent`). The other leg stays. |
 | Combined / Supertrend / OBS trail | Not shown | **Not implemented** — form hides them; schedule validation still rejects them |
-| `NO_SL` | Allowed only with auto square-off | Time exit only |
+| `NO_SL` | Allowed only with auto square-off | Time exit only; this is **not** the 9:20 leftover-wing case |
 | Max loss / max profit | Combined structure points | `lib/targetPnL.ts` — do **not** rewrite these as rupees |
-| Auto square-off | Clock IST | Default 15:20 |
+| Auto square-off | Clock IST | Default 15:20. Flattens **whatever is still open**, including a leftover wing |
 | Kill intraday | Dashboard | Flattens today’s straddles/strangles; does **not** pause Chase |
 
 Points vs rupees: the UI shows both on purpose. Strategy targets stay in option points.
+
+**Do not treat as a bug:** one-way tape → one SL + one open wing until ASO. Sim: `straddle-920-one-way-holds-other-leg`.
+
+**Do treat as a bug:** one SL flattening both legs; flatten qty falling back to configured lots on a flat book; one-legged fill left without rollback.
 
 ---
 
@@ -141,7 +149,7 @@ Kill scope `intraday` includes this strategy.
 | Skew math | `lib/strategies/skewMath.ts` |
 | Form defaults | `lib/constants.ts` `STRATEGIES_DETAILS` |
 | Validation | `lib/strategyValidation.ts` |
-| Per-leg SL | `lib/exit-strategies/individualLegExitOrders.ts` |
+| Per-leg SL | `lib/exit-strategies/individualLegPlan.ts`, `individualLegExitOrders.ts` |
 | Point targets | `lib/targetPnL.ts` |
 | Time flatten | `lib/exit-strategies/autoSquareOff.ts` |
 | Worker | `lib/queue-processor/tradingQueue.ts` |
@@ -154,7 +162,9 @@ In-app copy: `/help/straddle`.
 
 **Is this the same as Chase?** No. Options, same session, weekday templates.
 
-**What if only one leg fills?** Rollback on primary orders squares what filled.
+**What if only one leg fills?** Rollback on primary orders squares what filled. That one-legged book **is** naked risk. It is not the same as a later 9:20 leftover after both legs filled and one SL hit.
+
+**If Nifty trends and one SL hits, should I flatten the other?** No. Hold until auto square-off (or an operator square-off). That is the 9:20 trade.
 
 **Can I run FinNifty?** Yes on straddle. Strangle’s default margin table omits FinNifty; punch-now still depends on validation.
 

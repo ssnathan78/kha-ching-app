@@ -60,6 +60,10 @@ const CORE = [
   "strangle-paper-to-live-open",
   "straddle-live-to-paper-open",
   "strangle-live-to-paper-open",
+  "straddle-920-one-way-holds-other-leg",
+  "strangle-920-one-way-holds-other-leg",
+  "straddle-920-chop-stops-both-legs",
+  "strangle-920-chop-stops-both-legs",
 ]
 
 describe("deterministic scenario catalog", () => {

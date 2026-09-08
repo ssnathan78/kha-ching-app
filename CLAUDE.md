@@ -73,6 +73,8 @@ Operator specs: [docs/strategies/README.md](docs/strategies/README.md).
 - `lib/strategies/strangle.ts`
 - Chase: `lib/chaseSignal.ts`, `lib/queue-processor/chaseQueue.ts`
 
+ATM straddle/strangle are **9:20-style**: delta-neutral short CE+PE, **per-leg** SL, leftover wing until auto square-off. A one-way Nifty day that stops one wing is intended — see [docs/strategies/ATM_STRADDLE.md](docs/strategies/ATM_STRADDLE.md).
+
 Exits: `lib/exit-strategies/`. Watchers: `lib/watchers/`.
 
 ## Environment

@@ -73,4 +73,14 @@ describe("all-strategy adversarial sequences", () => {
       expect(result.orders.filter(o => o.provenance === "PAPER" && o.role === "ENTRY").length).toBe(0)
     }
   )
+
+  it("a one-way 9:20 day is not a phantom book: PE stays until square-off", () => {
+    const result = simulate({ scenario: "straddle-920-one-way-holds-other-leg", seed: 1 })
+    expect(result.invariantViolations).toEqual([])
+    expect(result.assertionResults.every(a => a.ok)).toBe(true)
+    const peSl = result.orders.filter(
+      o => o.symbol === "NIFTY25SEP25000PE" && o.role === "SL" && o.status !== "REJECTED"
+    )
+    expect(peSl).toEqual([])
+  })
 })

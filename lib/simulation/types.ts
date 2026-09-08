@@ -86,6 +86,8 @@ export type InstrumentSpec = {
   symbol: string
   lotSize: number
   startPrice: number
+  /** Override the scenario-wide path so CE and PE can move independently. */
+  pricePath?: PricePathKind
 }
 
 export type SlippageSpec = {
@@ -165,6 +167,12 @@ export type ActorConfig = {
   paused?: boolean
   /** Fire time HH:mm IST for time-based option entries. */
   fireAt?: string
+  /** Auto square-off HH:mm IST for remaining option legs (9:20 design). */
+  squareOffAt?: string
+  /** Per-leg stop as % of fill premium. Set only on 9:20 two-leg actors. */
+  slmPercent?: number
+  /** CE+PE (or wings). When set, the actor shorts every symbol independently. */
+  legSymbols?: string[]
   ema?: number
   bufferPercent?: number
   highestHigh?: number
@@ -192,6 +200,8 @@ export type OutcomeAssertion =
   | { type: "closed_market_no_live_entries" }
   | { type: "stale_data_no_order" }
   | { type: "recovered_qty"; symbol: string; quantity: number }
+  | { type: "role_on_symbol"; symbol: string; role: OrderRole; min?: number }
+  | { type: "role_absent_on_symbol"; symbol: string; role: OrderRole }
 
 export type SimulateConfig = {
   scenario: string

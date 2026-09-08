@@ -58,11 +58,12 @@ Treat every change as if it can lose real money. Happy-path tests are not enough
 | Paper ↔ Live (or MOCK ↔ live) while a book is open | Treating the other book as a fill; sending a live flatten that opens Kite size; stacking a second book |
 | New entry while the other provenance still has size | Punching the new book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) |
 | Halt / trading-disabled / strategy-disabled | Blocking flatten/SL when those roles must still work (except strategy **disabled**, which is fully dark) |
+| One-way Nifty after a 9:20 short (one wing SL) | Flattening the leftover wing because the first SL hit. That leftover until ASO **is** the strategy (`*-920-one-way-holds-other-leg`) |
 | Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty |
 
 **New or changed strategy:** add it to `RISK_STRATEGY_KEYS` and Desk → Risk; add a sim **actor** that reuses production `evaluateOrder` (do not invent a second entry rule); add catalog cases for reject-without-phantom-status, paper↔live with an open book, flatten-empty-book, and halt vs flatten. Spec: [docs/strategies/README.md](docs/strategies/README.md). Sim how-to: [docs/TRADING_SIMULATION_GUIDE.md](docs/TRADING_SIMULATION_GUIDE.md).
 
-Replay: `yarn simulate -- --scenario chase-paper-to-live-open` or `straddle-paper-to-live-open` / `strangle-paper-to-live-open` (print seed on failure).
+Replay: `yarn simulate -- --scenario chase-paper-to-live-open` or `straddle-paper-to-live-open` / `strangle-paper-to-live-open` (print seed on failure). 9:20 leftover wing: `straddle-920-one-way-holds-other-leg`.
 
 ## Docs to update when you change behaviour
 

@@ -6,7 +6,7 @@ This desk has two kinds of process:
 
 | Kind | Strategies | Product | Horizon |
 |---|---|---|---|
-| **Intraday** | [ATM straddle](./ATM_STRADDLE.md), [ATM strangle](./ATM_STRANGLE.md) | Index options (MIS by default) | Same session; time square-off |
+| **Intraday (9:20-style)** | [ATM straddle](./ATM_STRADDLE.md), [ATM strangle](./ATM_STRANGLE.md) | Index options (MIS by default) | Delta-neutral entry; **per-leg SL**; leftover wing until time square-off |
 | **Continuous** | [Chase](./CHASE.md) | Index futures (NRML) | Can hold overnight; not a weekday template |
 
 Related (execution, not alpha):
@@ -20,3 +20,5 @@ Changing a spec or adding a strategy also requires the adversarial sim/unit chec
 **Implementation review** (operator rule book vs chase-bot Python vs this app): [IMPLEMENTATION_REVIEW.md](./IMPLEMENTATION_REVIEW.md).
 
 These specs do **not** claim the strategies have edge. A correct implementation of a losing rule is still a losing rule.
+
+A one-way Nifty day that stops one straddle/strangle wing and holds the other until ASO is **specified behavior** (classic 9:20). Do not “fix” it by flattening both legs. See [TRADING_RISK_AUDIT.md](../TRADING_RISK_AUDIT.md) §2.

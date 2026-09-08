@@ -113,11 +113,13 @@ Named Chase: `chase-risk-reject-no-phantom`, `chase-phantom-flatten-no-lots`, `c
 
 Named straddle/strangle: `straddle-risk-reject-no-fill`, `strangle-risk-reject-no-fill`, `*-max-lots-reject`, `*-max-positions-no-entry`, `*-live-blocked`, `*-halted-no-entry`, `*-paper-to-live-open`, `*-live-to-paper-open`.
 
+9:20 two-leg (CE+PE with independent `pricePath`): `straddle-920-one-way-holds-other-leg`, `strangle-920-one-way-holds-other-leg`, `straddle-920-chop-stops-both-legs`, `strangle-920-chop-stops-both-legs`. Replay: `yarn simulate -- --scenario straddle-920-one-way-holds-other-leg`. A one-way tape that leaves PE open until 15:20 is **correct**. Flattening PE because CE stopped would fail those assertions.
+
 ## What sim proves / does not prove
 
 **Proves:** NSE calendar and session bounds, injected clock, `evaluateOrder` risk, simulated fills/faults, in-memory book invariants, Chase *buffer* + Chase window, mock-hours skip for timed entries (`paperRisk: true` ≈ `MOCK_ORDERS=true`).
 
-**Does not prove:** Desk punch UI, `/api/trades_day`, BullMQ workers, Postgres ledger, CE+PE strike/skew in `atmStraddle.ts` / `strangle.ts`, or Chase EMA computed from candles. Actors place a single futures MARKET/SL-M on a synthetic symbol. Price paths (gap, crash, trend) move the tape; they are not a PnL backtest of the live option strategies.
+**Does not prove:** Desk punch UI, `/api/trades_day`, BullMQ workers, Postgres ledger, live CE+PE strike/skew in `atmStraddle.ts` / `strangle.ts`, or Chase EMA computed from candles. Most timed actors still punch a single futures symbol. The `*-920-*` catalog uses two option symbols and per-leg SL/ASO to pin the 9:20 leftover-wing rule; it is still not a PnL backtest of live option premium.
 
 If you expected “Sunday Schedule now on the straddle form,” that is unit + API + E2E. `mock-weekend-entry` only shows the **actor** can punch when paper/mock risk is on.
 
@@ -134,4 +136,4 @@ Simulation tests set `SIMULATION=true` and `MOCK_ORDERS=true`. Do not point `KIT
 5. Missing guardrail
 6. Legitimate strategy behavior — **document it, do not “fix” the strategy to pass**
 
-Known legitimate behavior: ATM straddle skips `isMarketOpen` when `MOCK_ORDERS=true`. Live-hours scenarios set `paperRisk: false` to exercise the real closed-market reject.
+Known legitimate behavior: ATM straddle skips `isMarketOpen` when `MOCK_ORDERS=true`. Live-hours scenarios set `paperRisk: false` to exercise the real closed-market reject. A 9:20 one-way day that stops one wing and holds the other until ASO is **legitimate strategy behavior** — do not flatten both legs to make a “both books should be closed at first SL” test pass.

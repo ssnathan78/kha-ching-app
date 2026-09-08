@@ -6,11 +6,11 @@
 
 ## 1. Strategy overview
 
-Sell (default) or buy a **call and put struck away from spot** on the same index expiry. Same family as the ATM straddle: short volatility by default, **wider break-evens**, **less premium** than ATM.
+Sell (default) or buy a **call and put struck away from spot** on the same index expiry. Same family as the ATM straddle: **delta-neutral at entry**, **wider break-evens**, **less premium** than ATM. Exits follow the same **9:20** rule: independent per-leg SL, leftover wing until auto square-off.
 
-This is a **same-session** MIS structure (NRML allowed but unusual here). It is not Chase and does not hold index futures overnight by design.
+This is a **same-session** MIS structure (NRML allowed but unusual here). It is not Chase and does not hold index futures overnight by design. A leftover **option** wing after one SL is held only until ASO, not overnight.
 
-**Edge hypothesis (operator intent):** OTM wings are rich vs the move you expect today. You are paid for a range; you lose if the index trends hard through a wing.
+**Edge hypothesis:** OTM wings are rich vs the session range you expect. You are paid while the index stays inside the wings. A one-way day is supposed to stop the losing wing and **keep** the winning wing as a directional short until EOD — that is not a software failure.
 
 ---
 
@@ -96,15 +96,17 @@ Signals logged: `STRIKE_SELECT` on Desk → Signals.
 
 ## 6. Exits
 
-Same machinery as the straddle:
+Same machinery as the straddle (see [ATM_STRADDLE.md](./ATM_STRADDLE.md) §6):
 
-- Per-leg `slmPercent` SL-Limit
-- Time square-off
-- `NO_SL` only with auto square-off
+- Per-leg `slmPercent` SL-Limit — **one SL does not flatten the other wing**
+- Time square-off of whatever is still open (leftover 9:20 wing included)
+- `NO_SL` only with auto square-off (rejected without ASO — that would be a true naked hold)
 - Combined / Supertrend / OBS **not implemented** (hidden in the form)
 - Kill **intraday** includes strangle
 
 If max-profit / max-loss flags are on the job, `targetPnL` still uses **points**.
+
+Sim: `strangle-920-one-way-holds-other-leg`, `strangle-920-chop-stops-both-legs`.
 
 Desk → Risk still caps lots, open positions, notional, and live vs paper. Strategy code cannot skip that.
 
@@ -137,3 +139,5 @@ In-app copy: `/help/strangle`.
 **Is inverted the same as a strap/strip?** No. It only swaps which strike is the put vs call. Quantities stay 1:1 lots.
 
 **Can I skip SL?** Only with auto square-off on. Naked NO_SL without a clock flatten is rejected at validation.
+
+**Is a leftover wing after one SL “naked”?** No. Both legs filled; one stop took the losing side; the other is the intended trend hold until ASO. Naked here means **one-legged fill** (rollback) or **NO_SL without ASO**.

@@ -46,6 +46,17 @@ Implemented in `lib/simulation/catalog.ts`. IDs are CLI names (`yarn simulate --
 
 Chase actors use production `chaseTolerances` / `chaseAllowsNewEntry`. They do not invent a different indicator.
 
+### 9:20 option legs (delta-neutral entry)
+
+Two-leg CE+PE actors with independent premium paths. A one-way tape must **not** flatten the leftover wing.
+
+| ID | What it exercises |
+|---|---|
+| `straddle-920-one-way-holds-other-leg` | CE rallies through SL; PE downtrend has **no** SL; PE EXIT at 15:20; both books flat |
+| `strangle-920-one-way-holds-other-leg` | Same 9:20 leftover-wing rule for ATM_STRANGLE |
+| `straddle-920-chop-stops-both-legs` | Both premiums rally through SL; no invented ASO size |
+| `strangle-920-chop-stops-both-legs` | Same chop for ATM_STRANGLE |
+
 ### Portfolio
 
 `multiple-positions`, `multiple-strategies`, `correlated-positions`, `cash-constraint`, `exposure-limit`, `maximum-position`, `portfolio-drawdown`, `simultaneous-signals`
@@ -66,7 +77,7 @@ Process paper (`MOCK_ORDERS=true`): `placeOrder` records ledger, returns `paper:
 
 ## Highly volatile market
 
-Short straddle/strangle: SL and/or point targets and/or ASO should reduce risk. Risk engine does not shrink lots automatically. Notional cap can reject a fat-finger premium × qty.
+Short straddle/strangle (9:20): each wing has its own SL. A one-way day should stop **one** wing and hold the other until ASO. Chop can stop both. Risk engine does not shrink lots automatically. Notional cap can reject a fat-finger premium × qty.
 
 Chase: SL candle or `placeSL` market fallback if already through the stop.
 

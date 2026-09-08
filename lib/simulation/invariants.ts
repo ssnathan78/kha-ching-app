@@ -176,6 +176,19 @@ function check(
       const q = pos?.quantity ?? 0
       return yn(q === assertion.quantity, `recovered ${q} expected ${assertion.quantity}`)
     }
+    case "role_on_symbol": {
+      const n = result.orders.filter(
+        o => o.symbol === assertion.symbol && o.role === assertion.role && o.status !== "REJECTED"
+      ).length
+      const min = assertion.min ?? 1
+      return yn(n >= min, `${assertion.symbol} ${assertion.role} count=${n} min=${min}`)
+    }
+    case "role_absent_on_symbol": {
+      const n = result.orders.filter(
+        o => o.symbol === assertion.symbol && o.role === assertion.role && o.status !== "REJECTED"
+      ).length
+      return yn(n === 0, `${assertion.symbol} unexpected ${assertion.role} count=${n}`)
+    }
     default:
       return { ok: false, message: `unknown assertion ${(assertion as SimOrder).orderId}` }
   }

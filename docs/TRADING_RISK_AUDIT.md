@@ -50,25 +50,25 @@ There is **no backtester** in this repo. There is no implied live edge from hist
 
 ### ATM Straddle
 
-**What it does.** Sell (default) or buy the ATM call and put after the premium skew is inside a configured band. Optional hedge, per-leg SL, max loss/profit in **points**, time square-off.
+**What it does.** Classic **9:20 short straddle**: sell (default) or buy the ATM call and put after the premium skew is inside a configured band. The book is **delta-neutral at entry**. Optional hedge, **independent** per-leg SL, max loss/profit in **points**, time square-off of whatever is still open.
 
-**Assumptions.** Mean-reverting or range-bound implied vol over the session; ATM is a usable hedge pair; both legs fill; skew is a stable enough entry filter; lot size and freeze qty are known.
+**Assumptions.** Mean-reverting or range-bound implied vol *until* a wing is stopped; ATM is a usable hedge pair; both legs fill; skew is a stable enough entry filter; lot size and freeze qty are known. After one SL, the leftover wing is allowed to run until ASO.
 
-**When it can work.** Quiet to moderately volatile sessions, liquid Nifty/BankNifty/FinNifty weeklies/monthlies.
+**When it can work.** Quiet to moderately volatile sessions, and **trend days where one SL hits and the other wing rides** (that leftover is the 9:20 payoff, not a bug). Liquid Nifty/BankNifty/FinNifty weeklies/monthlies.
 
-**When it fails.** Trend days and vol explosions (short vol bleeds on both sides). Gap through SL. One-legged fill (naked short). Skew never converges then `takeTradeIrrespectiveSkew` punches a bad price. Expiry-day gamma.
+**When it fails (real failures).** Vol explosions that tag **both** stops (contained: two SL hits). Gap **through** SL on the losing wing. One-legged fill (true naked short — rollback). Skew never converges then `takeTradeIrrespectiveSkew` punches a bad price. Expiry-day gamma. **Do not list “one-way Nifty, one SL, other wing held” as a failure.**
 
-**Maximum plausible loss (uncontrolled, pre-guardrail).** Short options: theoretically large until hedge/square-off. Practically: lots × lot size × adverse premium move, plus margin calls. A 20-lot Nifty short straddle into a circuit is a large rupee loss even with SL, because SL-M/SL-L can gap.
+**Maximum plausible loss (uncontrolled, pre-guardrail).** Short options: theoretically large until hedge/square-off. Practically: lots × lot size × adverse premium move, plus margin calls. A 20-lot Nifty short straddle into a **circuit that gaps through SL** is a large rupee loss even with stops. A one-way day with working SL is a **designed** one-leg loss plus a leftover-wing P&L until ASO, not an unbounded two-leg bleed.
 
 **Signal issues.** Skew oscillates around the threshold → historically unbounded 2 ms recursion (now capped). No market-data → remote retry or reject. Late LTP → stale ATM strike. Wrong LTP → wrong strike.
 
 ### ATM Strangle
 
-**What it does.** Same family, wings chosen by strike distance, % from ATM, or option price. Previously defaulted to **NO_SL**.
+**What it does.** Same 9:20 family, wings chosen by strike distance, % from ATM, or option price. Previously defaulted to **NO_SL**.
 
-**Assumptions.** The wings are far enough that a session move does not tag both; time square-off or SL exists; OTM liquidity is adequate.
+**Assumptions.** The wings are far enough that a session move does not tag both; time square-off or SL exists; OTM liquidity is adequate. Same leftover-wing rule as the straddle.
 
-**When it fails.** Fast trend tags one wing hard; both wings if vol explodes. NO_SL without ASO was a naked hold to expiry/margin. Low-liquidity far OTM → slip / partial.
+**When it fails.** Fast trend tags one wing hard **and that is the intended SL**; both wings if vol explodes (chop). NO_SL without ASO was a naked hold to expiry/margin. Low-liquidity far OTM → slip / partial.
 
 **Default change.** New forms default to `INDIVIDUAL_LEG_SLM_1X` and rollback-on-broken-leg **true**. Existing saved plans are not rewritten.
 
@@ -84,19 +84,19 @@ There is **no backtester** in this repo. There is no implied live edge from hist
 
 ## 3. Market-condition analysis
 
-| Regime | Straddle / strangle (short) | Chase |
+| Regime | Straddle / strangle (short, 9:20) | Chase |
 |--------|-----------------------------|--------|
-| Strong trend | Both legs lose; SL/ASO must fire | Works if aligned; late entry chases |
-| Sideways | Intended habitat | Whipsaw around EMA |
-| Chop / noisy skew | Over-wait or punch on expiry of skew timer | Rapid SL/entry flips if candles oscillate |
-| Vol spike | Short gamma disaster | SL gap; wide futures spread |
+| Strong trend | **Intended:** losing wing SL; leftover wing held until ASO | Works if aligned; late entry chases |
+| Sideways | Both premiums decay; neither SL required | Whipsaw around EMA |
+| Chop / noisy skew | Both SLs can hit (contained worst case); over-wait or punch on skew timer | Rapid SL/entry flips if candles oscillate |
+| Vol spike | Short gamma; both stops or a gap through SL | SL gap; wide futures spread |
 | Flash crash/rally | SL gapped; hedge may not exist | SL candle logic can miss intra-bar spike |
-| Gap up/down | Open through SL | Overnight futures gap |
+| Gap up/down | Open through SL on a wing | Overnight futures gap |
 | Low liquidity / wide spread | Partial, reject, worse ATM | Futures usually OK; rolls less so |
-| Halt / holiday | `isMarketOpen` + risk `MARKET_CLOSED` | Chase window 09:16–15:29 IST |
+| Halt / holiday | `isMarketOpen` + risk `MARKET_CLOSED`; flatten/SL still allowed when halted | Chase window 09:16–15:29 IST |
 | News | Same as vol spike | Same |
 
-Adversarial “make it lose fast without a software bug”: short a 20-lot straddle into a one-way BankNifty day with NO_SL and ASO off (now rejected at validation), or leave Chase long into a gap-down open.
+Adversarial “make it lose fast without a software bug”: a **gap through SL** on a fat-finger lot size, **NO_SL with ASO off** (now rejected at validation), a **one-legged fill** left without rollback, or Chase long into a gap-down open. A clean one-way BankNifty/Nifty day with working per-leg stops is **not** that list.
 
 ## 4. Technical / execution risks
 
@@ -154,7 +154,7 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 
 ## 8. Final adversarial pass
 
-**Most realistic large loss today:** short multi-lot straddle/strangle into a one-way move, SL gapped, ASO not yet due; or Chase NRML held overnight through a gap.
+**Most realistic large loss today:** short options **gapping through** the losing-wing SL (and/or both SLs in a vol explosion) on a large lot size, with ASO not yet due; a **one-legged fill** if rollback fails; or Chase NRML held overnight through a gap. A one-way session that stops one 9:20 wing and holds the other until 15:20 is **the strategy**, not the large-loss case.
 
 **What happens:** SL/exit/flatten still allowed when the desk is halted. New entries are rejected. There is no daily-loss or drawdown gate on Chase / straddle / strangle.
 

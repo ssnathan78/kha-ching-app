@@ -16,8 +16,8 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "intraday",
         title: "Intraday — Straddle and Strangle",
         body: [
-          "These are same-session option structures. You either punch them now from the strategy page, or the weekday plan schedules them at the saved run time.",
-          "They use MIS by default and can auto square-off before the close. Each weekday holds at most one template per strategy.",
+          "These are same-session option structures (classic 9:20: sell CE and PE together, each with its own stop). You either punch them now from the strategy page, or the weekday plan schedules them at the saved run time.",
+          "They use MIS by default. When one stop hits, the other wing stays until auto square-off. Each weekday holds at most one template per strategy.",
         ],
       },
       {
@@ -91,7 +91,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
   straddle: {
     title: "ATM straddle",
     summary:
-      "Sell (or buy) the at-the-money call and put together. Short volatility by default. Same session.",
+      "Sell (or buy) the at-the-money call and put together. Starts delta-neutral. Same session; 9:20-style per-leg stops.",
     sections: [
       {
         id: "contract",
@@ -120,7 +120,9 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "risk",
         title: "Risk",
         body: [
-          "Fixed SL %: stop-loss on each leg as a percent of entry premium. Combined, Supertrend, and OBS trail exits are not available.",
+          "This is the classic 9:20 short straddle: sell ATM CE and PE together (delta-neutral at entry). Each leg has its own stop as a percent of that fill. Combined, Supertrend, and OBS trail exits are not available.",
+          "When Nifty trends one way, only the losing wing's SL should hit. The other wing stays open on purpose until auto square-off — that leftover is a directional hold until EOD, not a naked miss.",
+          "Chop that tags both stops is the contained worst case (two SL hits). True leftover risk is a one-legged fill (rollback) or a gap through the stop, not the trend leftover.",
           "No SL: time square-off only. Auto square-off must be on.",
           "Hedge: optional far OTM long options to cap tail risk.",
           "Max loss / max profit (points): strategy-level exits in option points, not rupees. The dashboard still shows rupee P&L separately.",
@@ -131,9 +133,9 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "timing",
         title: "Timing",
         body: [
-          "Schedule run: when the weekday job (or punch-now job) should start looking for entry.",
-          "Auto square off: flatten remaining legs at this clock time (Asia/Kolkata).",
-          "Rollback: what to do if a hedge, primary, or exit order breaks.",
+          "Schedule run: when the weekday job (or punch-now job) should start looking for entry. Classic 9:20 uses ~09:20 IST; the same per-leg exits apply at any run time.",
+          "Auto square off: flatten whatever is still open at this clock time (Asia/Kolkata), including a leftover wing after one SL. Default is 15:20.",
+          "Rollback: what to do if a hedge, primary, or exit order breaks. That is the real naked-short case (one leg filled, the other not).",
         ],
       },
     ],
@@ -141,7 +143,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
   strangle: {
     title: "Strangle",
     summary:
-      "Call and put struck away from spot, so you collect (or pay) less premium than an ATM straddle, with a wider break-even.",
+      "Call and put struck away from spot. Same 9:20 per-leg stops as the ATM straddle, with a wider break-even.",
     sections: [
       {
         id: "contract",
@@ -165,14 +167,15 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "risk",
         title: "Risk",
         body: [
-          "Same implemented exits as the straddle: per-leg SL %, or No SL with auto square-off. Combined, Supertrend, and OBS trail exits are not available.",
+          "Same 9:20 exits as the straddle: each wing has its own SL %. A one-way Nifty day stops the losing wing only; the other stays until auto square-off. That leftover is intended.",
+          "No SL is allowed only with auto square-off. Combined, Supertrend, and OBS trail exits are not available.",
         ],
       },
       {
         id: "timing",
         title: "Timing",
         body: [
-          "Same-session schedule and square-off. This is not Chase — it does not hold Nifty futures overnight by design.",
+          "Same-session schedule and square-off. A leftover option wing after one SL is held only until auto square-off, not overnight. This is not Chase.",
         ],
       },
     ],

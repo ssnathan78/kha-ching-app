@@ -39,6 +39,15 @@ describe("help content", () => {
     expect(text).toMatch(/Not halted only blocks new entries/i)
   })
 
+  it("describes 9:20 leftover-wing exits on straddle and strangle", () => {
+    const straddle = HELP_PAGES.straddle.sections.find(s => s.id === "risk")?.body.join(" ") ?? ""
+    const strangle = HELP_PAGES.strangle.sections.find(s => s.id === "risk")?.body.join(" ") ?? ""
+    for (const text of [straddle, strangle]) {
+      expect(text).toMatch(/each (leg|wing)|per-leg/i)
+      expect(text).toMatch(/other (leg|wing)|leftover/i)
+    }
+  })
+
   it("does not present Combined, Supertrend, or OBS as usable straddle exits", () => {
     const risk = HELP_PAGES.straddle.sections.find(s => s.id === "risk")
     expect(risk?.body.join(" ")).toMatch(/not available/i)

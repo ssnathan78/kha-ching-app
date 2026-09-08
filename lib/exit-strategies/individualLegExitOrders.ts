@@ -14,6 +14,7 @@ import logger from "../logger"
 import { convertSlmToSll } from "../slOrders"
 import { attemptBrokerOrders, round } from "../utils"
 import { doDeletePendingOrders, doSquareOffPositions } from "./autoSquareOff"
+import { planIndividualLegStops } from "./individualLegPlan"
 
 async function individualLegExitOrders({
   _kite,
@@ -43,40 +44,28 @@ async function individualLegExitOrders({
   const slOrderType = SL_ORDER_TYPE.SLL
   const kite = _kite || syncGetKiteInstance(user)
 
-  const exitOrders = completedOrders.map(order => {
-    const {
-      tradingsymbol,
-      exchange,
-      transaction_type: transactionType,
-      product,
-      quantity,
-      average_price: avgOrderPrice,
-    } = order
-    // if (isMaxLossEnabled ||isMaxProfitEnabled)
-    // totalOrders.push (order);
-    let exitOrderTransactionType: "BUY" | "SELL"
-    let exitOrderTriggerPrice: number
+  const planned = planIndividualLegStops(
+    completedOrders.map(order => ({
+      tradingsymbol: order.tradingsymbol,
+      transaction_type: order.transaction_type === kite.TRANSACTION_TYPE_SELL ? "SELL" : "BUY",
+      average_price: Number(order.average_price),
+      quantity: order.quantity,
+    })),
+    slmPercent
+  )
 
-    const absoluteSl: number = (slmPercent / 100) * avgOrderPrice!
-    if (transactionType === kite.TRANSACTION_TYPE_SELL) {
-      // original order is short positions
-      // exit orders would be buy orders with prices slmPercent above the avg sell prices
-      exitOrderTransactionType = kite.TRANSACTION_TYPE_BUY
-      exitOrderTriggerPrice = avgOrderPrice! + absoluteSl
-    } else {
-      // original order is long positions
-      exitOrderTransactionType = kite.TRANSACTION_TYPE_SELL
-      exitOrderTriggerPrice = avgOrderPrice! - absoluteSl
-    }
+  const exitOrders = completedOrders.map((order, idx) => {
+    const plan = planned[idx]
+    const { exchange, product } = order
 
     let exitOrder: KiteOrder = {
-      transaction_type: exitOrderTransactionType,
-      trigger_price: exitOrderTriggerPrice,
+      transaction_type: plan.transaction_type,
+      trigger_price: plan.trigger_price,
       order_type: kite.ORDER_TYPE_SLM,
-      quantity: Math.abs(quantity),
+      quantity: plan.quantity,
       tag: orderTag!,
       product,
-      tradingsymbol,
+      tradingsymbol: plan.tradingsymbol,
       exchange,
     }
 

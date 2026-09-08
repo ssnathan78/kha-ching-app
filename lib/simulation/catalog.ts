@@ -55,6 +55,44 @@ function optionActor(kind: OptionKind, extra: Partial<ActorConfig> = {}): ActorC
   }
 }
 
+const NIFTY_CE = { symbol: "NIFTY25SEP25000CE", lotSize: 65, startPrice: 120 }
+const NIFTY_PE = { symbol: "NIFTY25SEP25000PE", lotSize: 65, startPrice: 120 }
+
+function option920(id: string, kind: OptionKind, tape: "trend" | "chop"): SimulateConfig {
+  const slmPercent = 15
+  return day(MON, "09:20", "15:25", {
+    scenario: id,
+    stepMinutes: 5,
+    instruments: [
+      { ...NIFTY_CE, pricePath: "rally" },
+      { ...NIFTY_PE, pricePath: tape === "trend" ? "downtrend" : "rally" },
+    ],
+    actors: [
+      optionActor(kind, {
+        symbol: NIFTY_CE.symbol,
+        lotSize: 65,
+        lots: 1,
+        fireAt: "09:20",
+        squareOffAt: "15:20",
+        slmPercent,
+        legSymbols: [NIFTY_CE.symbol, NIFTY_PE.symbol],
+      }),
+    ],
+    assertions: [
+      { type: "position_qty", symbol: NIFTY_CE.symbol, quantity: 0 },
+      { type: "position_qty", symbol: NIFTY_PE.symbol, quantity: 0 },
+      { type: "role_on_symbol", symbol: NIFTY_CE.symbol, role: "SL", min: 1 },
+      tape === "trend"
+        ? { type: "role_absent_on_symbol", symbol: NIFTY_PE.symbol, role: "SL" }
+        : { type: "role_on_symbol", symbol: NIFTY_PE.symbol, role: "SL", min: 1 },
+      tape === "trend"
+        ? { type: "role_on_symbol", symbol: NIFTY_PE.symbol, role: "EXIT", min: 1 }
+        : { type: "role_absent_on_symbol", symbol: NIFTY_PE.symbol, role: "EXIT" },
+      { type: "role_absent_on_symbol", symbol: NIFTY_CE.symbol, role: "EXIT" },
+    ],
+  })
+}
+
 function withMode(kind: OptionKind, mode: "PAPER" | "LIVE") {
   const key = optionStrategy(kind)
   const base = DEFAULT_STRATS()
@@ -1172,6 +1210,14 @@ const NAMED: Record<string, () => SimulateConfig> = {
     optionModeSwitch("straddle-live-to-paper-open", "straddle", "live-to-paper"),
   "strangle-live-to-paper-open": () =>
     optionModeSwitch("strangle-live-to-paper-open", "strangle", "live-to-paper"),
+  "straddle-920-one-way-holds-other-leg": () =>
+    option920("straddle-920-one-way-holds-other-leg", "straddle", "trend"),
+  "strangle-920-one-way-holds-other-leg": () =>
+    option920("strangle-920-one-way-holds-other-leg", "strangle", "trend"),
+  "straddle-920-chop-stops-both-legs": () =>
+    option920("straddle-920-chop-stops-both-legs", "straddle", "chop"),
+  "strangle-920-chop-stops-both-legs": () =>
+    option920("strangle-920-chop-stops-both-legs", "strangle", "chop"),
   random: () =>
     day(MON, "09:15", "15:30", {
       scenario: "random",

@@ -23,12 +23,12 @@ tradingQueue worker
         │     └─ fills (incremental from Kite snapshot)
         │           └─ position_events → positions → open trades
         │
-        ├─ exitTradingQueue  (per-leg SL)
+        ├─ exitTradingQueue  (per-leg SL — one fill’s stop does not flatten the other wing)
         │     └─ orders purpose=SL, decision action=EXIT
         │
         ├─ targetPnLQueue    (points max-loss → squareOffTag)
         │
-        └─ autoSquareOffQueue (time square-off)
+        └─ autoSquareOffQueue (time square-off of leftover legs, including a 9:20 wing)
               └─ MARKET exits, exit_reason on the trade
 ```
 
@@ -47,7 +47,8 @@ from `generateSignal` / SL updates.
 | **Portfolio** | Sum of attributed positions + last broker margin snapshot. |
 
 One order ≠ one position ≠ one trade. A short straddle is typically **two**
-positions and **two** trades under one job.
+positions and **two** trades under one job. After a 9:20 one-way day, one of
+those positions may close on SL while the other stays open until auto square-off.
 
 ## 3. Order lifecycle
 

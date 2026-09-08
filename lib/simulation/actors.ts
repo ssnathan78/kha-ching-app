@@ -10,6 +10,7 @@ dayjs.extend(timezone)
 
 import { CHASE_STATUS } from "../constants"
 import { isChaseWindow, isSessionOpen } from "../marketCalendar"
+import { moneyToNumber } from "../trading/money"
 import { DEFAULT_RISK_SETTINGS, evaluateOrder, type RiskSettings } from "../trading/riskEngine"
 import type { Side } from "../trading/types"
 import { isMarketOpen } from "../utils"
@@ -22,6 +23,7 @@ export type ActorRuntime = {
   config: ActorConfig
   chaseStatus: string
   fired: boolean
+  legStopped: Record<string, boolean>
 }
 
 type ActorCtx = {
@@ -41,6 +43,7 @@ export function createActorRuntime(config: ActorConfig): ActorRuntime {
     config: { enabled: true, paused: false, ...config },
     chaseStatus: CHASE_STATUS.AWAITING_SIGNAL,
     fired: false,
+    legStopped: {},
   }
 }
 
@@ -182,37 +185,98 @@ function stepChase(
   }
 }
 
+function optionLegs(config: ActorConfig): string[] {
+  return config.legSymbols?.length ? config.legSymbols : [config.symbol]
+}
+
+function parseHmm(value: string): number {
+  const [hh, mm] = value.split(":").map(Number)
+  return hh * 60 + mm
+}
+
 function stepTimeEntry(
   actor: ActorRuntime,
   ctx: ActorCtx,
   signals: SignalEvent[],
   risk: RiskEvent[]
 ): void {
-  if (actor.fired) return
-  const fire = actor.config.fireAt ?? "09:20"
-  const [hh, mm] = fire.split(":").map(Number)
+  const fireMin = parseHmm(actor.config.fireAt ?? "09:20")
+  const slm = actor.config.slmPercent
+  const squareOffAt = actor.config.squareOffAt
+  const legs = optionLegs(actor.config)
   const ist = dayjs(ctx.nowMs).tz(IST_TZ)
   const istMin = ist.hour() * 60 + ist.minute()
-  const fireMin = hh * 60 + mm
-  if (istMin < fireMin) return
 
-  if (!isSessionOpen(ctx.nowMs) && !ctx.paperRisk) return
-  if (ctx.paperRisk && !isSessionOpen(ctx.nowMs) && !process.env.MOCK_ORDERS) return
+  if (!actor.fired) {
+    if (istMin < fireMin) return
+    if (!isSessionOpen(ctx.nowMs) && !ctx.paperRisk) return
+    if (ctx.paperRisk && !isSessionOpen(ctx.nowMs) && !process.env.MOCK_ORDERS) return
 
-  actor.fired = true
-  const qty = actor.config.lots * (actor.config.lotSize ?? 65)
-  signals.push(
-    signal(ctx.nowMs, actor.config, "SELL", "ENTRY", `${actor.config.kind} scheduled entry`)
-  )
-  maybeEnter(
-    ctx,
-    actor.config,
-    "SELL",
-    ctx.market.get(actor.config.symbol)?.last ?? 0,
-    qty,
-    "MARKET",
-    risk
-  )
+    actor.fired = true
+    const qty = actor.config.lots * (actor.config.lotSize ?? 65)
+    for (const symbol of legs) {
+      signals.push(
+        signal(
+          ctx.nowMs,
+          actor.config,
+          "SELL",
+          "ENTRY",
+          `${actor.config.kind} scheduled entry`,
+          symbol
+        )
+      )
+      maybeEnter(
+        ctx,
+        actor.config,
+        "SELL",
+        ctx.market.get(symbol)?.last ?? 0,
+        qty,
+        "MARKET",
+        risk,
+        "ENTRY",
+        symbol
+      )
+    }
+    return
+  }
+
+  if (slm != null) {
+    for (const symbol of legs) {
+      if (actor.legStopped[symbol]) continue
+      const qty = ctx.book.qty(symbol)
+      if (qty >= 0) continue
+      const quote = ctx.market.get(symbol)
+      if (!quote) continue
+      const avg = moneyToNumber(ctx.book.positions.get(symbol)?.averagePrice)
+      if (!Number.isFinite(avg) || avg <= 0) continue
+      if (quote.last < avg * (1 + slm / 100)) continue
+      signals.push(signal(ctx.nowMs, actor.config, "BUY", "SL", "9:20 per-leg stop", symbol))
+      maybeEnter(ctx, actor.config, "BUY", quote.last, Math.abs(qty), "MARKET", risk, "SL", symbol)
+      actor.legStopped[symbol] = true
+    }
+  }
+
+  if (!squareOffAt) return
+  const squareMin = parseHmm(squareOffAt)
+  if (istMin < squareMin) return
+  for (const symbol of legs) {
+    const qty = ctx.book.qty(symbol)
+    if (qty === 0) continue
+    const side = qty < 0 ? "BUY" : "SELL"
+    signals.push(signal(ctx.nowMs, actor.config, side, "EXIT", "auto square-off", symbol))
+    maybeEnter(
+      ctx,
+      actor.config,
+      side,
+      ctx.market.get(symbol)?.last ?? 0,
+      Math.abs(qty),
+      "MARKET",
+      risk,
+      "EXIT",
+      symbol
+    )
+    actor.legStopped[symbol] = true
+  }
 }
 
 function maybeEnter(
@@ -223,22 +287,23 @@ function maybeEnter(
   quantity: number,
   orderType: PlaceOrderInput["orderType"],
   risk: RiskEvent[],
-  role: "ENTRY" | "FLATTEN" | "SL" | "EXIT" = "ENTRY"
+  role: "ENTRY" | "FLATTEN" | "SL" | "EXIT" = "ENTRY",
+  symbol = config.symbol
 ): boolean {
   if (quantity <= 0) return false
-  if (role === "ENTRY" && workingEntry(ctx, config.symbol, side)) return false
+  if (role === "ENTRY" && workingEntry(ctx, symbol, side)) return false
   const other = ctx.paperRisk ? ctx.liveLedger : ctx.paperLedger
-  if (role === "ENTRY" && other.qty(config.symbol) !== 0) {
+  if (role === "ENTRY" && other.qty(symbol) !== 0) {
     risk.push({
       at: ctx.nowMs,
       code: config.strategy === "CHASE" ? "CHASE_OTHER_BOOK" : "OTHER_BOOK",
       message: "Will not punch this book while the other paper/live book is still open",
       strategy: config.strategy,
-      symbol: config.symbol,
+      symbol,
     })
     return false
   }
-  const quote = ctx.market.get(config.symbol)
+  const quote = ctx.market.get(symbol)
   const settings: RiskSettings = {
     ...DEFAULT_RISK_SETTINGS,
     ...ctx.settings,
@@ -247,7 +312,7 @@ function maybeEnter(
   const decision = evaluateOrder(
     {
       role,
-      tradingsymbol: config.symbol,
+      tradingsymbol: symbol,
       quantity,
       side,
       orderType,
@@ -278,13 +343,13 @@ function maybeEnter(
       code: decision.code,
       message: decision.message,
       strategy: config.strategy,
-      symbol: config.symbol,
+      symbol,
     })
     return false
   }
   ctx.broker.placeOrder(
     {
-      symbol: config.symbol,
+      symbol,
       side,
       quantity,
       orderType,
@@ -295,7 +360,7 @@ function maybeEnter(
       role,
       strategy: config.strategy,
       provenance: ctx.paperRisk ? "PAPER" : "LIVE",
-      clientKey: `${config.kind}:${config.symbol}:${side}:${quantity}:${role}:${ctx.nowMs}`,
+      clientKey: `${config.kind}:${symbol}:${side}:${quantity}:${role}:${ctx.nowMs}`,
     },
     ctx.market,
     ctx.nowMs
@@ -308,7 +373,8 @@ function signal(
   config: ActorConfig,
   side: Side,
   kind: string,
-  reason: string
+  reason: string,
+  symbol = config.symbol
 ): SignalEvent {
-  return { at, strategy: config.strategy, symbol: config.symbol, side, kind, reason }
+  return { at, strategy: config.strategy, symbol, side, kind, reason }
 }
