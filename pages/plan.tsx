@@ -641,7 +641,7 @@ const Plan = () => {
         Weekday templates for straddle and strangle only. Chase has its own plan (one config, pause
         and resume).
       </Typography>
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
         <Button component={Link} href="/help/plan" size="small">
           Plan guide
         </Button>
@@ -659,7 +659,7 @@ const Plan = () => {
           setEditing(null)
           syncUrl(next, activeStrategy)
         }}
-        sx={{ mb: 2 }}
+        sx={{ mb: 2, flexWrap: "wrap" }}
       >
         <ToggleButton value="day">By day</ToggleButton>
         <ToggleButton value="strategy">By strategy</ToggleButton>

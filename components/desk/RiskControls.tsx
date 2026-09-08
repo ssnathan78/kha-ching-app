@@ -17,7 +17,9 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import fetchJson from "../../lib/fetchJson"
+import { formatInr } from "../../lib/trading/notional"
 import { RISK_STRATEGY_KEYS, type RiskSettings } from "../../lib/trading/riskEngine"
+import type { DeskSetupNotional } from "../../lib/trading/setupNotional"
 
 const LABELS: Record<(typeof RISK_STRATEGY_KEYS)[number], string> = {
   ATM_STRADDLE: "ATM Straddle",
@@ -41,18 +43,23 @@ function num(value: string, fallback: number) {
   return Number.isFinite(n) ? n : fallback
 }
 
+const fieldSx = { width: { xs: "100%", md: 180 } }
+
 export default function RiskControls({
   settings: initial,
   mockOrders,
+  setups,
   onSaved,
 }: {
   settings: RiskSettings
   mockOrders: boolean
+  setups?: DeskSetupNotional
   onSaved: () => void
 }) {
   const [settings, setSettings] = useState<RiskSettings>(initial)
   const [status, setStatus] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [resettingChase, setResettingChase] = useState(false)
 
   useEffect(() => {
     setSettings(initial)
@@ -143,6 +150,7 @@ export default function RiskControls({
               label="Max qty per order"
               type="number"
               size="small"
+              sx={fieldSx}
               value={settings.maxQtyPerOrder}
               onChange={e =>
                 setSettings({ ...settings, maxQtyPerOrder: num(e.target.value, 1800) })
@@ -152,6 +160,7 @@ export default function RiskControls({
               label="Max notional (₹)"
               type="number"
               size="small"
+              sx={fieldSx}
               value={settings.maxNotionalInr}
               onChange={e =>
                 setSettings({ ...settings, maxNotionalInr: num(e.target.value, 2_000_000) })
@@ -161,6 +170,7 @@ export default function RiskControls({
               label="Max working orders"
               type="number"
               size="small"
+              sx={fieldSx}
               value={settings.maxOpenOrders}
               onChange={e => setSettings({ ...settings, maxOpenOrders: num(e.target.value, 40) })}
             />
@@ -168,17 +178,42 @@ export default function RiskControls({
               label="Max orders / minute"
               type="number"
               size="small"
+              sx={fieldSx}
               value={settings.maxOrdersPerMinute}
               onChange={e =>
                 setSettings({ ...settings, maxOrdersPerMinute: num(e.target.value, 20) })
               }
             />
           </Stack>
+          {setups?.rows?.length ? (
+            <Alert
+              severity={setups.rows.some(row => row.overCap) ? "error" : "info"}
+              sx={{ mt: 1 }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Configured setup vs max notional ₹{formatInr(settings.maxNotionalInr)}
+              </Typography>
+              {setups.rows.map(row => (
+                <Typography key={`${row.source}-${row.label}`} variant="body2">
+                  {row.detail}
+                  {row.overCap
+                    ? " — over cap; orders will be rejected until you raise max notional or cut lots."
+                    : ""}
+                </Typography>
+              ))}
+            </Alert>
+          ) : (
+            <Typography color="text.secondary" variant="body2" sx={{ mt: 1 }}>
+              Chase and today&apos;s weekday plans show here once loaded, so you can compare their
+              notional with this cap before an order is blocked.
+            </Typography>
+          )}
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               label="Stale price max age (sec)"
               type="number"
               size="small"
+              sx={fieldSx}
               value={settings.stalePriceMaxAgeSec}
               onChange={e =>
                 setSettings({ ...settings, stalePriceMaxAgeSec: num(e.target.value, 30) })
@@ -188,6 +223,7 @@ export default function RiskControls({
               label="Minimum LTP"
               type="number"
               size="small"
+              sx={fieldSx}
               value={settings.minLtp}
               onChange={e => setSettings({ ...settings, minLtp: num(e.target.value, 0.05) })}
             />
@@ -201,9 +237,10 @@ export default function RiskControls({
           <Paper key={key} sx={{ p: 2 }}>
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{LABELS[key]}</Typography>
             <Typography color="text.secondary" sx={{ mb: 1 }}>
-              Daily loss and drawdown use this strategy&apos;s book only. A straddle loss does not
-              halt Chase, and the reverse. Strategy enabled is on/off for every order; Not halted
-              only blocks new entries.
+              Lots and open-position caps are per strategy so a straddle punch cannot steal Chase
+              size. Open positions are an execution cap (do not stack another entry when this book
+              already has N rows). Strategy enabled is on/off for every order; Not halted only
+              blocks new entries. Flatten and stop-loss still work.
             </Typography>
             <Stack spacing={1}>
               <FormControlLabel
@@ -229,7 +266,7 @@ export default function RiskControls({
                   />
                 }
               />
-              <FormControl size="small" sx={{ maxWidth: 360 }}>
+              <FormControl size="small" sx={{ width: { xs: "100%", md: 360 }, maxWidth: 360 }}>
                 <InputLabel id={`exec-${key}`}>Execution</InputLabel>
                 <Select
                   labelId={`exec-${key}`}
@@ -255,11 +292,15 @@ export default function RiskControls({
               {row.executionMode === "LIVE" ? (
                 <Alert severity="warning">
                   Live also needs MOCK_ORDERS=false in the process and “Allow live orders” above.
+                  Flatten the open book before switching Paper ↔ Live — save is rejected if that
+                  book is still open. If the ledger is leftover and the broker is flat, use Desk →
+                  Positions → Clear phantom.
                 </Alert>
               ) : (
                 <Typography color="text.secondary" variant="body2">
                   Paper fills the ledger at the order price / LTP. Positions and trade history keep
-                  provenance PAPER (or MOCK if the whole process is MOCK_ORDERS=true).
+                  provenance PAPER (or MOCK if the whole process is MOCK_ORDERS=true). Flatten
+                  before switching to Live; an open paper book is not a live fill.
                 </Typography>
               )}
               <FormControlLabel
@@ -301,6 +342,7 @@ export default function RiskControls({
                   label="Max lots"
                   type="number"
                   size="small"
+                  sx={fieldSx}
                   value={row.maxLots}
                   onChange={e =>
                     setSettings({
@@ -313,39 +355,10 @@ export default function RiskControls({
                   }
                 />
                 <TextField
-                  label="Max daily loss (₹)"
-                  type="number"
-                  size="small"
-                  value={row.maxDailyLossInr}
-                  onChange={e =>
-                    setSettings({
-                      ...settings,
-                      strategies: {
-                        ...settings.strategies,
-                        [key]: { ...row, maxDailyLossInr: num(e.target.value, 50_000) },
-                      },
-                    })
-                  }
-                />
-                <TextField
-                  label="Max drawdown (0–1)"
-                  type="number"
-                  size="small"
-                  value={row.maxDrawdownPct}
-                  onChange={e =>
-                    setSettings({
-                      ...settings,
-                      strategies: {
-                        ...settings.strategies,
-                        [key]: { ...row, maxDrawdownPct: num(e.target.value, 0.15) },
-                      },
-                    })
-                  }
-                />
-                <TextField
                   label="Max open positions"
                   type="number"
                   size="small"
+                  sx={fieldSx}
                   value={row.maxOpenPositions}
                   onChange={e =>
                     setSettings({
@@ -359,6 +372,42 @@ export default function RiskControls({
                 />
               </Stack>
             </Stack>
+            {key === "CHASE" ? (
+              <Box sx={{ mt: 1 }}>
+                <Button
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  disabled={resettingChase}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        "Reset Chase to AWAITING_SIGNAL? This does not flatten an open futures position. Use Square off on Chase or Desk → Positions to get out of the current book."
+                      )
+                    ) {
+                      return
+                    }
+                    setResettingChase(true)
+                    setStatus(null)
+                    try {
+                      await fetchJson("/api/chase-settings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "reset-signal" }),
+                      })
+                      setStatus("Chase signal reset to AWAITING_SIGNAL.")
+                      onSaved()
+                    } catch (e) {
+                      setStatus(e instanceof Error ? e.message : "Could not reset Chase")
+                    } finally {
+                      setResettingChase(false)
+                    }
+                  }}
+                >
+                  {resettingChase ? "Resetting…" : "Reset Chase to fresh signal"}
+                </Button>
+              </Box>
+            ) : null}
           </Paper>
         )
       })}

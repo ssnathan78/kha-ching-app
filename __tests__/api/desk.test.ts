@@ -2,6 +2,8 @@ import alertsHandler from "../../pages/api/desk/alerts"
 import instrumentsHandler from "../../pages/api/desk/instruments"
 import ordersHandler from "../../pages/api/desk/orders"
 import portfolioHandler from "../../pages/api/desk/portfolio"
+import flattenHandler from "../../pages/api/desk/flatten"
+import positionsHandler from "../../pages/api/desk/positions"
 import reconcileHandler from "../../pages/api/desk/reconcile"
 import riskHandler from "../../pages/api/desk/risk"
 import signalsHandler from "../../pages/api/desk/signals"
@@ -15,6 +17,18 @@ describe("desk API auth", () => {
     expect(portfolio.status).toBe(401)
     const recon = await invokeApi(reconcileHandler, { method: "POST", user: null })
     expect(recon.status).toBe(401)
+    const positions = await invokeApi(positionsHandler, {
+      method: "POST",
+      user: null,
+      body: { action: "clear-phantom", positionId: "x", confirm: "CLEAR" },
+    })
+    expect(positions.status).toBe(401)
+    const flatten = await invokeApi(flattenHandler, {
+      method: "POST",
+      user: null,
+      body: { all: true },
+    })
+    expect(flatten.status).toBe(401)
   })
 
   it("rejects anonymous alerts", async () => {
@@ -281,6 +295,89 @@ describeDb("desk API session", () => {
     expect(resumed.status).toBe(200)
     expect((resumed.body as { settings?: { deskHalted?: boolean } }).settings?.deskHalted).toBe(
       false
+    )
+  })
+
+  it("clears a paper leftover without sending a broker order", async () => {
+    const { bookTestFill } = await import("../../lib/trading/ledger")
+    const symbol = `PHAN${Date.now()}`
+    await bookTestFill({
+      tradingsymbol: symbol,
+      side: "SELL",
+      quantity: 65,
+      price: 120,
+      strategy: "ATM_STRADDLE",
+      provenance: "MOCK",
+    })
+    const missingConfirm = await invokeApi(positionsHandler, {
+      method: "POST",
+      user,
+      body: { action: "clear-phantom", positionId: "missing", confirm: "nope" },
+    })
+    expect(missingConfirm.status).toBe(409)
+
+    const rows = await invokeApi(positionsHandler, { method: "GET", user, query: { book: "PAPER" } })
+    expect(rows.status).toBe(200)
+    const positionId =
+      (rows.body as { positions: { id: string; tradingsymbol: string; quantity: number }[] })
+        .positions.find(p => p.tradingsymbol === symbol && p.quantity !== 0)?.id ?? ""
+    expect(positionId).toBeTruthy()
+
+    const cleared = await invokeApi(positionsHandler, {
+      method: "POST",
+      user,
+      body: { action: "clear-phantom", positionId, confirm: "CLEAR" },
+    })
+    expect(cleared.status).toBe(200)
+    expect((cleared.body as { ok?: boolean }).ok).toBe(true)
+  })
+
+  it("squares off an open mock book without halting the desk", async () => {
+    const { bookTestFill } = await import("../../lib/trading/ledger")
+    const symbol = `FLAT${Date.now()}`
+    await bookTestFill({
+      tradingsymbol: symbol,
+      side: "SELL",
+      quantity: 65,
+      price: 120,
+      strategy: "ATM_STRADDLE",
+      provenance: "MOCK",
+    })
+    const rows = await invokeApi(positionsHandler, { method: "GET", user, query: { book: "PAPER" } })
+    const positionId =
+      (rows.body as { positions: { id: string; tradingsymbol: string; quantity: number }[] })
+        .positions.find(p => p.tradingsymbol === symbol && p.quantity !== 0)?.id ?? ""
+    expect(positionId).toBeTruthy()
+
+    const bad = await invokeApi(flattenHandler, {
+      method: "POST",
+      user,
+      body: { all: true, strategy: "CHASE" },
+    })
+    expect(bad.status).toBe(400)
+
+    const beforeRisk = await invokeApi(riskHandler, { method: "GET", user })
+    const haltedBefore = Boolean(
+      (beforeRisk.body as { settings?: { deskHalted?: boolean } }).settings?.deskHalted
+    )
+
+    const flattened = await invokeApi(flattenHandler, {
+      method: "POST",
+      user,
+      body: { positionId },
+    })
+    expect(flattened.status).toBe(200)
+    expect((flattened.body as { flattened?: unknown[] }).flattened?.length).toBe(1)
+
+    const after = await invokeApi(positionsHandler, { method: "GET", user, query: { book: "PAPER" } })
+    const leftover = (
+      after.body as { positions: { tradingsymbol: string; quantity: number; status: string }[] }
+    ).positions.filter(p => p.tradingsymbol === symbol)
+    expect(leftover.filter(p => Number(p.quantity) !== 0)).toEqual([])
+
+    const risk = await invokeApi(riskHandler, { method: "GET", user })
+    expect((risk.body as { settings?: { deskHalted?: boolean } }).settings?.deskHalted).toBe(
+      haltedBefore
     )
   })
 

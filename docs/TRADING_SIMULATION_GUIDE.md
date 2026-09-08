@@ -105,7 +105,13 @@ yarn simulate -- --scenario random --seed 12345
 
 `formatSimReport(result)` prints window, path, signals, orders, fills, per-symbol position, realized/unrealized/fees, risk events, errors, invariant and assertion lines.
 
-`paperRisk: false` evaluates `evaluateOrder` as **live** (market-hours and `LIVE_BLOCKED` apply) while still using the simulated exchange. Default `paperRisk: true` matches `MOCK_ORDERS=true` (paper entries can be placed for execution tests).
+## Live vs paper mid-trade
+
+`riskSchedule` on a scenario can flip `paperRisk` and per-strategy `executionMode` at a timestamp. Paper fills and live fills are tracked separately. A new entry is refused (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) while the other book still has size. Flatten qty is the open book only — never configured lots on a flat book.
+
+Named Chase: `chase-risk-reject-no-phantom`, `chase-phantom-flatten-no-lots`, `chase-max-lots-reject-no-phantom`, `chase-max-positions-no-entry`, `chase-live-blocked`, `chase-halted-no-entry`, `chase-paper-to-live-open`, `chase-live-to-paper-open`.
+
+Named straddle/strangle: `straddle-risk-reject-no-fill`, `strangle-risk-reject-no-fill`, `*-max-lots-reject`, `*-max-positions-no-entry`, `*-live-blocked`, `*-halted-no-entry`, `*-paper-to-live-open`, `*-live-to-paper-open`.
 
 ## What sim proves / does not prove
 

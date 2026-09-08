@@ -123,35 +123,19 @@ export async function computePortfolio(
   }
 }
 
-/** P&L and open count for one strategy only — strategies do not share risk books. */
-export async function computeStrategyRiskBook(
+/** Open ledger rows for one strategy — used to avoid stacking another entry, not as a P&L brake. */
+export async function countOpenStrategyPositions(
   strategy: string,
-  marks?: Map<string, string>,
   book: TradeBookFilter = "ALL"
-): Promise<{ netPnl: number; drawdownPct: number; openPositionCount: number }> {
+): Promise<number> {
   const rows = await db.select().from(positions)
-  let realized = moneyZero()
-  let unrealized = moneyZero()
   let openPositionCount = 0
   for (const pos of rows) {
     if (pos.strategy !== strategy) continue
     if (book !== "ALL" && !provenanceInBook(pos.provenance, book)) continue
-    realized = moneyAdd(realized, moneyFromUnknown(pos.realizedPnl))
-    const mark =
-      marks?.get(`${pos.exchange}:${pos.tradingsymbol}`) ??
-      pos.markPrice ??
-      pos.averageEntryPrice ??
-      "0"
-    unrealized = moneyAdd(
-      unrealized,
-      unrealizedPnl(pos.quantity, moneyFromUnknown(pos.averageEntryPrice), moneyFromUnknown(mark))
-    )
     if (pos.quantity !== 0) openPositionCount += 1
   }
-  const netPnl = Number(moneyToString(moneyAdd(realized, unrealized)))
-  const peak = Math.max(Math.abs(netPnl), 1)
-  const drawdownPct = netPnl < 0 ? Math.abs(netPnl) / peak : 0
-  return { netPnl, drawdownPct, openPositionCount }
+  return openPositionCount
 }
 
 export async function snapshotPortfolio(input?: {

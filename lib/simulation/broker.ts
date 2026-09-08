@@ -27,6 +27,7 @@ export type PlaceOrderInput = {
   tag?: string | null
   role?: OrderRole
   strategy?: string | null
+  provenance?: "PAPER" | "LIVE"
   clientKey?: string
 }
 
@@ -121,6 +122,7 @@ export class SimulatedExchange {
       tag: input.tag ?? null,
       role: input.role ?? "ENTRY",
       strategy: input.strategy ?? null,
+      provenance: input.provenance ?? "PAPER",
       createdAt: nowMs,
       updatedAt: nowMs,
       fills: [],
@@ -238,6 +240,7 @@ export class SimulatedExchange {
       tag: input.tag ?? null,
       role: input.role ?? "ENTRY",
       strategy: input.strategy ?? null,
+      provenance: input.provenance ?? "PAPER",
       rejectReason: reason,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -277,6 +280,7 @@ export class SimulatedExchange {
       price: px,
       fee,
       at: nowMs,
+      provenance: order.provenance ?? "PAPER",
     }
     order.fills.push(fill)
     order.filledQty += fillQty

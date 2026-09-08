@@ -132,7 +132,6 @@ There is **no** per-sector model. Caps are:
 - max lots / qty / notional per order
 - max open positions and working orders
 - max orders / minute
-- daily loss (ledger net P&L) and drawdown %
 - strategy disable list
 - desk halt
 
@@ -141,7 +140,6 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 ## 6. P&L and sizing
 
 - UI rupee P&L (`lib/pnl.ts`) and strategy **points** (`lib/targetPnL.ts`) must stay separate.
-- Daily-loss halt uses **ledger** realized + unrealized, not Kite points.
 - Position size = `lots * lot_size`. Lot size comes from the instrument master at punch time. Wrong lot size → wrong qty (risk qty/notional caps still apply).
 - No leverage slider; MIS vs NRML changes margin and overnight eligibility, not a computed leverage number.
 
@@ -158,7 +156,7 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 
 **Most realistic large loss today:** short multi-lot straddle/strangle into a one-way move, SL gapped, ASO not yet due; or Chase NRML held overnight through a gap.
 
-**What happens:** SL/exit/flatten still allowed when the desk is halted. New entries are rejected. Daily loss / drawdown halt the desk after the damage is already on the book.
+**What happens:** SL/exit/flatten still allowed when the desk is halted. New entries are rejected. There is no daily-loss or drawdown gate on Chase / straddle / strangle.
 
 **What prevents catastrophe:** lot/qty/notional caps, NO_SL+ASO rule, mock/live/paper triple gate, kill + halt, flatten-on-Chase-SL.
 
@@ -166,10 +164,9 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 
 ## 9. Recommended remaining work (not done)
 
-- Paper MARKET fills still use order price / trigger / LTP-if-passed / 0. Callers should pass `ltp` on `placeOrder`.
+- Paper MARKET fills still use order price / trigger / LTP-if-fetched / 0 when Kite LTP is missing. Entries now fetch LTP in `placeOrder` / `remoteOrderSuccessEnsurer` so `MAX_NOTIONAL` applies; flatten/SL/EXIT do not use LTP/notional/lots so an exit cannot be skipped.
 - Route Chase entries through `remoteOrderSuccessEnsurer` (freeze split + ABORT). Chase paper now falls back to the ledger when Kite has no position.
 - Desk portfolio chips and daily sessions still mix paper + live P&L. Trade/position/order tabs filter by book.
-- Freshness on straddle/strangle LTP at punch (risk already supports `ltp`/`ltpAt` when callers pass it).
 - Recon-driven strategy halt on persistent **live** quantity mismatch (paper rows are excluded from Kite compare).
 - Operator runbook for “Kite down, position open”.
 - New strategy keys must be added to `RISK_STRATEGY_KEYS` to appear on Desk → Risk; until then they still default PAPER.

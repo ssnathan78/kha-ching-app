@@ -38,6 +38,28 @@ const CORE = [
   "maximum-position",
   "multiple-strategies",
   "simultaneous-signals",
+  "chase-risk-reject-no-phantom",
+  "chase-paper-to-live-open",
+  "chase-live-to-paper-open",
+  "chase-phantom-flatten-no-lots",
+  "chase-max-lots-reject-no-phantom",
+  "chase-max-positions-no-entry",
+  "chase-live-blocked",
+  "chase-halted-no-entry",
+  "straddle-risk-reject-no-fill",
+  "strangle-risk-reject-no-fill",
+  "straddle-max-lots-reject",
+  "strangle-max-lots-reject",
+  "straddle-max-positions-no-entry",
+  "strangle-max-positions-no-entry",
+  "straddle-live-blocked",
+  "strangle-live-blocked",
+  "straddle-halted-no-entry",
+  "strangle-halted-no-entry",
+  "straddle-paper-to-live-open",
+  "strangle-paper-to-live-open",
+  "straddle-live-to-paper-open",
+  "strangle-live-to-paper-open",
 ]
 
 describe("deterministic scenario catalog", () => {
@@ -145,5 +167,26 @@ describe("end-to-end outcome scenarios", () => {
     if (pos) {
       expect(Number.isFinite(pos.quantity)).toBe(true)
     }
+  })
+
+  it("Scenario K — Chase risk reject does not leave a phantom LONG/SHORT", () => {
+    const result = simulate({ scenario: "chase-risk-reject-no-phantom", seed: 1 })
+    expect(result.assertionResults.every(a => a.ok)).toBe(true)
+    const status = (
+      result.finalState.actorStatus as Array<{ strategy: string; chaseStatus: string }>
+    ).find(a => a.strategy === "CHASE")?.chaseStatus
+    expect(status).toBe("AWAITING_SIGNAL")
+  })
+
+  it("Scenario L — paper→live with an open Chase book does not punch live", () => {
+    const result = simulate({ scenario: "chase-paper-to-live-open", seed: 1 })
+    expect(result.assertionResults.every(a => a.ok)).toBe(true)
+    expect(result.orders.filter(o => o.provenance === "LIVE" && o.role === "ENTRY").length).toBe(0)
+  })
+
+  it("Scenario M — live→paper with an open Chase book does not open a paper book", () => {
+    const result = simulate({ scenario: "chase-live-to-paper-open", seed: 1 })
+    expect(result.assertionResults.every(a => a.ok)).toBe(true)
+    expect(result.orders.filter(o => o.provenance === "PAPER" && o.role === "ENTRY").length).toBe(0)
   })
 })

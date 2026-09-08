@@ -168,6 +168,7 @@ docker compose up -d postgres redis
 yarn install --immutable
 yarn lint
 yarn unit-test
+yarn sim-test           # adversarial catalog; required for strategy/risk/ledger changes
 yarn migrate
 yarn int-test --runInBand --forceExit
 yarn api-test --runInBand --forceExit
@@ -221,6 +222,10 @@ See also [DEVELOPMENT.md](./DEVELOPMENT.md) (mixed host/Docker dev) and [LOCAL.m
 | Live Kite | Real `USER_SESSION` only | Manual smoke |
 
 **Do not** mock business invariants (dual P&amp;L, plan uniqueness, points-based targets).
+
+## Adversarial simulation (live-desk changes)
+
+Strategy, risk, Chase, and ledger-provenance changes must add or extend **named** `lib/simulation/catalog.ts` scenarios that would fail if a phantom book, paper/live mix-up, or flatten-with-lots-on-a-flat-book came back. Agents: follow **Adversarial testing** in [AGENTS.md](../AGENTS.md). Suites: `__tests__/simulation/chaseAdversarial.test.ts`, `__tests__/simulation/strategyAdversarial.test.ts`, CORE list in `__tests__/simulation/scenarios.test.ts`. Run `yarn sim-test`. Every strategy (Chase, ATM straddle, ATM strangle) needs reject-without-fill and paper↔live coverage.
 
 Punch-form orchestration (`jobsForPunch`, `futurePlansToSchedule`) is unit-tested. An empty index list must fail — never `Promise.all([])` plus a dashboard redirect. `/api/trades_day` tests pin **mock + closed = 200** and **live + closed = 409**; do not treat 200-or-409 as success for that matrix. E2E must click **Schedule now** with and without an index ticked.
 

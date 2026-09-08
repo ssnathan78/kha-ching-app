@@ -255,7 +255,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
   const widths = { sm: 600, md: 900, lg: 1140, xl: 1400 }
 
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex" }}>
+    <Box sx={{ minHeight: "100vh", display: "flex", minWidth: 0, overflowX: "clip" }}>
       <AppBar
         position="fixed"
         elevation={0}
@@ -268,18 +268,28 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ minHeight: { xs: 56 }, px: { xs: 1, sm: 2 } }}>
           {compact ? (
             <IconButton
               color="inherit"
               edge="start"
+              aria-label="Open menu"
               onClick={() => setMobileOpen(true)}
               sx={{ mr: 1 }}
             >
               <MenuIcon />
             </IconButton>
           ) : null}
-          <Typography variant="h6" sx={{ flex: 1 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {title || "Kha-Ching"}
           </Typography>
           {user?.isLoggedIn ? (
@@ -291,8 +301,16 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
                   <Avatar>{(user.user_shortname || "K").slice(0, 1)}</Avatar>
                 )
               }
-              label={user.user_name || user.user_id || "Signed in"}
+              label={
+                compact
+                  ? user.user_shortname || user.user_id || "In"
+                  : user.user_name || user.user_id || "Signed in"
+              }
               variant="outlined"
+              sx={{
+                maxWidth: { xs: 132, sm: 240 },
+                "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
+              }}
             />
           ) : (
             <Chip label="Signed out" variant="outlined" />
@@ -332,13 +350,21 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         component="main"
         sx={{
           flex: 1,
-          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          minWidth: 0,
+          width: { xs: "100%", md: `calc(100% - ${DRAWER_WIDTH}px)` },
           pt: 11,
           pb: 6,
-          px: { xs: 2, md: 4 },
+          px: { xs: 1.5, sm: 2, md: 4 },
         }}
       >
-        <Box sx={{ maxWidth: maxWidth === false ? "none" : widths[maxWidth], mx: "auto" }}>
+        <Box
+          sx={{
+            maxWidth: maxWidth === false ? "none" : widths[maxWidth],
+            mx: "auto",
+            minWidth: 0,
+            width: "100%",
+          }}
+        >
           {children}
         </Box>
       </Box>

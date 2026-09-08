@@ -14,7 +14,20 @@ export default withSession(async (req, res) => {
   try {
     if (req.method === "GET") {
       const config = await getChaseSettings()
-      return res.json({ config })
+      try {
+        const { buildDeskSetupNotional } = await import("../../lib/trading/setupNotional")
+        const setups = await buildDeskSetupNotional()
+        return res.json({
+          config,
+          notional: {
+            maxNotionalInr: setups.maxNotionalInr,
+            rows: setups.rows.filter(row => row.source === "CHASE"),
+          },
+        })
+      } catch (e) {
+        logger.warn("[chase-settings] notional preview unavailable", e)
+        return res.json({ config })
+      }
     }
 
     if (req.method === "PUT") {
@@ -33,6 +46,24 @@ export default withSession(async (req, res) => {
     if (req.method === "POST" && req.body?.action === "reset") {
       const config = await saveChaseSettings({ ...CHASE_MASTER_DEFAULTS, paused: false })
       return res.json({ config })
+    }
+
+    if (req.method === "POST" && req.body?.action === "reset-signal") {
+      const { resetChaseSignalState } = await import("../../lib/chaseReset")
+      const instrument =
+        typeof req.body?.instrument === "string" && req.body.instrument.trim()
+          ? req.body.instrument.trim().toUpperCase()
+          : "NIFTY"
+      const result = await resetChaseSignalState({
+        instrument,
+        accessToken: user.session?.access_token,
+        force: Boolean(req.body?.force),
+      })
+      if (!result.ok) {
+        return res.status(409).json(result)
+      }
+      const config = await getChaseSettings()
+      return res.json({ config, reset: result })
     }
 
     return res.status(405).json({ error: "Method not allowed" })

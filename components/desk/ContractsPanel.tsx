@@ -10,8 +10,8 @@ import {
   TableRow,
   Typography,
 } from "@mui/material"
-
 import type { DeskInstrumentSnapshot } from "../../lib/trading/deskInstruments"
+import ScrollTable from "../lib/ScrollTable"
 
 function contract(row: { tradingsymbol: string; expiry: string; lotSize: number } | null) {
   if (!row) return "—"
@@ -49,64 +49,66 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
         </Typography>
       </Paper>
 
-      <Paper>
+      <Paper sx={{ overflow: "hidden" }}>
         <Typography sx={{ fontWeight: 600, p: 2, pb: 0 }}>
           Index contracts {data.source === "KITE_NFO" ? "(from Kite NFO)" : "(static lots only)"}
         </Typography>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Index</TableCell>
-              <TableCell>Chase</TableCell>
-              <TableCell>Front FUT</TableCell>
-              <TableCell>Next FUT</TableCell>
-              <TableCell>Chase entry today</TableCell>
-              <TableCell>Option expiries</TableCell>
-              <TableCell>Lot / step</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {data.indexes.map(row => (
-              <TableRow key={row.index}>
-                <TableCell>
-                  {row.displayName}
-                  <Typography variant="caption" component="p" color="text.secondary">
-                    {row.underlyingSymbol}
-                    {row.hasWeeklyExpiry ? " · weekly options" : ""}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  {row.chaseEnabled ? row.chaseStatus || "on" : "off"}
-                  {row.chaseTradingsymbol ? (
-                    <Typography variant="caption" component="p" color="text.secondary">
-                      book {row.chaseTradingsymbol}
-                      {row.chaseStoploss != null ? ` · SL ${row.chaseStoploss}` : ""}
-                    </Typography>
-                  ) : null}
-                </TableCell>
-                <TableCell>{contract(row.frontFut)}</TableCell>
-                <TableCell>{contract(row.nextFut)}</TableCell>
-                <TableCell>{contract(row.chaseNewEntry)}</TableCell>
-                <TableCell>
-                  {row.optionCurrentExpiry ? `current ${row.optionCurrentExpiry}` : "—"}
-                  {row.optionNextExpiry ? (
-                    <Typography variant="caption" component="p">
-                      next {row.optionNextExpiry}
-                    </Typography>
-                  ) : null}
-                  {row.optionMonthlyExpiry ? (
-                    <Typography variant="caption" component="p">
-                      monthly {row.optionMonthlyExpiry}
-                    </Typography>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  {row.frontFut?.lotSize || row.lotSize} / {row.strikeStepSize}
-                </TableCell>
+        <ScrollTable minWidth={880}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Index</TableCell>
+                <TableCell>Chase</TableCell>
+                <TableCell>Front FUT</TableCell>
+                <TableCell>Next FUT</TableCell>
+                <TableCell>Chase entry today</TableCell>
+                <TableCell>Option expiries</TableCell>
+                <TableCell>Lot / step</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {data.indexes.map(row => (
+                <TableRow key={row.index}>
+                  <TableCell>
+                    {row.displayName}
+                    <Typography variant="caption" component="p" color="text.secondary">
+                      {row.underlyingSymbol}
+                      {row.hasWeeklyExpiry ? " · weekly options" : ""}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {row.chaseEnabled ? row.chaseStatus || "on" : "off"}
+                    {row.chaseTradingsymbol ? (
+                      <Typography variant="caption" component="p" color="text.secondary">
+                        book {row.chaseTradingsymbol}
+                        {row.chaseStoploss != null ? ` · SL ${row.chaseStoploss}` : ""}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>{contract(row.frontFut)}</TableCell>
+                  <TableCell>{contract(row.nextFut)}</TableCell>
+                  <TableCell>{contract(row.chaseNewEntry)}</TableCell>
+                  <TableCell>
+                    {row.optionCurrentExpiry ? `current ${row.optionCurrentExpiry}` : "—"}
+                    {row.optionNextExpiry ? (
+                      <Typography variant="caption" component="p">
+                        next {row.optionNextExpiry}
+                      </Typography>
+                    ) : null}
+                    {row.optionMonthlyExpiry ? (
+                      <Typography variant="caption" component="p">
+                        monthly {row.optionMonthlyExpiry}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    {row.frontFut?.lotSize || row.lotSize} / {row.strikeStepSize}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollTable>
       </Paper>
       <Typography color="text.secondary" variant="body2">
         Straddle and strangle pick CE/PE symbols at punch time from the same NFO dump (current /

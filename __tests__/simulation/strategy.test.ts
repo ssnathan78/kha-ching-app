@@ -67,8 +67,6 @@ describe("strategy-faithful scenarios", () => {
         openOrderCount: 0,
         recentOrderCount: 0,
         pendingDuplicate: false,
-        dailyLossInr: 0,
-        drawdownPct: 0,
       }
     )
     expect(decision.ok).toBe(false)
@@ -88,8 +86,6 @@ describe("strategy-faithful scenarios", () => {
       openOrderCount: 0,
       recentOrderCount: 0,
       pendingDuplicate: false,
-      dailyLossInr: 0,
-      drawdownPct: 0,
     }
     const at = evaluateOrder({ role: "ENTRY", tradingsymbol: "X", quantity: 65, side: "BUY" }, ctx)
     const over = evaluateOrder(

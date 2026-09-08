@@ -6,7 +6,7 @@ import logger from "../logger"
 import { jobExecutions, orders } from "../schema"
 import { isMarketOpen, isMockOrder } from "../utils"
 import { recordAuditEvent } from "./ledger"
-import { computeStrategyRiskBook } from "./portfolio"
+import { countOpenStrategyPositions } from "./portfolio"
 import {
   evaluateOrder,
   inferOrderRole,
@@ -16,7 +16,7 @@ import {
   RiskRejectedError,
   type RiskSettings,
 } from "./riskEngine"
-import { getRiskSettings, haltStrategy } from "./riskSettings"
+import { getRiskSettings } from "./riskSettings"
 import { isSyntheticProvenance } from "./types"
 
 export async function assertOrderAllowed(input: {
@@ -153,15 +153,9 @@ export async function assertOrderAllowed(input: {
     .reduce((n, row) => n + Number(row.n ?? 0), 0)
   const dup = dupRaw.filter(row => sameBook(row.provenance))
 
-  const book = intent.strategy
-    ? await computeStrategyRiskBook(intent.strategy, undefined, paper ? "PAPER" : "LIVE").catch(
-        () => ({
-          netPnl: 0,
-          drawdownPct: 0,
-          openPositionCount: 0,
-        })
-      )
-    : { netPnl: 0, drawdownPct: 0, openPositionCount: 0 }
+  const bookCount = intent.strategy
+    ? await countOpenStrategyPositions(intent.strategy, paper ? "PAPER" : "LIVE").catch(() => 0)
+    : 0
 
   const decision = evaluateOrder(intent, {
     settings,
@@ -170,21 +164,16 @@ export async function assertOrderAllowed(input: {
     isPaper: paper,
     marketOpen: isMarketOpen(),
     jobAborted: job?.userOverride === USER_OVERRIDE.ABORT,
-    openPositionCount: book.openPositionCount,
+    openPositionCount: bookCount,
     openOrderCount: openOrds.length,
     recentOrderCount,
     pendingDuplicate: dup.length > 0 && role === "ENTRY",
-    dailyLossInr: Number.isFinite(book.netPnl) ? book.netPnl : 0,
-    drawdownPct: Number.isFinite(book.drawdownPct) ? book.drawdownPct : 0,
   })
 
   if (!decision.ok) {
     await recordAuditEvent({
       eventType:
-        decision.code === "DESK_HALTED" ||
-        decision.code === "DAILY_LOSS" ||
-        decision.code === "DRAWDOWN" ||
-        decision.code === "STRATEGY_HALTED"
+        decision.code === "DESK_HALTED" || decision.code === "STRATEGY_HALTED"
           ? "RISK_LIMIT_TRIGGERED"
           : "RISK_CHECK_FAILED",
       severity: "ERROR",
@@ -199,9 +188,6 @@ export async function assertOrderAllowed(input: {
       },
       idempotencyKey: `risk:${decision.code}:${intent.tag || ""}:${intent.tradingsymbol}:${intent.quantity}:${nowAt.toISOString().slice(0, 16)}`,
     })
-    if ((decision.code === "DAILY_LOSS" || decision.code === "DRAWDOWN") && intent.strategy) {
-      await haltStrategy(intent.strategy, decision.message, "RISK_ENGINE")
-    }
     throw new RiskRejectedError(decision)
   }
 }

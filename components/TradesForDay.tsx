@@ -1,12 +1,11 @@
 import { DeleteForever, Stop } from "@mui/icons-material"
-import { Box, Button, Grid, Paper, Typography } from "@mui/material"
-import dayjs from "dayjs"
+import { Box, Button, Paper, Typography } from "@mui/material"
 import router from "next/router"
 import type React from "react"
 import { useState } from "react"
 import useSWR, { mutate } from "swr"
 
-import { STRATEGIES_DETAILS, USER_OVERRIDE } from "../lib/constants"
+import { STRATEGIES_DETAILS } from "../lib/constants"
 import { dashboardJobActions, isJobAborted } from "../lib/dashboardJobActions"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import BrokerOrders from "./lib/brokerOrders"
@@ -39,7 +38,8 @@ type TradeJob = {
 
 const WrapperComponent = (props: TradeJob) => {
   const [deleteLoading, setDeleteLoading] = useState(false)
-  const [stopLoading, setStopLoading] = useState(false)
+  const [flattenOpen, setFlattenOpen] = useState(false)
+  const [flattenLoading, setFlattenLoading] = useState(false)
   const { showMessage, SnackbarAlert } = useSnackbar()
 
   const isChase = props.strategy === "CHASE"
@@ -108,28 +108,34 @@ const WrapperComponent = (props: TradeJob) => {
     }
   }
 
-  const handleAbortTrade = async (tradeId: string) => {
+  const handleSquareOff = async () => {
+    setFlattenLoading(true)
     try {
-      await fetchJson("/api/trades_day", {
-        method: "PUT",
+      await fetchJson("/api/desk/flatten", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: tradeId,
-          userOverride: USER_OVERRIDE.ABORT,
-          user_override: USER_OVERRIDE.ABORT,
-        }),
+        body: JSON.stringify(isChase ? { strategy: "CHASE" } : { jobId: props.id }),
       })
+      setFlattenOpen(false)
       await mutate("/api/trades_day")
+      showMessage(
+        isChase
+          ? "Chase squared off. The next signal can still be taken unless you pause or halt."
+          : "Position squared off.",
+        "success"
+      )
     } catch (e) {
       const err = e as FetchJsonError
       showMessage(
-        (err.data as { error?: string })?.error || err.message || "Could not stop job",
+        (err.data as { error?: string })?.error || err.message || "Could not square off",
         "error"
       )
+    } finally {
+      setFlattenLoading(false)
     }
   }
 
-  const { showDelete, showStop } = dashboardJobActions({
+  const { showDelete, showSquareOff } = dashboardJobActions({
     jobWasQueued: Boolean(jobWasQueued),
     isChase,
     jobState: (jobDetails as { current_state?: string })?.current_state,
@@ -145,9 +151,11 @@ const WrapperComponent = (props: TradeJob) => {
         sx={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
           mb: 2,
           minHeight: 36,
+          gap: 1,
+          flexWrap: "wrap",
         }}
       >
         <Typography sx={{ mr: 1 }}>
@@ -169,28 +177,46 @@ const WrapperComponent = (props: TradeJob) => {
               Delete
             </Button>
           ) : null}
-          {showStop ? (
+          {showSquareOff ? (
             <Button
               variant="outlined"
-              color="inherit"
-              loading={stopLoading}
-              onClick={async () => {
-                setStopLoading(true)
-                await handleAbortTrade(props.id)
-                setStopLoading(false)
-              }}
+              color="warning"
+              loading={flattenLoading}
+              onClick={() => setFlattenOpen(true)}
             >
-              <Stop /> Stop
+              <Stop /> Square off
             </Button>
           ) : null}
         </Box>
       </Box>
 
+      <ConfirmDialog
+        open={flattenOpen}
+        title={isChase ? "Square off Chase?" : "Square off this trade?"}
+        message={
+          isChase
+            ? "This flattens the current Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk."
+            : "This flattens the open legs for this job and stops further punches on it. It does not halt the desk. Chase is left running."
+        }
+        confirmLabel="Square off"
+        confirmColor="warning"
+        onConfirm={() => void handleSquareOff()}
+        onCancel={() => setFlattenOpen(false)}
+      />
+
       <Box sx={{ mb: 2 }}>{props.detailsComponent(props.strategy, jobDetails)}</Box>
 
       {jobWasQueued && !isChase ? (
         <Box sx={{ mb: 1 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 1,
+              flexWrap: "wrap",
+            }}
+          >
             <Typography variant="subtitle2">
               Live status —{" "}
               {(jobDetails as { current_state?: string })?.current_state?.toUpperCase() ||
@@ -215,9 +241,11 @@ const WrapperComponent = (props: TradeJob) => {
 }
 
 const KILL_MESSAGES = {
+  flatten:
+    "Flatten every currently open book (straddle, strangle, and Chase). Chase can take the next signal. The desk is not halted.",
   intraday:
-    "Flatten today's straddles and strangles (abort + square-off). Chase Nifty futures stay running.",
-  all: "Flatten today's option jobs AND pause Chase, then square off Chase futures. Use this only if the hedge should come off too.",
+    "Emergency: flatten today's straddles and strangles, abort those jobs, and halt the desk. Chase stays running.",
+  all: "Emergency: flatten every open book, pause Chase, and halt the desk. Use this only if the hedge should come off too.",
 } as const
 
 const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
@@ -225,21 +253,29 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
   const [loading, setLoading] = useState(false)
   const { showMessage, SnackbarAlert } = useSnackbar()
 
-  const runKill = async () => {
+  const runAction = async () => {
     if (!pendingScope) return
     setLoading(true)
     try {
-      await fetchJson("/api/kill-desk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: pendingScope }),
-      })
+      if (pendingScope === "flatten") {
+        await fetchJson("/api/desk/flatten", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ all: true }),
+        })
+      } else {
+        await fetchJson("/api/kill-desk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: pendingScope }),
+        })
+      }
       setPendingScope(null)
       await onDone()
     } catch (e) {
       const err = e as FetchJsonError
       showMessage(
-        (err.data as { error?: string })?.error || err.message || "Could not run kill",
+        (err.data as { error?: string })?.error || err.message || "Could not complete the action",
         "error"
       )
     } finally {
@@ -252,11 +288,17 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
       {SnackbarAlert}
       <ConfirmDialog
         open={Boolean(pendingScope)}
-        title={pendingScope === "all" ? "Kill all jobs?" : "Kill intraday jobs?"}
+        title={
+          pendingScope === "flatten"
+            ? "Square off all open books?"
+            : pendingScope === "all"
+              ? "Kill all jobs?"
+              : "Kill intraday jobs?"
+        }
         message={pendingScope ? KILL_MESSAGES[pendingScope] : ""}
         confirmColor={pendingScope === "all" ? "error" : "warning"}
         confirmLabel="Proceed"
-        onConfirm={runKill}
+        onConfirm={runAction}
         onCancel={() => setPendingScope(null)}
       />
       <Box
@@ -269,6 +311,14 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
           flexWrap: "wrap",
         }}
       >
+        <Button
+          color="warning"
+          variant="contained"
+          loading={loading}
+          onClick={() => setPendingScope("flatten")}
+        >
+          <Stop /> Square off all open
+        </Button>
         <Button
           color="warning"
           variant="outlined"

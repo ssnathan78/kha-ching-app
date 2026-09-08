@@ -140,7 +140,9 @@ const Dashboard = () => {
         <Tabs
           value={value}
           onChange={handleChange}
-          variant="fullWidth"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           aria-label="dashboard sections"
         >
           <Tab label="Today" />

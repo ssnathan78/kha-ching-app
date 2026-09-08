@@ -42,7 +42,7 @@ Implemented in `lib/simulation/catalog.ts`. IDs are CLI names (`yarn simulate --
 
 ### Strategy
 
-`normal-signal`, `repeated-signal`, `signal-oscillation`, `conflicting-signals`, `entry-exit-collision`, `strategy-disabled`, `strategy-paused`, `risk-limit-reached`, `drawdown-reached`, `chase-gap-down` (Chase actor across an overnight gap; book qty stays consistent, not a PnL check)
+`normal-signal`, `repeated-signal`, `signal-oscillation`, `conflicting-signals`, `entry-exit-collision`, `strategy-disabled`, `strategy-paused`, `risk-limit-reached`, `drawdown-reached` (catalog id kept; asserts `MAX_POSITIONS`), `chase-gap-down` (Chase actor across an overnight gap; book qty stays consistent, not a PnL check), `chase-risk-reject-no-phantom`, `chase-phantom-flatten-no-lots`, `chase-max-lots-reject-no-phantom`, `chase-max-positions-no-entry`, `chase-live-blocked`, `chase-halted-no-entry`, `chase-paper-to-live-open`, `chase-live-to-paper-open`
 
 Chase actors use production `chaseTolerances` / `chaseAllowsNewEntry`. They do not invent a different indicator.
 
@@ -76,7 +76,7 @@ Chase can flip. Rate cap (20/min) and duplicate working-order check limit churn 
 
 ## Sudden crash / rally
 
-Stops can gap. Flatten role remains allowed after desk halt. Daily-loss halt fires **after** mark-to-market, not before the gap.
+Stops can gap. Flatten role remains allowed after desk halt. There is no daily-loss or drawdown gate.
 
 ## Gap through stop
 
@@ -116,7 +116,7 @@ Workers restart with the process. Jobs in BullMQ retry. `placeOrder` is not retr
 
 ## Strategy drawdown / portfolio drawdown
 
-Ledger drawdown % ≥ 15% or daily net ≤ −50k INR → reject entries + persist halt. Does not auto-flatten. Kill desk is the flatten path.
+Chase / straddle / strangle are **not** gated on daily P&L or drawdown. `portfolio-drawdown` is a crash price-path scenario only. `drawdown-reached` asserts the open-position cap (`MAX_POSITIONS`). Kill desk is the flatten path.
 
 ## Kill switch
 

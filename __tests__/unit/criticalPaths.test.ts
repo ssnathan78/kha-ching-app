@@ -40,6 +40,15 @@ jest.mock("../../lib/exit-strategies/autoSquareOff", () => ({
   squareOffTag: jest.fn().mockResolvedValue(undefined),
 }))
 
+jest.mock("../../lib/flattenOpen", () => ({
+  flattenOpenPositions: jest.fn().mockResolvedValue({
+    flattened: [],
+    skipped: [],
+    abortedJobs: [],
+    chaseReset: [],
+  }),
+}))
+
 describe("killDesk runDeskKill", () => {
   it("intraday scope does not pause chase", async () => {
     const { runDeskKill } = await import("../../lib/killDesk")

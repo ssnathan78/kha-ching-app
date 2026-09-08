@@ -103,6 +103,7 @@ export type FillEvent = {
   price: number
   fee: number
   at: number
+  provenance?: "PAPER" | "LIVE"
 }
 
 export type SimOrder = {
@@ -120,6 +121,7 @@ export type SimOrder = {
   tag: string | null
   role: OrderRole
   strategy: string | null
+  provenance?: "PAPER" | "LIVE"
   rejectReason?: string
   createdAt: number
   updatedAt: number
@@ -157,6 +159,8 @@ export type ActorConfig = {
   strategy: string
   symbol: string
   lots: number
+  /** Contract size. Defaults to Nifty 65 when omitted. */
+  lotSize?: number
   enabled?: boolean
   paused?: boolean
   /** Fire time HH:mm IST for time-based option entries. */
@@ -214,6 +218,8 @@ export type SimulateConfig = {
   assertions?: OutcomeAssertion[]
   restartAt?: string
   allowOrdersWhenClosed?: boolean
+  /** Flip Desk risk / paper vs live mid-run (ISO-like `YYYY-MM-DD HH:mm` IST). */
+  riskSchedule?: Array<{ at: string; risk?: Partial<RiskSettings>; paperRisk?: boolean }>
 }
 
 export type PositionSnapshot = {

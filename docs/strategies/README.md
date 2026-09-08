@@ -15,6 +15,8 @@ Related (execution, not alpha):
 - Risk that cannot be bypassed by strategy code: [TRADING_RISK_AUDIT.md](../TRADING_RISK_AUDIT.md)
 - Job → fill path: [TRADING_LIFECYCLE.md](../TRADING_LIFECYCLE.md)
 
+Changing a spec or adding a strategy also requires the adversarial sim/unit checklist in [AGENTS.md](../../AGENTS.md) (phantom status, paper↔live books, flatten-on-empty-book).
+
 **Implementation review** (operator rule book vs chase-bot Python vs this app): [IMPLEMENTATION_REVIEW.md](./IMPLEMENTATION_REVIEW.md).
 
 These specs do **not** claim the strategies have edge. A correct implementation of a losing rule is still a losing rule.

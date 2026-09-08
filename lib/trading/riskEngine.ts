@@ -12,8 +12,6 @@ export type StrategyRiskLimits = {
   /** PAPER uses live quotes and writes the ledger; it never calls Kite placeOrder. */
   executionMode: ExecutionMode
   maxLots: number
-  maxDailyLossInr: number
-  maxDrawdownPct: number
   maxOpenPositions: number
 }
 
@@ -23,8 +21,6 @@ export const DEFAULT_STRATEGY_LIMITS: StrategyRiskLimits = {
   haltReason: null,
   executionMode: "PAPER",
   maxLots: 20,
-  maxDailyLossInr: 50_000,
-  maxDrawdownPct: 0.15,
   maxOpenPositions: 12,
 }
 
@@ -116,8 +112,6 @@ export type RiskContext = {
   openOrderCount: number
   recentOrderCount: number
   pendingDuplicate: boolean
-  dailyLossInr: number
-  drawdownPct: number
 }
 
 export type RiskDecision = { ok: true } | { ok: false; code: string; message: string }
@@ -161,7 +155,7 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
     return fail("INVALID_QTY", "Order quantity must be a positive integer")
   }
 
-  if (!ctx.isMock && !ctx.isPaper && !settings.allowLiveOrders) {
+  if (isEntry(intent.role) && !ctx.isMock && !ctx.isPaper && !settings.allowLiveOrders) {
     return fail(
       "LIVE_BLOCKED",
       "Live broker orders are off. Set this strategy to Live on Desk → Risk, enable “Allow live orders”, and run without MOCK_ORDERS."
@@ -198,7 +192,7 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
     return fail("MARKET_CLOSED", "Market is closed (Desk → Risk can turn this check off)")
   }
 
-  if (intent.ltp != null) {
+  if (isEntry(intent.role) && intent.ltp != null) {
     if (!Number.isFinite(intent.ltp) || intent.ltp < settings.minLtp) {
       return fail(
         "INVALID_PRICE",
@@ -220,21 +214,23 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
     return fail("MAX_QTY", `Quantity ${qty} exceeds Desk max qty ${settings.maxQtyPerOrder}`)
   }
 
-  if (intent.lots != null && intent.lots > strat.maxLots) {
+  if (isEntry(intent.role) && intent.lots != null && intent.lots > strat.maxLots) {
     return fail(
       "MAX_LOTS",
       `Lots ${intent.lots} exceed ${intent.strategy || "strategy"} max ${strat.maxLots}`
     )
   }
 
-  const px = intent.price || intent.triggerPrice || intent.ltp
-  if (px && px > 0) {
-    const notional = qty * px
-    if (notional > settings.maxNotionalInr) {
-      return fail(
-        "MAX_NOTIONAL",
-        `Notional ${notional} exceeds Desk max ${settings.maxNotionalInr}`
-      )
+  if (isEntry(intent.role)) {
+    const px = intent.price || intent.triggerPrice || intent.ltp
+    if (px && px > 0) {
+      const notional = qty * px
+      if (notional > settings.maxNotionalInr) {
+        return fail(
+          "MAX_NOTIONAL",
+          `Notional ${notional} exceeds Desk max ${settings.maxNotionalInr}`
+        )
+      }
     }
   }
 
@@ -251,20 +247,6 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
 
   if (isEntry(intent.role) && ctx.recentOrderCount >= settings.maxOrdersPerMinute) {
     return fail("ORDER_RATE", `More than ${settings.maxOrdersPerMinute} orders in the last minute`)
-  }
-
-  if (isEntry(intent.role) && ctx.dailyLossInr <= -Math.abs(strat.maxDailyLossInr)) {
-    return fail(
-      "DAILY_LOSS",
-      `Daily loss ${ctx.dailyLossInr} for ${intent.strategy || "strategy"} breached ${strat.maxDailyLossInr}`
-    )
-  }
-
-  if (isEntry(intent.role) && ctx.drawdownPct >= strat.maxDrawdownPct) {
-    return fail(
-      "DRAWDOWN",
-      `Drawdown ${(ctx.drawdownPct * 100).toFixed(1)}% for ${intent.strategy || "strategy"} breached ${(strat.maxDrawdownPct * 100).toFixed(1)}%`
-    )
   }
 
   if (isEntry(intent.role) && ctx.pendingDuplicate) {

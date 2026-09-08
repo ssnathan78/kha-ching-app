@@ -18,7 +18,7 @@ File: `__tests__/unit/trading/riskEngine.test.ts`
 | LTP 0 | `INVALID_PRICE` |
 | Qty 2000 / lots 21 / huge notional | cap codes |
 | 12 open positions / 40 working / 20 per minute | caps |
-| Daily loss −50k / drawdown 15% | halt codes; flatten still ok |
+| Flatten still ok at the open-position cap | flatten not gated |
 | Duplicate working entry | `DUPLICATE` |
 | Job aborted / strategy disabled / market closed | rejected |
 
@@ -39,7 +39,28 @@ File: `__tests__/unit/strategyValidation.test.ts`
 - `atmStraddle.test.ts` — skew timeout reject; `takeTradeIrrespectiveSkew`; NO_SL skips exit queue; margin fail
 - `processExitJob.test.ts` — NO_SL places no exit orders
 - `chaseSignal.test.ts` — mocked Kite; does not bypass `placeOrder` in production
+- `chaseFill.test.ts` — paper vs live book qty, flatten qty, Paper↔Live switch guard, no status flip on `signal_only` / `other_book_open`
 - Ledger: `__tests__/unit/trading/{money,accounting,stateMachine,invariants}.test.ts`
+
+## Simulation — adversarial sequences (all strategies)
+
+Files: `__tests__/simulation/chaseAdversarial.test.ts`, `__tests__/simulation/strategyAdversarial.test.ts`, CORE in `scenarios.test.ts`. Catalog: `lib/simulation/catalog.ts`.
+
+| Scenario | Asserts |
+|----------|---------|
+| `chase-risk-reject-no-phantom` | `MAX_NOTIONAL`, empty book, status `AWAITING_SIGNAL` |
+| `chase-phantom-flatten-no-lots` | No flatten/SL on a rejected entry (lots are not a fallback) |
+| `chase-max-lots-reject-no-phantom` | `MAX_LOTS`, empty book |
+| `chase-max-positions-no-entry` | `MAX_POSITIONS`, empty book |
+| `chase-live-blocked` | `LIVE_BLOCKED`, empty book |
+| `chase-halted-no-entry` | `STRATEGY_HALTED`, empty book |
+| `chase-paper-to-live-open` | `CHASE_OTHER_BOOK`, live qty 0, no live ENTRY |
+| `chase-live-to-paper-open` | `CHASE_OTHER_BOOK`, paper qty 0, no paper ENTRY |
+| `straddle-*-` / `strangle-*-` (reject, lots, positions, live-blocked, halted) | Matching risk code, empty book, no flatten |
+| `straddle-paper-to-live-open` / `strangle-paper-to-live-open` | `OTHER_BOOK`, live qty 0, paper lot remains |
+| `straddle-live-to-paper-open` / `strangle-live-to-paper-open` | `OTHER_BOOK`, paper qty 0, live book remains |
+
+`yarn sim-test` is required after strategy/risk/ledger changes. See [AGENTS.md](../AGENTS.md#adversarial-testing-required--this-is-a-live-desk).
 
 ## API
 
@@ -51,6 +72,7 @@ File: `__tests__/api/desk.test.ts`
 | POST halt / resume | `deskHalted` persists |
 | GET `/api/desk/alerts` authenticated | `{ alerts, errorCount, warnCount }` |
 | GET anonymous | 401 |
+| POST `/api/desk/positions` `clear-phantom` | paper leftover zeros; live with Kite size is 409 |
 | Existing portfolio/orders auth | unchanged |
 
 Kill-desk contract tests remain in `__tests__/api/kill-desk.test.ts`.
@@ -71,12 +93,12 @@ docker run --rm --network kha-ching-app_default -v /c/senthil/kha-ching-app:/app
   -e MOCK_ORDERS=true -e TZ=Asia/Kolkata \
   -e SECRET_COOKIE_PASSWORD=test-secret-cookie-password-min-32-chars \
   -e KITE_API_KEY=test_key -e KITE_API_SECRET=test_secret \
-  node:22-bookworm bash -c "corepack enable && yarn migrate && yarn unit-test && yarn int-test && yarn api-test"
+  node:22-bookworm bash -c "corepack enable && yarn migrate && yarn unit-test && yarn sim-test && yarn int-test && yarn api-test"
 ```
 
-If the host install is native Windows: `docker compose up -d postgres redis`, then `yarn migrate && yarn unit-test && yarn int-test && yarn api-test`.
+If the host install is native Windows: `docker compose up -d postgres redis`, then `yarn migrate && yarn unit-test && yarn sim-test && yarn int-test && yarn api-test`.
 
-CI: lint → unit-test → migrate → int-test → api-test → build → e2e.
+CI: lint → unit-test → sim-test → migrate → int-test → api-test → build → e2e.
 
 ## Gaps (not yet automated)
 

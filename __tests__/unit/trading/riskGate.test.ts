@@ -34,8 +34,6 @@ function ctx(overrides: Partial<RiskContext> = {}): RiskContext {
     openOrderCount: 0,
     recentOrderCount: 0,
     pendingDuplicate: false,
-    dailyLossInr: 0,
-    drawdownPct: 0,
     ...overrides,
   }
 }

@@ -99,8 +99,17 @@ export function provenanceInBook(
 }
 
 /** Missing provenance is paper, never live. Live must be set explicitly. */
-export function ledgerProvenance(value?: Provenance | null): Provenance {
-  return value ?? "PAPER"
+export function ledgerProvenance(value?: string | null): Provenance {
+  if (
+    value === "LIVE" ||
+    value === "MIGRATED" ||
+    value === "RECONCILED" ||
+    value === "MOCK" ||
+    value === "PAPER"
+  ) {
+    return value
+  }
+  return "PAPER"
 }
 
 export type FeeType = "BROKERAGE" | "EXCHANGE" | "STT" | "GST" | "STAMP" | "OTHER"

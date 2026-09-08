@@ -30,6 +30,7 @@ import RiskControls from "../components/desk/RiskControls"
 import SignalsPanel from "../components/desk/SignalsPanel"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
+import ScrollTable from "../components/lib/ScrollTable"
 import fetchJson from "../lib/fetchJson"
 import type { FeedClearMode, FeedPeriod } from "../lib/trading/feedWindow"
 import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
@@ -40,6 +41,11 @@ function money(value: string | number | null | undefined) {
   const n = Number(value)
   if (!Number.isFinite(n)) return String(value)
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 })
+}
+
+const filterFieldSx = {
+  minWidth: { xs: "100%", sm: 160 },
+  width: { xs: "100%", sm: "auto" },
 }
 
 function istYmd(d = new Date()) {
@@ -99,6 +105,19 @@ export default function DeskPage() {
   const [reconciling, setReconciling] = useState(false)
   const [reconMsg, setReconMsg] = useState<string | null>(null)
   const [resumeOpen, setResumeOpen] = useState(false)
+  const [phantomClear, setPhantomClear] = useState<{
+    id: string
+    symbol: string
+    qty: number
+    book: string
+  } | null>(null)
+  const [flattenRow, setFlattenRow] = useState<{
+    id: string
+    symbol: string
+    qty: number
+    book: string
+    strategy: string
+  } | null>(null)
   const [riskBusy, setRiskBusy] = useState(false)
   const [tradeBook, setTradeBook] = useState<"ALL" | "PAPER" | "LIVE">("ALL")
   const [tradePreset, setTradePreset] = useState<"all" | "month" | "quarter" | "year" | "custom">(
@@ -119,7 +138,9 @@ export default function DeskPage() {
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR(
     user?.isLoggedIn ? `/api/desk/portfolio${bookQs}` : null
   )
-  const { data: positionData } = useSWR(user?.isLoggedIn ? `/api/desk/positions${bookQs}` : null)
+  const { data: positionData, mutate: mutatePositions } = useSWR(
+    user?.isLoggedIn ? `/api/desk/positions${bookQs}` : null
+  )
   const { data: orderData } = useSWR(user?.isLoggedIn ? `/api/desk/orders${bookQs}` : null)
   const tradeRange =
     tradePreset === "custom"
@@ -196,6 +217,7 @@ export default function DeskPage() {
                 variant="contained"
                 disabled={riskBusy}
                 onClick={() => setResumeOpen(true)}
+                sx={{ width: { xs: "100%", md: "auto" } }}
               >
                 Resume trading
               </Button>
@@ -223,6 +245,7 @@ export default function DeskPage() {
                     setRiskBusy(false)
                   }
                 }}
+                sx={{ width: { xs: "100%", md: "auto" } }}
               >
                 Halt new entries
               </Button>
@@ -232,6 +255,7 @@ export default function DeskPage() {
         <Button
           variant="outlined"
           disabled={reconciling}
+          sx={{ width: { xs: "100%", md: "auto" } }}
           onClick={async () => {
             setReconciling(true)
             setReconMsg(null)
@@ -298,6 +322,68 @@ export default function DeskPage() {
         }}
       />
       <ConfirmDialog
+        open={Boolean(flattenRow)}
+        title="Square off this position?"
+        message={
+          flattenRow
+            ? `This sends a flatten for ${flattenRow.symbol} qty ${flattenRow.qty} (${flattenRow.book}${flattenRow.strategy ? ` · ${flattenRow.strategy}` : ""}). Chase can still take the next signal. The desk is not halted. Use Clear phantom only if the broker is already flat and the ledger is leftover.`
+            : ""
+        }
+        confirmLabel="Square off"
+        confirmColor="warning"
+        onCancel={() => setFlattenRow(null)}
+        onConfirm={async () => {
+          if (!flattenRow) return
+          try {
+            await fetchJson("/api/desk/flatten", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ positionId: flattenRow.id }),
+            })
+            setReconMsg(`Squared off ${flattenRow.symbol}`)
+            await mutatePositions()
+            await mutatePortfolio()
+          } catch (e) {
+            setReconMsg(e instanceof Error ? e.message : "Square off failed")
+          } finally {
+            setFlattenRow(null)
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(phantomClear)}
+        title="Clear phantom ledger row?"
+        message={
+          phantomClear
+            ? `This zeros ${phantomClear.symbol} qty ${phantomClear.qty} (${phantomClear.book}) in the app ledger. It does not send a Kite order. Use it when the book is leftover paper or a phantom live row. If Kite still has size, flatten or Kill first.`
+            : ""
+        }
+        confirmLabel="Clear phantom"
+        confirmColor="warning"
+        onCancel={() => setPhantomClear(null)}
+        onConfirm={async () => {
+          if (!phantomClear) return
+          try {
+            await fetchJson("/api/desk/positions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "clear-phantom",
+                positionId: phantomClear.id,
+                confirm: "CLEAR",
+              }),
+            })
+            setReconMsg(`Cleared phantom ${phantomClear.symbol}`)
+            await mutatePositions()
+            await mutatePortfolio()
+          } catch (e) {
+            setReconMsg(e instanceof Error ? e.message : "Clear phantom failed")
+          } finally {
+            setPhantomClear(null)
+          }
+        }}
+      />
+      <ConfirmDialog
         open={resumeOpen}
         title="Resume trading?"
         message="This clears the desk halt and allows new entries again. Flatten and stop-loss orders were still allowed while halted. Resume only after you have reviewed positions."
@@ -356,6 +442,8 @@ export default function DeskPage() {
           value={DESK_TABS.indexOf(tab)}
           onChange={(_, v) => setTab(DESK_TABS[v] ?? "positions")}
           variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
         >
           <Tab label="Positions" />
           <Tab label="Orders" />
@@ -374,7 +462,7 @@ export default function DeskPage() {
 
       {tab === "positions" || tab === "orders" || tab === "trades" || tab === "decisions" ? (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
+          <FormControl size="small" sx={filterFieldSx}>
             <InputLabel>Book</InputLabel>
             <Select
               label="Book"
@@ -388,7 +476,7 @@ export default function DeskPage() {
           </FormControl>
           {tab === "trades" ? (
             <>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={filterFieldSx}>
                 <InputLabel>Period</InputLabel>
                 <Select
                   label="Period"
@@ -411,6 +499,7 @@ export default function DeskPage() {
                     slotProps={{ inputLabel: { shrink: true } }}
                     value={tradeFrom}
                     onChange={e => setTradeFrom(e.target.value)}
+                    sx={filterFieldSx}
                   />
                   <TextField
                     size="small"
@@ -419,6 +508,7 @@ export default function DeskPage() {
                     slotProps={{ inputLabel: { shrink: true } }}
                     value={tradeTo}
                     onChange={e => setTradeTo(e.target.value)}
+                    sx={filterFieldSx}
                   />
                 </>
               ) : null}
@@ -428,85 +518,138 @@ export default function DeskPage() {
       ) : null}
 
       {tab === "positions" ? (
-        <Paper>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Symbol</TableCell>
-                <TableCell>Product</TableCell>
-                <TableCell>Strategy</TableCell>
-                <TableCell>Book</TableCell>
-                <TableCell align="right">Qty</TableCell>
-                <TableCell align="right">Avg</TableCell>
-                <TableCell align="right">Mark</TableCell>
-                <TableCell align="right">Unrealized</TableCell>
-                <TableCell align="right">Realized</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {positions.map((row: Record<string, unknown>) => (
-                <TableRow key={String(row.id)}>
-                  <TableCell>{String(row.tradingsymbol)}</TableCell>
-                  <TableCell>{String(row.product || "—")}</TableCell>
-                  <TableCell>{String(row.strategy || "—")}</TableCell>
-                  <TableCell>{String(row.provenance || "—")}</TableCell>
-                  <TableCell align="right">{String(row.quantity)}</TableCell>
-                  <TableCell align="right">{money(row.averageEntryPrice as string)}</TableCell>
-                  <TableCell align="right">{money(row.markPrice as string)}</TableCell>
-                  <TableCell align="right">{money(row.unrealizedPnl as string)}</TableCell>
-                  <TableCell align="right">{money(row.realizedPnl as string)}</TableCell>
-                  <TableCell>{String(row.status)}</TableCell>
+        <Paper sx={{ overflow: "hidden" }}>
+          <ScrollTable minWidth={880}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Symbol</TableCell>
+                  <TableCell>Product</TableCell>
+                  <TableCell>Strategy</TableCell>
+                  <TableCell>Book</TableCell>
+                  <TableCell align="right">Qty</TableCell>
+                  <TableCell align="right">Avg</TableCell>
+                  <TableCell align="right">Mark</TableCell>
+                  <TableCell align="right">Unrealized</TableCell>
+                  <TableCell align="right">Realized</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {positions.map((row: Record<string, unknown>) => (
+                  <TableRow key={String(row.id)}>
+                    <TableCell>{String(row.tradingsymbol)}</TableCell>
+                    <TableCell>{String(row.product || "—")}</TableCell>
+                    <TableCell>{String(row.strategy || "—")}</TableCell>
+                    <TableCell>{String(row.provenance || "—")}</TableCell>
+                    <TableCell align="right">{String(row.quantity)}</TableCell>
+                    <TableCell align="right">{money(row.averageEntryPrice as string)}</TableCell>
+                    <TableCell align="right">{money(row.markPrice as string)}</TableCell>
+                    <TableCell align="right">{money(row.unrealizedPnl as string)}</TableCell>
+                    <TableCell align="right">{money(row.realizedPnl as string)}</TableCell>
+                    <TableCell>{String(row.status)}</TableCell>
+                    <TableCell>
+                      {Number(row.quantity) !== 0 && row.status === "OPEN" ? (
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ justifyContent: "flex-end", flexWrap: "wrap" }}
+                        >
+                          <Button
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            onClick={() =>
+                              setFlattenRow({
+                                id: String(row.id),
+                                symbol: String(row.tradingsymbol),
+                                qty: Number(row.quantity),
+                                book: String(row.provenance || "—"),
+                                strategy: String(row.strategy || ""),
+                              })
+                            }
+                          >
+                            Square off
+                          </Button>
+                          <Button
+                            size="small"
+                            color="warning"
+                            onClick={() =>
+                              setPhantomClear({
+                                id: String(row.id),
+                                symbol: String(row.tradingsymbol),
+                                qty: Number(row.quantity),
+                                book: String(row.provenance || "—"),
+                              })
+                            }
+                          >
+                            Clear phantom
+                          </Button>
+                        </Stack>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollTable>
           {positions.length === 0 ? (
             <Typography sx={{ p: 2 }} color="text.secondary">
-              No positions in the ledger yet. Punch a trade or run Reconcile.
+              No positions in the ledger yet. Punch a trade or run Reconcile. Square off sends a
+              flatten for an open book. Clear phantom zeros a leftover ledger row and does not send
+              a Kite order.
             </Typography>
-          ) : null}
+          ) : (
+            <Typography sx={{ p: 2 }} color="text.secondary" variant="body2">
+              Square off flattens the open book (paper or live) without halting the desk. Clear
+              phantom zeros a leftover ledger row after proving Kite is flat (paper rows skip Kite).
+              It does not flatten the broker. Reconcile if Kite has size the ledger missed.
+            </Typography>
+          )}
         </Paper>
       ) : null}
 
       {tab === "orders" ? (
-        <Paper>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>When</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Side</TableCell>
-                <TableCell>Symbol</TableCell>
-                <TableCell align="right">Filled / Qty</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell>Purpose</TableCell>
-                <TableCell>Book</TableCell>
-                <TableCell>Tag</TableCell>
-                <TableCell>Reason</TableCell>
-                <TableCell>Broker id</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {orders.map((row: Record<string, unknown>) => (
-                <TableRow key={String(row.id)}>
-                  <TableCell>{when(row.createdAt as string)}</TableCell>
-                  <TableCell>{String(row.status)}</TableCell>
-                  <TableCell>{String(row.side)}</TableCell>
-                  <TableCell>{String(row.tradingsymbol)}</TableCell>
-                  <TableCell align="right">
-                    {String(row.filledQty)} / {String(row.requestedQty)}
-                  </TableCell>
-                  <TableCell>{String(row.orderType || "—")}</TableCell>
-                  <TableCell>{String(row.purpose)}</TableCell>
-                  <TableCell>{String(row.provenance || "—")}</TableCell>
-                  <TableCell>{String(row.orderTag || "—")}</TableCell>
-                  <TableCell>{String(row.rejectReason || row.errorInfo || "—")}</TableCell>
-                  <TableCell>{String(row.brokerOrderId || "—")}</TableCell>
+        <Paper sx={{ overflow: "hidden" }}>
+          <ScrollTable minWidth={880}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>When</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Side</TableCell>
+                  <TableCell>Symbol</TableCell>
+                  <TableCell align="right">Filled / Qty</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Purpose</TableCell>
+                  <TableCell>Book</TableCell>
+                  <TableCell>Tag</TableCell>
+                  <TableCell>Reason</TableCell>
+                  <TableCell>Broker id</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {orders.map((row: Record<string, unknown>) => (
+                  <TableRow key={String(row.id)}>
+                    <TableCell>{when(row.createdAt as string)}</TableCell>
+                    <TableCell>{String(row.status)}</TableCell>
+                    <TableCell>{String(row.side)}</TableCell>
+                    <TableCell>{String(row.tradingsymbol)}</TableCell>
+                    <TableCell align="right">
+                      {String(row.filledQty)} / {String(row.requestedQty)}
+                    </TableCell>
+                    <TableCell>{String(row.orderType || "—")}</TableCell>
+                    <TableCell>{String(row.purpose)}</TableCell>
+                    <TableCell>{String(row.provenance || "—")}</TableCell>
+                    <TableCell>{String(row.orderTag || "—")}</TableCell>
+                    <TableCell>{String(row.rejectReason || row.errorInfo || "—")}</TableCell>
+                    <TableCell>{String(row.brokerOrderId || "—")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollTable>
           {orders.length === 0 ? (
             <Typography sx={{ p: 2 }} color="text.secondary">
               No ledger orders in this book. A job that never punched (Sunday, risk block, enqueue
@@ -517,45 +660,47 @@ export default function DeskPage() {
       ) : null}
 
       {tab === "trades" ? (
-        <Paper>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Entry</TableCell>
-                <TableCell>Exit</TableCell>
-                <TableCell>Symbol</TableCell>
-                <TableCell>Dir</TableCell>
-                <TableCell>Strategy</TableCell>
-                <TableCell>Book</TableCell>
-                <TableCell align="right">Entry / Exit qty</TableCell>
-                <TableCell align="right">Avg in / out</TableCell>
-                <TableCell align="right">Net P&L</TableCell>
-                <TableCell>Exit reason</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {trades.map((row: Record<string, unknown>) => (
-                <TableRow key={String(row.id)}>
-                  <TableCell>{when(row.entryAt as string)}</TableCell>
-                  <TableCell>{when(row.exitAt as string)}</TableCell>
-                  <TableCell>{String(row.tradingsymbol)}</TableCell>
-                  <TableCell>{String(row.direction)}</TableCell>
-                  <TableCell>{String(row.strategy || "—")}</TableCell>
-                  <TableCell>{String(row.provenance || "—")}</TableCell>
-                  <TableCell align="right">
-                    {String(row.entryQty)} / {String(row.exitQty)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {money(row.averageEntry as string)} / {money(row.averageExit as string)}
-                  </TableCell>
-                  <TableCell align="right">{money(row.netPnl as string)}</TableCell>
-                  <TableCell>{String(row.exitReason || "—")}</TableCell>
-                  <TableCell>{String(row.status)}</TableCell>
+        <Paper sx={{ overflow: "hidden" }}>
+          <ScrollTable minWidth={800}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Entry</TableCell>
+                  <TableCell>Exit</TableCell>
+                  <TableCell>Symbol</TableCell>
+                  <TableCell>Dir</TableCell>
+                  <TableCell>Strategy</TableCell>
+                  <TableCell>Book</TableCell>
+                  <TableCell align="right">Entry / Exit qty</TableCell>
+                  <TableCell align="right">Avg in / out</TableCell>
+                  <TableCell align="right">Net P&L</TableCell>
+                  <TableCell>Exit reason</TableCell>
+                  <TableCell>Status</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {trades.map((row: Record<string, unknown>) => (
+                  <TableRow key={String(row.id)}>
+                    <TableCell>{when(row.entryAt as string)}</TableCell>
+                    <TableCell>{when(row.exitAt as string)}</TableCell>
+                    <TableCell>{String(row.tradingsymbol)}</TableCell>
+                    <TableCell>{String(row.direction)}</TableCell>
+                    <TableCell>{String(row.strategy || "—")}</TableCell>
+                    <TableCell>{String(row.provenance || "—")}</TableCell>
+                    <TableCell align="right">
+                      {String(row.entryQty)} / {String(row.exitQty)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {money(row.averageEntry as string)} / {money(row.averageExit as string)}
+                    </TableCell>
+                    <TableCell align="right">{money(row.netPnl as string)}</TableCell>
+                    <TableCell>{String(row.exitReason || "—")}</TableCell>
+                    <TableCell>{String(row.status)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollTable>
         </Paper>
       ) : null}
 
@@ -587,121 +732,129 @@ export default function DeskPage() {
       ) : null}
 
       {tab === "decisions" ? (
-        <Paper>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>When</TableCell>
-                <TableCell>Action</TableCell>
-                <TableCell>Strategy</TableCell>
-                <TableCell>Symbol</TableCell>
-                <TableCell>Book</TableCell>
-                <TableCell>Risk</TableCell>
-                <TableCell>Reason</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {decisions.map((row: Record<string, unknown>) => (
-                <TableRow key={String(row.id)}>
-                  <TableCell>{when(row.occurredAt as string)}</TableCell>
-                  <TableCell>{String(row.action)}</TableCell>
-                  <TableCell>{String(row.strategy || "—")}</TableCell>
-                  <TableCell>{String(row.tradingsymbol || row.instrument || "—")}</TableCell>
-                  <TableCell>{String(row.provenance || "—")}</TableCell>
-                  <TableCell>{String(row.riskResult || "—")}</TableCell>
-                  <TableCell>{String(row.reason || row.intent || "—")}</TableCell>
+        <Paper sx={{ overflow: "hidden" }}>
+          <ScrollTable minWidth={720}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>When</TableCell>
+                  <TableCell>Action</TableCell>
+                  <TableCell>Strategy</TableCell>
+                  <TableCell>Symbol</TableCell>
+                  <TableCell>Book</TableCell>
+                  <TableCell>Risk</TableCell>
+                  <TableCell>Reason</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {decisions.map((row: Record<string, unknown>) => (
+                  <TableRow key={String(row.id)}>
+                    <TableCell>{when(row.occurredAt as string)}</TableCell>
+                    <TableCell>{String(row.action)}</TableCell>
+                    <TableCell>{String(row.strategy || "—")}</TableCell>
+                    <TableCell>{String(row.tradingsymbol || row.instrument || "—")}</TableCell>
+                    <TableCell>{String(row.provenance || "—")}</TableCell>
+                    <TableCell>{String(row.riskResult || "—")}</TableCell>
+                    <TableCell>{String(row.reason || row.intent || "—")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollTable>
         </Paper>
       ) : null}
 
       {tab === "activity" ? (
         <Stack spacing={2}>
-          <Paper>
+          <Paper sx={{ overflow: "hidden" }}>
             <Typography variant="subtitle2" sx={{ p: 1.5 }}>
               Audit
             </Typography>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>When</TableCell>
-                  <TableCell>Event</TableCell>
-                  <TableCell>Actor</TableCell>
-                  <TableCell>Summary</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {audit.map((row: Record<string, unknown>) => (
-                  <TableRow key={String(row.id)}>
-                    <TableCell>{when(row.occurredAt as string)}</TableCell>
-                    <TableCell>{String(row.eventType)}</TableCell>
-                    <TableCell>{String(row.actor)}</TableCell>
-                    <TableCell>{String(row.summary || "—")}</TableCell>
+            <ScrollTable minWidth={560}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>When</TableCell>
+                    <TableCell>Event</TableCell>
+                    <TableCell>Actor</TableCell>
+                    <TableCell>Summary</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {audit.map((row: Record<string, unknown>) => (
+                    <TableRow key={String(row.id)}>
+                      <TableCell>{when(row.occurredAt as string)}</TableCell>
+                      <TableCell>{String(row.eventType)}</TableCell>
+                      <TableCell>{String(row.actor)}</TableCell>
+                      <TableCell>{String(row.summary || "—")}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollTable>
           </Paper>
-          <Paper>
+          <Paper sx={{ overflow: "hidden" }}>
             <Typography variant="subtitle2" sx={{ p: 1.5 }}>
               Reconciliation
             </Typography>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>When</TableCell>
-                  <TableCell>Kind</TableCell>
-                  <TableCell>Symbol</TableCell>
-                  <TableCell>Detail</TableCell>
-                  <TableCell>Resolved</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {recon.map((row: Record<string, unknown>) => (
-                  <TableRow key={String(row.id)}>
-                    <TableCell>{when(row.occurredAt as string)}</TableCell>
-                    <TableCell>{String(row.kind)}</TableCell>
-                    <TableCell>{String(row.tradingsymbol || "—")}</TableCell>
-                    <TableCell>{String(row.detail || "—")}</TableCell>
-                    <TableCell>{row.resolved ? "yes" : "no"}</TableCell>
+            <ScrollTable minWidth={640}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>When</TableCell>
+                    <TableCell>Kind</TableCell>
+                    <TableCell>Symbol</TableCell>
+                    <TableCell>Detail</TableCell>
+                    <TableCell>Resolved</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {recon.map((row: Record<string, unknown>) => (
+                    <TableRow key={String(row.id)}>
+                      <TableCell>{when(row.occurredAt as string)}</TableCell>
+                      <TableCell>{String(row.kind)}</TableCell>
+                      <TableCell>{String(row.tradingsymbol || "—")}</TableCell>
+                      <TableCell>{String(row.detail || "—")}</TableCell>
+                      <TableCell>{row.resolved ? "yes" : "no"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollTable>
           </Paper>
         </Stack>
       ) : null}
 
       {tab === "sessions" ? (
-        <Paper>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Date (IST)</TableCell>
-                <TableCell align="right">Net P&L</TableCell>
-                <TableCell align="right">Fees</TableCell>
-                <TableCell align="right">Trades</TableCell>
-                <TableCell align="right">Wins</TableCell>
-                <TableCell align="right">Win rate</TableCell>
-                <TableCell align="right">Drawdown</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sessions.map((row: Record<string, unknown>) => (
-                <TableRow key={String(row.sessionDate)}>
-                  <TableCell>{String(row.sessionDate)}</TableCell>
-                  <TableCell align="right">{money(row.netPnl as string)}</TableCell>
-                  <TableCell align="right">{money(row.fees as string)}</TableCell>
-                  <TableCell align="right">{String(row.tradeCount)}</TableCell>
-                  <TableCell align="right">{String(row.winCount)}</TableCell>
-                  <TableCell align="right">{money(row.winRate as string)}</TableCell>
-                  <TableCell align="right">{money(row.maxDrawdown as string)}</TableCell>
+        <Paper sx={{ overflow: "hidden" }}>
+          <ScrollTable minWidth={560}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date (IST)</TableCell>
+                  <TableCell align="right">Net P&L</TableCell>
+                  <TableCell align="right">Fees</TableCell>
+                  <TableCell align="right">Trades</TableCell>
+                  <TableCell align="right">Wins</TableCell>
+                  <TableCell align="right">Win rate</TableCell>
+                  <TableCell align="right">Drawdown</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {sessions.map((row: Record<string, unknown>) => (
+                  <TableRow key={String(row.sessionDate)}>
+                    <TableCell>{String(row.sessionDate)}</TableCell>
+                    <TableCell align="right">{money(row.netPnl as string)}</TableCell>
+                    <TableCell align="right">{money(row.fees as string)}</TableCell>
+                    <TableCell align="right">{String(row.tradeCount)}</TableCell>
+                    <TableCell align="right">{String(row.winCount)}</TableCell>
+                    <TableCell align="right">{money(row.winRate as string)}</TableCell>
+                    <TableCell align="right">{money(row.maxDrawdown as string)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollTable>
         </Paper>
       ) : null}
 
@@ -712,6 +865,7 @@ export default function DeskPage() {
           <RiskControls
             settings={risk ?? DEFAULT_RISK_SETTINGS}
             mockOrders={Boolean(riskData?.mockOrders)}
+            setups={riskData?.setups}
             onSaved={() => mutateRisk()}
           />
         </Paper>

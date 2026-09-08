@@ -54,7 +54,7 @@ Shipped form defaults live in `STRATEGIES_DETAILS[ATM_STRADDLE].defaultFormState
 | Hedge | off unless ticked | Far OTM long options (short vol only) |
 | Rollback | all three flags true | Flatten if hedge / primary / exit basket breaks |
 
-Desk → Risk still caps lots, notional, daily loss, and live vs paper. Strategy code cannot skip that.
+Desk → Risk still caps lots, open positions, notional, and live vs paper. Strategy code cannot skip that.
 
 ---
 

@@ -16,9 +16,11 @@ import {
 import { TimePicker } from "@mui/x-date-pickers/TimePicker"
 import dayjs from "dayjs"
 import React from "react"
+import useSWR from "swr"
 
 import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import { type EXIT_STRATEGIES, INSTRUMENTS, STRATEGIES } from "../../../lib/constants"
+import fetchJson from "../../../lib/fetchJson"
 import { coerceLots } from "../../../lib/planMapper"
 import {
   coerceScheduleableExitStrategy,
@@ -32,6 +34,7 @@ import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 import FormSection from "../../lib/FormSection"
 import HedgeComponent from "../../lib/HedgeComponent"
 import InstrumentPicker from "../../lib/InstrumentPicker"
+import { OptionNotionalPreview } from "../../lib/NotionalPreview"
 import ProductTypeComponent from "../../lib/ProductTypeComponent"
 import RollbackComponent from "../../lib/RollbackComponent"
 import SlManagerComponent from "../../lib/SlManagerComponent"
@@ -84,6 +87,11 @@ const TradeSetupForm = ({
 
   const [lotsError, setLotsError] = React.useState<string | null>(null)
   const [instrumentError, setInstrumentError] = React.useState<string | null>(null)
+  const { data: riskData } = useSWR<{ settings?: { maxNotionalInr?: number } }>(
+    "/api/desk/risk",
+    fetchJson
+  )
+  const maxNotionalInr = Number(riskData?.settings?.maxNotionalInr) || 0
 
   const handleFormSubmit = e => {
     e.preventDefault()
@@ -164,12 +172,19 @@ const TradeSetupForm = ({
                 label="Lots"
               />
             </Grid>
+            <Grid size={12}>
+              <OptionNotionalPreview
+                lots={Number(state.lots) || 0}
+                instruments={state.instruments}
+                maxNotionalInr={maxNotionalInr}
+              />
+            </Grid>
           </Grid>
         </FormSection>
 
         <FormSection title="Entry" hint="Skew wait before punching" helpHref="/help/straddle#entry">
           <Grid container spacing={2}>
-            <Grid size={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 size="small"
                 fullWidth
@@ -179,7 +194,7 @@ const TradeSetupForm = ({
                 label="Ideal skew %"
               />
             </Grid>
-            <Grid size={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 size="small"
                 fullWidth

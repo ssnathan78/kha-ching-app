@@ -1,17 +1,25 @@
 import dayjs from "dayjs"
 import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "./chaseDefaults"
+import {
+  type ChaseFillDecision,
+  chaseBookFromSources,
+  chaseLotsFromConfig,
+  chaseStatusHasPosition,
+  splitChaseLedgerQty,
+} from "./chaseFill"
 import { getChaseEngineConfig, getChaseSettings } from "./chaseSettings"
 import { CHASE_STATUS } from "./constants"
-import { getChaseJob, getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
+import { getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
 import {
   cancelOrder,
   getKiteInstance,
+  getNetPositionQty,
   getPreviousTradingDay,
   placeKiteOrder,
   placeSL,
 } from "./kiteUtils"
 import logger from "./logger"
-import { executionProvenance } from "./trading/riskEngine"
+import { executionProvenance, isPaperStrategy } from "./trading/riskEngine"
 import { getRiskSettings } from "./trading/riskSettings"
 import { isMockOrder, postToSlack, toIst } from "./utils"
 
@@ -38,6 +46,56 @@ async function persistChaseSignal(input: {
   })
 }
 
+export type { ChaseFillDecision }
+
+export function decideChaseEntryAction(input: {
+  automated: boolean
+  quantity: number
+  netQty: number
+  side: "LONG" | "SHORT"
+  hasOpenEntryOrder: boolean
+  otherBookOpen?: boolean
+}): ChaseFillDecision {
+  if (!input.automated || input.quantity <= 0) return "signal_only"
+  if (input.otherBookOpen) return "other_book_open"
+  const hasPosition = input.side === "LONG" ? input.netQty > 0 : input.netQty < 0
+  if (hasPosition) return "already_filled"
+  if (input.hasOpenEntryOrder) return "wait_open_order"
+  return "place_entry"
+}
+
+export async function resolveChaseBookBreakdown(
+  tradingsymbol: string | null | undefined,
+  accessToken: string
+) {
+  const settings = await getRiskSettings()
+  const paperBook = isMockOrder() || isPaperStrategy(settings, "CHASE")
+  if (!tradingsymbol) {
+    return chaseBookFromSources({
+      paperBook,
+      kiteQty: 0,
+      paperLedgerQty: 0,
+      liveLedgerQty: 0,
+    })
+  }
+  const { getOpenPositions } = await import("./trading/ledger")
+  const { paperLedgerQty, liveLedgerQty } = splitChaseLedgerQty(
+    await getOpenPositions(),
+    tradingsymbol
+  )
+  let kiteQty = 0
+  if (!paperBook) {
+    try {
+      kiteQty = await getNetPositionQty(getKiteInstance(accessToken), tradingsymbol, {
+        ledgerFallback: false,
+      })
+    } catch (e) {
+      logger.warn("[generateSignal] kite qty unavailable", e)
+    }
+  }
+  return chaseBookFromSources({ paperBook, kiteQty, paperLedgerQty, liveLedgerQty })
+}
+
 export type ChaseInstrument = {
   tradingsymbol: string
   instrumentToken: number
@@ -46,22 +104,6 @@ export type ChaseInstrument = {
   lowestLow: number
   lastClose: number
   lotSize: number
-}
-
-export type ChaseFillDecision = "already_filled" | "wait_open_order" | "place_entry" | "signal_only"
-
-export function decideChaseEntryAction(input: {
-  automated: boolean
-  quantity: number
-  netQty: number
-  side: "LONG" | "SHORT"
-  hasOpenEntryOrder: boolean
-}): ChaseFillDecision {
-  if (!input.automated || input.quantity <= 0) return "signal_only"
-  const hasPosition = input.side === "LONG" ? input.netQty > 0 : input.netQty < 0
-  if (hasPosition) return "already_filled"
-  if (input.hasOpenEntryOrder) return "wait_open_order"
-  return "place_entry"
 }
 
 export type ChasePrevEmaResolution =
@@ -308,6 +350,32 @@ export const generateSignal = async (
   const createdAtDate = createdAt ? dayjs(createdAt).format("YYYY-MM-DD") : ""
   const hour = parseInt(timePart.split(":")[0])
 
+  if (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) {
+    const netQty = (await resolveChaseBookBreakdown(tradingsymbol, accessToken)).netQty
+    if (!chaseStatusHasPosition(currentStatus, netQty)) {
+      logger.warn(
+        `[generateSignal] ${currentStatus} with no fill (qty=${netQty}) — resetting to AWAITING_SIGNAL`
+      )
+      await persistChaseSignal({
+        outcome: "INVALID",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol,
+        summary: `${currentStatus} with no fill — resetting so this hour can evaluate a fresh signal`,
+        features: { status: currentStatus, netQty },
+        key: `chase:phantom:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
+      await updateChaseStatus({
+        instrument: nfoSymbol,
+        status: CHASE_STATUS.AWAITING_SIGNAL,
+        isSignalBreachingTolerance: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      currentStatus = CHASE_STATUS.AWAITING_SIGNAL
+    }
+  }
+
   if (
     (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
     hour !== 13
@@ -365,8 +433,7 @@ export const generateSignal = async (
       logger.error("[generateSignal] error updating chase_status:", error)
     } else {
       const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-      const chaseJob = await getChaseJob()
-      const lots = chaseJob?.lots ?? 0
+      const lots = chaseLotsFromConfig((await getChaseSettings()).lots)
       const quantity = lots * (instrument.lotSize ?? 1)
       await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
     }
@@ -672,6 +739,26 @@ export const generateSignal = async (
         features: { status: currentStatus, lastClose: instrument.lastClose },
         key: `chase:pending-entry:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
       })
+      const pendingSide = currentStatus === CHASE_STATUS.AWAITING_LONG ? "BUY" : "SELL"
+      const trigger =
+        chaseStatusData.entryPoint ??
+        (pendingSide === "BUY" ? instrument.highestHigh : instrument.lowestLow)
+      try {
+        await placeEntryTriggerOrder(instrument, pendingSide, trigger, accessToken)
+      } catch (entryErr) {
+        logger.error(`[generateSignal] pending ${currentStatus} entry retry failed`, entryErr)
+        await persistChaseSignal({
+          outcome: "REJECT",
+          kind: "ENTRY",
+          instrument: nfoSymbol,
+          tradingsymbol: instrument.tradingsymbol,
+          summary: `Entry retry failed — staying ${currentStatus}: ${
+            entryErr instanceof Error ? entryErr.message : String(entryErr)
+          }`,
+          features: { status: currentStatus },
+          key: `chase:entry-retry:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+        })
+      }
     }
   }
 }

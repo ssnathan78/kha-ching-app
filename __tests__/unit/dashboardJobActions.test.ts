@@ -39,7 +39,7 @@ describe("toClientJobExecution", () => {
 })
 
 describe("dashboardJobActions", () => {
-  it("shows Stop for an active live job", () => {
+  it("shows Square off for an active live job", () => {
     expect(
       dashboardJobActions({
         jobWasQueued: true,
@@ -48,10 +48,22 @@ describe("dashboardJobActions", () => {
         aborted: false,
         hasSettledPnl: false,
       })
-    ).toEqual({ showDelete: false, showStop: true })
+    ).toEqual({ showDelete: false, showSquareOff: true, showStop: true })
   })
 
-  it("shows Delete after Stop has persisted ABORT", () => {
+  it("shows Square off for Chase without requiring a filled option job", () => {
+    expect(
+      dashboardJobActions({
+        jobWasQueued: true,
+        isChase: true,
+        jobState: "delayed",
+        aborted: false,
+        hasSettledPnl: false,
+      })
+    ).toEqual({ showDelete: true, showSquareOff: true, showStop: true })
+  })
+
+  it("keeps Square off after abort so leftover size can still be flattened", () => {
     expect(
       dashboardJobActions({
         jobWasQueued: true,
@@ -60,7 +72,7 @@ describe("dashboardJobActions", () => {
         aborted: true,
         hasSettledPnl: false,
       })
-    ).toEqual({ showDelete: true, showStop: false })
+    ).toEqual({ showDelete: true, showSquareOff: true, showStop: true })
   })
 
   it("shows Delete when the Bull job failed after a revoked Kite token", () => {
@@ -72,7 +84,7 @@ describe("dashboardJobActions", () => {
         aborted: false,
         hasSettledPnl: false,
       })
-    ).toEqual({ showDelete: true, showStop: false })
+    ).toEqual({ showDelete: true, showSquareOff: false, showStop: false })
   })
 })
 

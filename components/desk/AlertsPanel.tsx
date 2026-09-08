@@ -11,8 +11,8 @@ import {
   Typography,
 } from "@mui/material"
 import NextLink from "next/link"
-
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
+import ScrollTable from "../lib/ScrollTable"
 import FeedToolbar from "./FeedToolbar"
 
 type OperatorAlert = {
@@ -48,7 +48,7 @@ export default function AlertsPanel({
   onClear: (period: FeedPeriod) => void
 }) {
   return (
-    <Paper>
+    <Paper sx={{ overflow: "hidden" }}>
       <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
         Failures that never became a Kite or ledger order (market closed, risk block, stale job,
         Chase data miss) plus broker rejects. Orders tab stays the blotter.
@@ -60,45 +60,47 @@ export default function AlertsPanel({
           {warnCount ? ` · ${warnCount} warning${warnCount === 1 ? "" : "s"}` : ""} in this view
         </Alert>
       ) : null}
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>When (IST)</TableCell>
-            <TableCell>Severity</TableCell>
-            <TableCell>Source</TableCell>
-            <TableCell>Code</TableCell>
-            <TableCell>What happened</TableCell>
-            <TableCell>Strategy</TableCell>
-            <TableCell>Instrument</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {alerts.map(row => (
-            <TableRow key={row.id}>
-              <TableCell>{when(row.occurredAt)}</TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  label={row.severity}
-                  color={
-                    row.severity === "ERROR"
-                      ? "error"
-                      : row.severity === "WARN"
-                        ? "warning"
-                        : "default"
-                  }
-                  variant="outlined"
-                />
-              </TableCell>
-              <TableCell>{row.source}</TableCell>
-              <TableCell>{row.code}</TableCell>
-              <TableCell>{row.summary}</TableCell>
-              <TableCell>{row.strategy || "—"}</TableCell>
-              <TableCell>{row.instrument || "—"}</TableCell>
+      <ScrollTable minWidth={720}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>When (IST)</TableCell>
+              <TableCell>Severity</TableCell>
+              <TableCell>Source</TableCell>
+              <TableCell>Code</TableCell>
+              <TableCell>What happened</TableCell>
+              <TableCell>Strategy</TableCell>
+              <TableCell>Instrument</TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {alerts.map(row => (
+              <TableRow key={row.id}>
+                <TableCell>{when(row.occurredAt)}</TableCell>
+                <TableCell>
+                  <Chip
+                    size="small"
+                    label={row.severity}
+                    color={
+                      row.severity === "ERROR"
+                        ? "error"
+                        : row.severity === "WARN"
+                          ? "warning"
+                          : "default"
+                    }
+                    variant="outlined"
+                  />
+                </TableCell>
+                <TableCell>{row.source}</TableCell>
+                <TableCell>{row.code}</TableCell>
+                <TableCell>{row.summary}</TableCell>
+                <TableCell>{row.strategy || "—"}</TableCell>
+                <TableCell>{row.instrument || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollTable>
       {alerts.length === 0 ? (
         <Typography sx={{ p: 2 }} color="text.secondary">
           No operator alerts. A rejected “Schedule now” on a Sunday or a live punch that never

@@ -17,6 +17,7 @@ import {
 } from "../kiteUtils"
 import logger from "../logger"
 import { jobExecutions } from "../schema"
+import { ledgerRowsForActiveBook, squareOffQtySource } from "../trading/bookSplit"
 import { getOpenPositions } from "../trading/ledger"
 import { isPaperStrategy } from "../trading/riskEngine"
 import { getRiskSettings } from "../trading/riskSettings"
@@ -48,6 +49,48 @@ export async function doDeletePendingOrders(orders: KiteOrder[], kite: any) {
   )
 }
 
+async function squareOffNet(args: {
+  kite: any
+  paperBook: boolean
+  strategy?: string | null
+}): Promise<Array<{ tradingsymbol: string; exchange: string; product: string; quantity: number }>> {
+  let kiteNet: Array<{
+    tradingsymbol: string
+    exchange: string
+    product: string
+    quantity: number
+  }> = []
+  let kiteQueried = false
+  if (!args.paperBook) {
+    try {
+      const openPositions = await withRemoteRetry(() => args.kite.getPositions())
+      kiteNet = openPositions.net || []
+      kiteQueried = true
+    } catch (e) {
+      logger.warn("[squareOffNet] kite positions unavailable", e)
+    }
+  }
+  const source = squareOffQtySource({
+    paperBook: args.paperBook,
+    kiteQueried,
+    kiteNetLength: kiteNet.filter(p => Number(p.quantity) !== 0).length,
+  })
+  if (source === "kite") {
+    return kiteNet.filter(p => Number(p.quantity) !== 0)
+  }
+  if (source === "empty") return []
+  const rows = ledgerRowsForActiveBook(await getOpenPositions(), {
+    paperBook: source === "paper-ledger",
+    strategy: args.strategy,
+  })
+  return rows.map(p => ({
+    tradingsymbol: p.tradingsymbol,
+    exchange: p.exchange,
+    product: p.product || "",
+    quantity: p.quantity,
+  }))
+}
+
 export async function doSquareOffPositions(
   orders: KiteOrder[],
   kite: any,
@@ -56,26 +99,7 @@ export async function doSquareOffPositions(
   const strategy = (initialJobData as { strategy?: string }).strategy
   const settings = await getRiskSettings()
   const paper = isMockOrder() || isPaperStrategy(settings, strategy)
-  let net: Array<{ tradingsymbol: string; exchange: string; product: string; quantity: number }> =
-    []
-  if (!paper) {
-    try {
-      const openPositions = await withRemoteRetry(() => kite.getPositions())
-      net = openPositions.net || []
-    } catch (e) {
-      logger.warn("[doSquareOffPositions] kite positions unavailable", e)
-    }
-  }
-  if (!net.length) {
-    net = (await getOpenPositions())
-      .filter(p => p.quantity !== 0 && (!strategy || p.strategy === strategy))
-      .map(p => ({
-        tradingsymbol: p.tradingsymbol,
-        exchange: p.exchange,
-        product: p.product || "",
-        quantity: p.quantity,
-      }))
-  }
+  const net = await squareOffNet({ kite, paperBook: paper, strategy })
   //orders would always have +ve value and filter based on transaction_type
   const openPositionsForOrders = orders
     .filter(o => o)
@@ -151,24 +175,9 @@ async function squareOffOrder(order: KiteOrder, kite: any) {
         .where(eq(jobExecutions.orderTag, order.tag))
     : []
   const strategy = tagRows[0]?.strategy
-  let net: Array<{ tradingsymbol: string; exchange: string; product: string; quantity: number }> =
-    []
-  try {
-    const openPositions = await withRemoteRetry(() => kite.getPositions())
-    net = openPositions.net || []
-  } catch (e) {
-    logger.warn("[squareOffOrder] kite positions unavailable", e)
-  }
-  if (!net.length) {
-    net = (await getOpenPositions())
-      .filter(p => p.quantity !== 0)
-      .map(p => ({
-        tradingsymbol: p.tradingsymbol,
-        exchange: p.exchange,
-        product: p.product || "",
-        quantity: p.quantity,
-      }))
-  }
+  const settings = await getRiskSettings()
+  const paper = isMockOrder() || (strategy ? isPaperStrategy(settings, strategy) : false)
+  const net = await squareOffNet({ kite, paperBook: paper, strategy })
   const openPositionsforOrders = net.filter(
     position =>
       position.tradingsymbol === order.tradingsymbol &&

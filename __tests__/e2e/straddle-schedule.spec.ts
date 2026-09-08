@@ -13,7 +13,7 @@ test.describe("Straddle Schedule now", () => {
     }
     await page.getByRole("button", { name: /schedule now/i }).click()
     await page.waitForURL(/\/dashboard/, { timeout: 20_000 })
-    await expect(page.getByRole("tab", { name: /today/i })).toBeVisible()
+    await expect(page.getByRole("tab", { name: "Today", exact: true })).toBeVisible()
     await expect(page.getByText(/job|scheduled|straddle/i).first()).toBeVisible()
   })
 

@@ -1,5 +1,5 @@
-import { DEFAULT_RISK_SETTINGS } from "../trading/riskEngine"
-import type { SimulateConfig } from "./types"
+import { DEFAULT_RISK_SETTINGS, type RiskStrategyKey } from "../trading/riskEngine"
+import type { ActorConfig, ActorKind, SimulateConfig } from "./types"
 
 const NIFTY = { symbol: "NIFTY26SEPFUT", lotSize: 65, startPrice: 25000 }
 const BANK = { symbol: "BANKNIFTY26SEPFUT", lotSize: 30, startPrice: 52000 }
@@ -26,6 +26,91 @@ function day(
     paperRisk: extra.paperRisk ?? true,
     ...extra,
   }
+}
+
+function DEFAULT_STRATS() {
+  return DEFAULT_RISK_SETTINGS.strategies
+}
+
+type OptionKind = Extract<ActorKind, "straddle" | "strangle">
+
+function optionStrategy(kind: OptionKind): RiskStrategyKey {
+  return kind === "strangle" ? "ATM_STRANGLE" : "ATM_STRADDLE"
+}
+
+function optionInstrument(kind: OptionKind) {
+  return kind === "strangle" ? BANK : NIFTY
+}
+
+function optionActor(kind: OptionKind, extra: Partial<ActorConfig> = {}): ActorConfig {
+  const inst = optionInstrument(kind)
+  return {
+    kind,
+    strategy: optionStrategy(kind),
+    symbol: inst.symbol,
+    lots: extra.lots ?? 1,
+    fireAt: extra.fireAt ?? "09:20",
+    lotSize: extra.lotSize ?? inst.lotSize,
+    ...extra,
+  }
+}
+
+function withMode(kind: OptionKind, mode: "PAPER" | "LIVE") {
+  const key = optionStrategy(kind)
+  const base = DEFAULT_STRATS()
+  return { ...base, [key]: { ...base[key], executionMode: mode } }
+}
+
+function optionReject(
+  id: string,
+  kind: OptionKind,
+  args: {
+    paperRisk?: boolean
+    risk?: SimulateConfig["risk"]
+    code: string
+    lots?: number
+  }
+): SimulateConfig {
+  const inst = optionInstrument(kind)
+  return day(MON, "09:20", "10:00", {
+    scenario: id,
+    instruments: [inst],
+    paperRisk: args.paperRisk,
+    risk: args.risk,
+    actors: [optionActor(kind, { lots: args.lots ?? 1 })],
+    assertions: [{ type: "risk_code_seen", code: args.code }, { type: "no_position" }],
+  })
+}
+
+function optionModeSwitch(
+  id: string,
+  kind: OptionKind,
+  direction: "paper-to-live" | "live-to-paper"
+): SimulateConfig {
+  const inst = optionInstrument(kind)
+  const toLive = direction === "paper-to-live"
+  return day(MON, "09:20", "10:30", {
+    scenario: id,
+    instruments: [inst],
+    paperRisk: toLive,
+    stepMinutes: 5,
+    risk: toLive ? undefined : { allowLiveOrders: true, strategies: withMode(kind, "LIVE") },
+    actors: [optionActor(kind)],
+    riskSchedule: [
+      {
+        at: `${MON} 10:00`,
+        paperRisk: !toLive,
+        risk: {
+          ...(toLive ? { allowLiveOrders: true } : {}),
+          strategies: withMode(kind, toLive ? "LIVE" : "PAPER"),
+        },
+      },
+    ],
+    assertions: [
+      { type: "risk_code_seen", code: "OTHER_BOOK" },
+      { type: "max_exposure", maxAbsQty: inst.lotSize },
+    ],
+  })
 }
 
 const NAMED: Record<string, () => SimulateConfig> = {
@@ -632,7 +717,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
           fireAt: "09:20",
         },
       ],
-      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }],
+      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
     }),
   "drawdown-reached": () =>
     day(MON, "09:20", "10:00", {
@@ -640,7 +725,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
       risk: {
         strategies: {
           ...DEFAULT_STRATS(),
-          ATM_STRADDLE: { ...DEFAULT_STRATS().ATM_STRADDLE, maxDrawdownPct: 0 },
+          ATM_STRADDLE: { ...DEFAULT_STRATS().ATM_STRADDLE, maxOpenPositions: 0 },
         },
       },
       actors: [
@@ -652,6 +737,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
           fireAt: "09:20",
         },
       ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_POSITIONS" }],
     }),
   "multiple-positions": () =>
     day(MON, "09:20", "11:00", {
@@ -757,7 +843,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
           fireAt: "09:20",
         },
       ],
-      assertions: [{ type: "risk_code_seen", code: "MAX_POSITIONS" }],
+      assertions: [{ type: "risk_code_seen", code: "MAX_POSITIONS" }, { type: "no_position" }],
     }),
   "portfolio-drawdown": () =>
     day(MON, "09:20", "15:00", {
@@ -795,6 +881,297 @@ const NAMED: Record<string, () => SimulateConfig> = {
         { kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 24000 },
       ],
     }),
+  "chase-risk-reject-no-phantom": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-risk-reject-no-phantom",
+      risk: { maxNotionalInr: 100 },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 2,
+          ema: 24000,
+          bufferPercent: 0.2,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
+    }),
+  "chase-paper-to-live-open": () =>
+    day(MON, "09:20", "10:30", {
+      scenario: "chase-paper-to-live-open",
+      stepMinutes: 5,
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 1,
+          ema: 24000,
+          bufferPercent: 0.2,
+        },
+      ],
+      riskSchedule: [
+        {
+          at: `${MON} 10:00`,
+          paperRisk: false,
+          risk: {
+            allowLiveOrders: true,
+            strategies: {
+              ...DEFAULT_STRATS(),
+              CHASE: { ...DEFAULT_STRATS().CHASE, executionMode: "LIVE" },
+            },
+          },
+        },
+      ],
+      assertions: [
+        { type: "risk_code_seen", code: "CHASE_OTHER_BOOK" },
+        { type: "max_exposure", maxAbsQty: 65 },
+      ],
+    }),
+  "chase-live-to-paper-open": () =>
+    day(MON, "09:20", "10:30", {
+      scenario: "chase-live-to-paper-open",
+      paperRisk: false,
+      stepMinutes: 5,
+      risk: {
+        allowLiveOrders: true,
+        strategies: {
+          ...DEFAULT_STRATS(),
+          CHASE: { ...DEFAULT_STRATS().CHASE, executionMode: "LIVE" },
+        },
+      },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 1,
+          ema: 24000,
+          bufferPercent: 0.2,
+        },
+      ],
+      riskSchedule: [
+        {
+          at: `${MON} 10:00`,
+          paperRisk: true,
+          risk: {
+            strategies: {
+              ...DEFAULT_STRATS(),
+              CHASE: { ...DEFAULT_STRATS().CHASE, executionMode: "PAPER" },
+            },
+          },
+        },
+      ],
+      assertions: [
+        { type: "risk_code_seen", code: "CHASE_OTHER_BOOK" },
+        { type: "max_exposure", maxAbsQty: 65 },
+      ],
+    }),
+  "chase-phantom-flatten-no-lots": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-phantom-flatten-no-lots",
+      pricePath: "downtrend",
+      risk: { maxNotionalInr: 100 },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 2,
+          ema: 24000,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
+    }),
+  "chase-max-lots-reject-no-phantom": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-max-lots-reject-no-phantom",
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          CHASE: { ...DEFAULT_STRATS().CHASE, maxLots: 1 },
+        },
+      },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 2,
+          ema: 24000,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_LOTS" }, { type: "no_position" }],
+    }),
+  "chase-max-positions-no-entry": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-max-positions-no-entry",
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          CHASE: { ...DEFAULT_STRATS().CHASE, maxOpenPositions: 0 },
+        },
+      },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 1,
+          ema: 24000,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_POSITIONS" }, { type: "no_position" }],
+    }),
+  "chase-live-blocked": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-live-blocked",
+      paperRisk: false,
+      risk: {
+        allowLiveOrders: false,
+        strategies: {
+          ...DEFAULT_STRATS(),
+          CHASE: { ...DEFAULT_STRATS().CHASE, executionMode: "LIVE" },
+        },
+      },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 1,
+          ema: 24000,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "LIVE_BLOCKED" }, { type: "no_position" }],
+    }),
+  "chase-halted-no-entry": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-halted-no-entry",
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          CHASE: { ...DEFAULT_STRATS().CHASE, halted: true, haltReason: "test" },
+        },
+      },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 1,
+          ema: 24000,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "STRATEGY_HALTED" }, { type: "no_position" }],
+    }),
+  "straddle-risk-reject-no-fill": () =>
+    optionReject("straddle-risk-reject-no-fill", "straddle", {
+      risk: { maxNotionalInr: 100 },
+      code: "MAX_NOTIONAL",
+    }),
+  "strangle-risk-reject-no-fill": () =>
+    optionReject("strangle-risk-reject-no-fill", "strangle", {
+      risk: { maxNotionalInr: 100 },
+      code: "MAX_NOTIONAL",
+    }),
+  "straddle-max-lots-reject": () =>
+    optionReject("straddle-max-lots-reject", "straddle", {
+      lots: 2,
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          ATM_STRADDLE: { ...DEFAULT_STRATS().ATM_STRADDLE, maxLots: 1 },
+        },
+      },
+      code: "MAX_LOTS",
+    }),
+  "strangle-max-lots-reject": () =>
+    optionReject("strangle-max-lots-reject", "strangle", {
+      lots: 2,
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          ATM_STRANGLE: { ...DEFAULT_STRATS().ATM_STRANGLE, maxLots: 1 },
+        },
+      },
+      code: "MAX_LOTS",
+    }),
+  "straddle-max-positions-no-entry": () =>
+    optionReject("straddle-max-positions-no-entry", "straddle", {
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          ATM_STRADDLE: { ...DEFAULT_STRATS().ATM_STRADDLE, maxOpenPositions: 0 },
+        },
+      },
+      code: "MAX_POSITIONS",
+    }),
+  "strangle-max-positions-no-entry": () =>
+    optionReject("strangle-max-positions-no-entry", "strangle", {
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          ATM_STRANGLE: { ...DEFAULT_STRATS().ATM_STRANGLE, maxOpenPositions: 0 },
+        },
+      },
+      code: "MAX_POSITIONS",
+    }),
+  "straddle-live-blocked": () =>
+    optionReject("straddle-live-blocked", "straddle", {
+      paperRisk: false,
+      risk: {
+        allowLiveOrders: false,
+        strategies: withMode("straddle", "LIVE"),
+      },
+      code: "LIVE_BLOCKED",
+    }),
+  "strangle-live-blocked": () =>
+    optionReject("strangle-live-blocked", "strangle", {
+      paperRisk: false,
+      risk: {
+        allowLiveOrders: false,
+        strategies: withMode("strangle", "LIVE"),
+      },
+      code: "LIVE_BLOCKED",
+    }),
+  "straddle-halted-no-entry": () =>
+    optionReject("straddle-halted-no-entry", "straddle", {
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          ATM_STRADDLE: {
+            ...DEFAULT_STRATS().ATM_STRADDLE,
+            halted: true,
+            haltReason: "test",
+          },
+        },
+      },
+      code: "STRATEGY_HALTED",
+    }),
+  "strangle-halted-no-entry": () =>
+    optionReject("strangle-halted-no-entry", "strangle", {
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          ATM_STRANGLE: {
+            ...DEFAULT_STRATS().ATM_STRANGLE,
+            halted: true,
+            haltReason: "test",
+          },
+        },
+      },
+      code: "STRATEGY_HALTED",
+    }),
+  "straddle-paper-to-live-open": () =>
+    optionModeSwitch("straddle-paper-to-live-open", "straddle", "paper-to-live"),
+  "strangle-paper-to-live-open": () =>
+    optionModeSwitch("strangle-paper-to-live-open", "strangle", "paper-to-live"),
+  "straddle-live-to-paper-open": () =>
+    optionModeSwitch("straddle-live-to-paper-open", "straddle", "live-to-paper"),
+  "strangle-live-to-paper-open": () =>
+    optionModeSwitch("strangle-live-to-paper-open", "strangle", "live-to-paper"),
   random: () =>
     day(MON, "09:15", "15:30", {
       scenario: "random",
@@ -804,10 +1181,6 @@ const NAMED: Record<string, () => SimulateConfig> = {
       liquidity: "low",
       actors: [{ kind: "chase", strategy: "CHASE", symbol: NIFTY.symbol, lots: 1, ema: 25000 }],
     }),
-}
-
-function DEFAULT_STRATS() {
-  return DEFAULT_RISK_SETTINGS.strategies
 }
 
 export const SCENARIO_IDS = Object.keys(NAMED).sort()
@@ -837,6 +1210,7 @@ export function resolveScenario(
     failures: input.failures ?? named.failures,
     calendar: input.calendar ?? named.calendar,
     risk: input.risk ?? named.risk,
+    riskSchedule: input.riskSchedule ?? named.riskSchedule,
     seed: input.seed ?? named.seed,
     start: input.start ?? named.start,
     end: input.end ?? named.end,

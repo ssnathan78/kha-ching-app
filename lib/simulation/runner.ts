@@ -4,7 +4,7 @@ import utc from "dayjs/plugin/utc"
 
 import { resetClock, SimClock, setClock } from "../clock"
 import { IST_TZ, isSessionOpen, marketSessionState } from "../marketCalendar"
-import { DEFAULT_RISK_SETTINGS, type RiskSettings } from "../trading/riskEngine"
+import { DEFAULT_RISK_SETTINGS, RISK_STRATEGY_KEYS, type RiskSettings } from "../trading/riskEngine"
 import { createActorRuntime, runActors } from "./actors"
 import { PortfolioBook } from "./book"
 import { SimulatedBrokerError, SimulatedExchange } from "./broker"
@@ -48,8 +48,10 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
     rng,
   })
   const book = new PortfolioBook()
+  const paperLedger = new PortfolioBook()
+  const liveLedger = new PortfolioBook()
   const actors = (config.actors ?? []).map(createActorRuntime)
-  const settings: RiskSettings = {
+  let settings: RiskSettings = {
     ...DEFAULT_RISK_SETTINGS,
     ...config.risk,
     strategies: {
@@ -63,7 +65,7 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
   const errors: string[] = []
   const warnings: string[] = []
   const journal: JournalEvent[] = []
-  const paperRisk = config.paperRisk !== false
+  let paperRisk = config.paperRisk !== false
 
   const start = dayjs.tz(config.start, IST_TZ)
   const end = dayjs.tz(config.end, IST_TZ)
@@ -79,6 +81,32 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
       const ist = clock.ist()
       const nowIso = ist.format("YYYY-MM-DD HH:mm")
       ticks += 1
+
+      for (const sched of config.riskSchedule ?? []) {
+        if (sched.at !== nowIso) continue
+        if (sched.paperRisk != null && sched.paperRisk !== paperRisk) {
+          for (const actor of actors) {
+            if (actor.config.kind !== "chase") actor.fired = false
+          }
+          paperRisk = sched.paperRisk
+        }
+        if (sched.risk) {
+          const strategies = { ...settings.strategies }
+          if (sched.risk.strategies) {
+            for (const key of RISK_STRATEGY_KEYS) {
+              if (sched.risk.strategies[key]) {
+                strategies[key] = { ...strategies[key], ...sched.risk.strategies[key] }
+              }
+            }
+          }
+          settings = { ...settings, ...sched.risk, strategies }
+        }
+        journal.push({
+          at: nowMs,
+          type: "risk_schedule",
+          detail: { at: nowIso, paperRisk, executionMode: settings.strategies.CHASE.executionMode },
+        })
+      }
 
       for (const sched of config.sessionSchedule ?? []) {
         if (sched.at === nowIso) market.setForcedSession(sched.state)
@@ -120,9 +148,12 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
       if (config.restartAt === nowIso && !restarted) {
         const snap = broker.snapshot()
         const bookSnap = book.clone()
+        const paperSnap = paperLedger.clone()
+        const liveSnap = liveLedger.clone()
         broker.restore(snap)
-        for (const [sym, pos] of bookSnap.positions) book.positions.set(sym, { ...pos })
-        book.fills = bookSnap.fills.map(f => ({ ...f }))
+        restoreBook(book, bookSnap)
+        restoreBook(paperLedger, paperSnap)
+        restoreBook(liveLedger, liveSnap)
         restarted = true
         journal.push({ at: nowMs, type: "restart", detail: { at: nowIso } })
       }
@@ -134,7 +165,7 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
       } else {
         try {
           const fills = broker.step(market, nowMs, open)
-          applyFills(book, fills)
+          applySplitFills(book, paperLedger, liveLedger, fills)
         } catch (e) {
           errors.push(errMsg(e))
         }
@@ -147,7 +178,9 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
           nowMs,
           market,
           broker,
-          book,
+          book: paperRisk ? paperLedger : liveLedger,
+          paperLedger,
+          liveLedger,
           settings,
           paperRisk,
           recentOrderCount: recent,
@@ -156,8 +189,8 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
         riskEvents.push(...out.risk)
         errors.push(...out.errors)
         const more = broker.step(market, nowMs, open)
-        applyFills(book, more)
-        syncBook(book, broker)
+        applySplitFills(book, paperLedger, liveLedger, more)
+        applySplitFills(book, paperLedger, liveLedger, broker.fills)
       } catch (e) {
         if (e instanceof SimulatedBrokerError) {
           errors.push(`${e.code}: ${e.message}`)
@@ -232,6 +265,8 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
         chaseStatus: a.chaseStatus,
         fired: a.fired,
       })),
+      paperQty: qtyBySymbol(paperLedger),
+      liveQty: qtyBySymbol(liveLedger),
     },
     elapsedMs: Date.now() - started,
     ticks,
@@ -248,8 +283,35 @@ function applyFills(book: PortfolioBook, fills: FillEvent[]): void {
   }
 }
 
-function syncBook(book: PortfolioBook, broker: SimulatedExchange): void {
-  applyFills(book, broker.fills)
+function applySplitFills(
+  combined: PortfolioBook,
+  paper: PortfolioBook,
+  live: PortfolioBook,
+  fills: FillEvent[]
+): void {
+  applyFills(combined, fills)
+  applyFills(
+    paper,
+    fills.filter(f => f.provenance !== "LIVE")
+  )
+  applyFills(
+    live,
+    fills.filter(f => f.provenance === "LIVE")
+  )
+}
+
+function restoreBook(target: PortfolioBook, snap: PortfolioBook): void {
+  target.positions.clear()
+  for (const [sym, pos] of snap.positions) target.positions.set(sym, { ...pos })
+  target.fills = snap.fills.map(f => ({ ...f }))
+}
+
+function qtyBySymbol(book: PortfolioBook): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [symbol, pos] of book.positions) {
+    if (pos.quantity !== 0) out[symbol] = pos.quantity
+  }
+  return out
 }
 
 function errMsg(e: unknown): string {

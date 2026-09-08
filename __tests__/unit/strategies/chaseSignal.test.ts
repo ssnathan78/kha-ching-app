@@ -45,6 +45,7 @@ jest.mock("../../../lib/trading/riskSettings", () => ({
 
 jest.mock("../../../lib/trading/ledger", () => ({
   recordDecision: jest.fn().mockResolvedValue("decision-1"),
+  getOpenPositions: jest.fn().mockResolvedValue([]),
 }))
 
 describe("chaseTolerances trader bands", () => {
@@ -193,6 +194,31 @@ describe("decideChaseEntryAction", () => {
       })
     ).toBe("already_filled")
   })
+
+  it("does not treat missing lots as a fill", () => {
+    expect(
+      decideChaseEntryAction({
+        automated: false,
+        quantity: 0,
+        netQty: 0,
+        side: "SHORT",
+        hasOpenEntryOrder: false,
+      })
+    ).toBe("signal_only")
+  })
+
+  it("refuses a new entry while the opposite paper/live book is open", () => {
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 130,
+        netQty: 0,
+        side: "SHORT",
+        hasOpenEntryOrder: false,
+        otherBookOpen: true,
+      })
+    ).toBe("other_book_open")
+  })
 })
 
 describe("generateSignal entry order failure stays awaiting", () => {
@@ -232,5 +258,83 @@ describe("generateSignal entry order failure stays awaiting", () => {
       expect.objectContaining({ status: CHASE_STATUS.AWAITING_SHORT })
     )
     expect(placeKiteOrder).toHaveBeenCalled()
+  })
+})
+
+describe("generateSignal phantom LONG/SHORT", () => {
+  it("resets SHORT with no fill and evaluates a fresh signal", async () => {
+    const { getChaseStatus, updateChaseStatus } = require("../../../lib/drizzleDbUtils")
+    const { getChaseSettings } = require("../../../lib/chaseSettings")
+    const { placeKiteOrder, getKiteInstance } = require("../../../lib/kiteUtils")
+    const { getOpenPositions } = require("../../../lib/trading/ledger")
+    getChaseSettings.mockResolvedValue({ lots: 2, paused: false })
+    getOpenPositions.mockResolvedValue([])
+    getChaseStatus.mockResolvedValue({
+      status: CHASE_STATUS.SHORT,
+      tradingsymbol: "NIFTY26SEPFUT",
+      entryPoint: 23765,
+      stoploss: 24045,
+    })
+    getKiteInstance.mockReturnValue({
+      getLTP: jest.fn().mockResolvedValue({ "NFO:NIFTY26SEPFUT": { last_price: 23921 } }),
+    })
+    placeKiteOrder.mockRejectedValue(new Error("MAX_NOTIONAL"))
+
+    const { generateSignal } = await import("../../../lib/chaseSignal")
+    await generateSignal(
+      [
+        {
+          tradingsymbol: "NIFTY26SEPFUT",
+          instrumentToken: 1,
+          ema: 24116.93,
+          highestHigh: 24000,
+          lowestLow: 23765,
+          lastClose: 23921,
+          lotSize: 65,
+        },
+      ],
+      "2026-09-08 12:15:00",
+      "token"
+    )
+    expect(updateChaseStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: CHASE_STATUS.AWAITING_SIGNAL })
+    )
+    expect(updateChaseStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: CHASE_STATUS.AWAITING_SHORT })
+    )
+  })
+
+  it("holds SHORT when the paper book actually has size", async () => {
+    const { getChaseStatus, updateChaseStatus } = require("../../../lib/drizzleDbUtils")
+    const { getChaseSettings } = require("../../../lib/chaseSettings")
+    const { placeKiteOrder } = require("../../../lib/kiteUtils")
+    const { getOpenPositions } = require("../../../lib/trading/ledger")
+    getChaseSettings.mockResolvedValue({ lots: 2, paused: false })
+    getOpenPositions.mockResolvedValue([{ tradingsymbol: "NIFTY26SEPFUT", quantity: -130 }])
+    getChaseStatus.mockResolvedValue({
+      status: CHASE_STATUS.SHORT,
+      tradingsymbol: "NIFTY26SEPFUT",
+    })
+    placeKiteOrder.mockClear()
+    updateChaseStatus.mockClear()
+
+    const { generateSignal } = await import("../../../lib/chaseSignal")
+    await generateSignal(
+      [
+        {
+          tradingsymbol: "NIFTY26SEPFUT",
+          instrumentToken: 1,
+          ema: 24116.93,
+          highestHigh: 24000,
+          lowestLow: 23765,
+          lastClose: 23921,
+          lotSize: 65,
+        },
+      ],
+      "2026-09-08 12:15:00",
+      "token"
+    )
+    expect(updateChaseStatus).not.toHaveBeenCalled()
+    expect(placeKiteOrder).not.toHaveBeenCalled()
   })
 })

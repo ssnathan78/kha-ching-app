@@ -32,15 +32,12 @@ export function dashboardJobActions({
   hasSettledPnl: boolean
 }) {
   const waitingLike = ["delayed", "waiting", "failed"].includes(jobState || "")
+  const showSquareOff =
+    !hasSettledPnl &&
+    (isChase || (jobWasQueued && ["active", "completed"].includes(jobState || "") && !jobMissing))
   const showDelete =
     aborted || !jobWasQueued || isChase || jobMissing || (jobWasQueued && waitingLike)
-  const showStop =
-    !aborted &&
-    !isChase &&
-    jobWasQueued &&
-    ["active", "completed"].includes(jobState || "") &&
-    !hasSettledPnl
-  return { showDelete: showDelete && !showStop, showStop }
+  return { showDelete, showSquareOff, showStop: showSquareOff }
 }
 
 /** @deprecated Use trades_day PUT with userOverride ABORT only */

@@ -10,7 +10,6 @@ dayjs.extend(timezone)
 
 import { CHASE_STATUS } from "../constants"
 import { isChaseWindow, isSessionOpen } from "../marketCalendar"
-import { moneyToNumber } from "../trading/money"
 import { DEFAULT_RISK_SETTINGS, evaluateOrder, type RiskSettings } from "../trading/riskEngine"
 import type { Side } from "../trading/types"
 import { isMarketOpen } from "../utils"
@@ -23,6 +22,18 @@ export type ActorRuntime = {
   config: ActorConfig
   chaseStatus: string
   fired: boolean
+}
+
+type ActorCtx = {
+  nowMs: number
+  market: SimulatedMarket
+  broker: SimulatedExchange
+  book: PortfolioBook
+  paperLedger: PortfolioBook
+  liveLedger: PortfolioBook
+  settings: RiskSettings
+  paperRisk: boolean
+  recentOrderCount: number
 }
 
 export function createActorRuntime(config: ActorConfig): ActorRuntime {
@@ -39,6 +50,8 @@ export function runActors(args: {
   market: SimulatedMarket
   broker: SimulatedExchange
   book: PortfolioBook
+  paperLedger: PortfolioBook
+  liveLedger: PortfolioBook
   settings: RiskSettings
   paperRisk: boolean
   recentOrderCount: number
@@ -62,17 +75,19 @@ export function runActors(args: {
   return { signals, risk, errors }
 }
 
+function workingEntry(ctx: ActorCtx, symbol: string, side: Side): boolean {
+  return [...ctx.broker.orders.values()].some(
+    o =>
+      o.symbol === symbol &&
+      o.side === side &&
+      o.role === "ENTRY" &&
+      !["FILLED", "CANCELLED", "REJECTED", "EXPIRED", "FAILED"].includes(o.status)
+  )
+}
+
 function stepChase(
   actor: ActorRuntime,
-  ctx: {
-    nowMs: number
-    market: SimulatedMarket
-    broker: SimulatedExchange
-    book: PortfolioBook
-    settings: RiskSettings
-    paperRisk: boolean
-    recentOrderCount: number
-  },
+  ctx: ActorCtx,
   signals: SignalEvent[],
   risk: RiskEvent[]
 ): void {
@@ -98,6 +113,14 @@ function stepChase(
   const high = config.highestHigh ?? quote.high
   const low = config.lowestLow ?? quote.low
   const qty = config.lots * 65
+  const bookQty = ctx.book.qty(config.symbol)
+
+  if (actor.chaseStatus === CHASE_STATUS.AWAITING_LONG && bookQty > 0) {
+    actor.chaseStatus = CHASE_STATUS.LONG
+  }
+  if (actor.chaseStatus === CHASE_STATUS.AWAITING_SHORT && bookQty < 0) {
+    actor.chaseStatus = CHASE_STATUS.SHORT
+  }
 
   if (actor.chaseStatus === CHASE_STATUS.AWAITING_SIGNAL) {
     if (!chaseAllowsNewEntry(paused)) return
@@ -111,8 +134,8 @@ function stepChase(
           `last ${quote.last} > long ${longTolerance}`
         )
       )
-      actor.chaseStatus = CHASE_STATUS.AWAITING_LONG
-      maybeEnter(ctx, config, "BUY", high, qty, "SL-M", signals, risk)
+      const placed = maybeEnter(ctx, config, "BUY", high, qty, "SL-M", risk)
+      actor.chaseStatus = placed ? CHASE_STATUS.AWAITING_LONG : CHASE_STATUS.AWAITING_SIGNAL
     } else if (quote.last < shortTolerance) {
       signals.push(
         signal(
@@ -123,55 +146,45 @@ function stepChase(
           `last ${quote.last} < short ${shortTolerance}`
         )
       )
-      actor.chaseStatus = CHASE_STATUS.AWAITING_SHORT
-      maybeEnter(ctx, config, "SELL", low, qty, "SL-M", signals, risk)
+      const placed = maybeEnter(ctx, config, "SELL", low, qty, "SL-M", risk)
+      actor.chaseStatus = placed ? CHASE_STATUS.AWAITING_SHORT : CHASE_STATUS.AWAITING_SIGNAL
     }
     return
   }
 
+  if (
+    (actor.chaseStatus === CHASE_STATUS.LONG || actor.chaseStatus === CHASE_STATUS.SHORT) &&
+    bookQty === 0
+  ) {
+    actor.chaseStatus = CHASE_STATUS.AWAITING_SIGNAL
+    return
+  }
+
   if (actor.chaseStatus === CHASE_STATUS.LONG && quote.low <= (config.lowestLow ?? ema)) {
+    const flattenQty = Math.abs(bookQty)
+    if (flattenQty === 0) {
+      actor.chaseStatus = CHASE_STATUS.AWAITING_SIGNAL
+      return
+    }
     signals.push(signal(ctx.nowMs, config, "SELL", "SL", "long stop"))
-    maybeEnter(
-      ctx,
-      config,
-      "SELL",
-      quote.last,
-      Math.abs(ctx.book.qty(config.symbol)) || qty,
-      "MARKET",
-      signals,
-      risk,
-      "FLATTEN"
-    )
+    maybeEnter(ctx, config, "SELL", quote.last, flattenQty, "MARKET", risk, "FLATTEN")
     actor.chaseStatus = CHASE_STATUS.AWAITING_SIGNAL
   }
   if (actor.chaseStatus === CHASE_STATUS.SHORT && quote.high >= (config.highestHigh ?? ema)) {
+    const flattenQty = Math.abs(bookQty)
+    if (flattenQty === 0) {
+      actor.chaseStatus = CHASE_STATUS.AWAITING_SIGNAL
+      return
+    }
     signals.push(signal(ctx.nowMs, config, "BUY", "SL", "short stop"))
-    maybeEnter(
-      ctx,
-      config,
-      "BUY",
-      quote.last,
-      Math.abs(ctx.book.qty(config.symbol)) || qty,
-      "MARKET",
-      signals,
-      risk,
-      "FLATTEN"
-    )
+    maybeEnter(ctx, config, "BUY", quote.last, flattenQty, "MARKET", risk, "FLATTEN")
     actor.chaseStatus = CHASE_STATUS.AWAITING_SIGNAL
   }
 }
 
 function stepTimeEntry(
   actor: ActorRuntime,
-  ctx: {
-    nowMs: number
-    market: SimulatedMarket
-    broker: SimulatedExchange
-    book: PortfolioBook
-    settings: RiskSettings
-    paperRisk: boolean
-    recentOrderCount: number
-  },
+  ctx: ActorCtx,
   signals: SignalEvent[],
   risk: RiskEvent[]
 ): void {
@@ -183,13 +196,11 @@ function stepTimeEntry(
   const fireMin = hh * 60 + mm
   if (istMin < fireMin) return
 
-  // Real ATM straddle skips the market-hours check when MOCK_ORDERS is true.
-  // Live path (paperRisk=false) must honor isMarketOpen.
-  if (!ctx.paperRisk && !isMarketOpen()) return
+  if (!isSessionOpen(ctx.nowMs) && !ctx.paperRisk) return
   if (ctx.paperRisk && !isSessionOpen(ctx.nowMs) && !process.env.MOCK_ORDERS) return
 
   actor.fired = true
-  const qty = actor.config.lots * (actor.config.kind === "strangle" ? 65 : 65)
+  const qty = actor.config.lots * (actor.config.lotSize ?? 65)
   signals.push(
     signal(ctx.nowMs, actor.config, "SELL", "ENTRY", `${actor.config.kind} scheduled entry`)
   )
@@ -200,31 +211,33 @@ function stepTimeEntry(
     ctx.market.get(actor.config.symbol)?.last ?? 0,
     qty,
     "MARKET",
-    signals,
     risk
   )
 }
 
 function maybeEnter(
-  ctx: {
-    nowMs: number
-    market: SimulatedMarket
-    broker: SimulatedExchange
-    book: PortfolioBook
-    settings: RiskSettings
-    paperRisk: boolean
-    recentOrderCount: number
-  },
+  ctx: ActorCtx,
   config: ActorConfig,
   side: Side,
   triggerOrPx: number,
   quantity: number,
   orderType: PlaceOrderInput["orderType"],
-  _signals: SignalEvent[],
   risk: RiskEvent[],
   role: "ENTRY" | "FLATTEN" | "SL" | "EXIT" = "ENTRY"
-): void {
-  if (quantity <= 0) return
+): boolean {
+  if (quantity <= 0) return false
+  if (role === "ENTRY" && workingEntry(ctx, config.symbol, side)) return false
+  const other = ctx.paperRisk ? ctx.liveLedger : ctx.paperLedger
+  if (role === "ENTRY" && other.qty(config.symbol) !== 0) {
+    risk.push({
+      at: ctx.nowMs,
+      code: config.strategy === "CHASE" ? "CHASE_OTHER_BOOK" : "OTHER_BOOK",
+      message: "Will not punch this book while the other paper/live book is still open",
+      strategy: config.strategy,
+      symbol: config.symbol,
+    })
+    return false
+  }
   const quote = ctx.market.get(config.symbol)
   const settings: RiskSettings = {
     ...DEFAULT_RISK_SETTINGS,
@@ -248,7 +261,6 @@ function maybeEnter(
       settings,
       now: new Date(ctx.nowMs),
       isMock: ctx.paperRisk,
-      // paperRisk=false means "evaluate as live" (LIVE_BLOCKED + market hours).
       isPaper: ctx.paperRisk,
       marketOpen: isMarketOpen(),
       jobAborted: false,
@@ -258,11 +270,6 @@ function maybeEnter(
       ).length,
       recentOrderCount: ctx.recentOrderCount,
       pendingDuplicate: false,
-      dailyLossInr: [...ctx.book.positions.values()].reduce(
-        (s, p) => s + moneyToNumber(p.realizedPnl),
-        0
-      ),
-      drawdownPct: 0,
     }
   )
   if (!decision.ok) {
@@ -273,7 +280,7 @@ function maybeEnter(
       strategy: config.strategy,
       symbol: config.symbol,
     })
-    return
+    return false
   }
   ctx.broker.placeOrder(
     {
@@ -287,14 +294,13 @@ function maybeEnter(
       tag: config.kind,
       role,
       strategy: config.strategy,
+      provenance: ctx.paperRisk ? "PAPER" : "LIVE",
       clientKey: `${config.kind}:${config.symbol}:${side}:${quantity}:${role}:${ctx.nowMs}`,
     },
     ctx.market,
     ctx.nowMs
   )
-  if (config.kind === "chase" && role === "ENTRY") {
-    // status advanced by caller
-  }
+  return true
 }
 
 function signal(

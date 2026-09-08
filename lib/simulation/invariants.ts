@@ -160,11 +160,7 @@ function check(
     case "halted_no_entries": {
       const entries = result.orders.filter(o => o.role === "ENTRY" && o.status !== "REJECTED")
       const halted = result.riskEvents.some(
-        e =>
-          e.code === "DESK_HALTED" ||
-          e.code === "STRATEGY_HALTED" ||
-          e.code === "DRAWDOWN" ||
-          e.code === "DAILY_LOSS"
+        e => e.code === "DESK_HALTED" || e.code === "STRATEGY_HALTED"
       )
       return yn(!halted || entries.length === 0, `entries after halt=${entries.length}`)
     }

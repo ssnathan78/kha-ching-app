@@ -631,8 +631,6 @@ export const riskSettings = pgTable("risk_settings", {
   maxNotionalInr: numeric("max_notional_inr").notNull().default("2000000"),
   maxOpenPositions: integer("max_open_positions").notNull().default(12),
   maxOpenOrders: integer("max_open_orders").notNull().default(40),
-  maxDailyLossInr: numeric("max_daily_loss_inr").notNull().default("50000"),
-  maxDrawdownPct: numeric("max_drawdown_pct").notNull().default("0.15"),
   maxOrdersPerMinute: integer("max_orders_per_minute").notNull().default(20),
   stalePriceMaxAgeSec: integer("stale_price_max_age_sec").notNull().default(30),
   requireMarketHours: boolean("require_market_hours").notNull().default(true),

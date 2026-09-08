@@ -40,12 +40,6 @@ function sanitizeStrategyLimits(raw: unknown): RiskSettings["strategies"] | unde
       maxLots: Number.isFinite(Number(row.maxLots))
         ? Number(row.maxLots)
         : DEFAULT_STRATEGY_LIMITS.maxLots,
-      maxDailyLossInr: Number.isFinite(Number(row.maxDailyLossInr))
-        ? Number(row.maxDailyLossInr)
-        : DEFAULT_STRATEGY_LIMITS.maxDailyLossInr,
-      maxDrawdownPct: Number.isFinite(Number(row.maxDrawdownPct))
-        ? Number(row.maxDrawdownPct)
-        : DEFAULT_STRATEGY_LIMITS.maxDrawdownPct,
       maxOpenPositions: Number.isFinite(Number(row.maxOpenPositions))
         ? Number(row.maxOpenPositions)
         : DEFAULT_STRATEGY_LIMITS.maxOpenPositions,
@@ -79,7 +73,18 @@ export default withSession(async (req, res) => {
 
   try {
     if (req.method === "GET") {
-      return res.json({ settings: await getRiskSettings(), mockOrders: isMockOrder() })
+      const settings = await getRiskSettings()
+      try {
+        const { buildDeskSetupNotional } = await import("../../../lib/trading/setupNotional")
+        return res.json({
+          settings,
+          mockOrders: isMockOrder(),
+          setups: await buildDeskSetupNotional(),
+        })
+      } catch (e) {
+        logger.warn("[desk/risk] setup notional unavailable", e)
+        return res.json({ settings, mockOrders: isMockOrder() })
+      }
     }
 
     if (req.method === "POST") {
@@ -98,7 +103,28 @@ export default withSession(async (req, res) => {
     }
 
     if (req.method === "PUT") {
+      const current = await getRiskSettings()
       const patch = sanitizePatch(req.body?.settings || req.body || {})
+      const { getOpenPositions } = await import("../../../lib/trading/ledger")
+      const { splitLedgerQty, executionModeSwitchBlocked } = await import(
+        "../../../lib/trading/bookSplit"
+      )
+      const openRows = await getOpenPositions()
+      for (const key of RISK_STRATEGY_KEYS) {
+        const nextMode = patch.strategies?.[key]?.executionMode
+        if (!nextMode || nextMode === current.strategies[key].executionMode) continue
+        const { paperLedgerQty, liveLedgerQty } = splitLedgerQty(openRows, { strategy: key })
+        const blocked = executionModeSwitchBlocked({
+          processMock: isMockOrder(),
+          strategy: key,
+          fromMode: current.strategies[key].executionMode,
+          toMode: nextMode,
+          paperLedgerQty,
+          liveLedgerQty,
+          kiteQty: 0,
+        })
+        if (!blocked.ok) return res.status(409).json({ error: blocked.error })
+      }
       return res.json({ settings: await saveRiskSettings(patch), mockOrders: isMockOrder() })
     }
 

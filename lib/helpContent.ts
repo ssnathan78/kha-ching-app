@@ -26,7 +26,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Chase is a Nifty futures process that keeps running across days. It is not a weekday template.",
           "There is a single lots + engine configuration. Pause skips new entries after the current position is flat; resume allows the next signal.",
-          "Kill intraday on the dashboard does not pause Chase. Kill all (incl. Chase) does.",
+          "Kill intraday on the dashboard does not pause Chase. Kill all (incl. Chase) does. Square off all open gets you out of current books without a halt; Chase can take the next signal.",
         ],
       },
       {
@@ -38,19 +38,19 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
           "Desk → Contracts shows the Kite NFO futures and option expiries the strategies will use today (front/next month FUT for Chase, current/next/monthly option dates for straddles and strangles). The contract list is fetched from Kite and cached until 07:00 IST — it is not a Postgres table. Chase stores only the selected indexes and, once in a trade, the tradingsymbol on chase_status.",
           "Desk → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, and unresolved recon. The sidebar badge is the unread error count. Filter All / Today / Before today. Clear hides those rows without deleting the ledger.",
           "Desk → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. Filter by strategy, weekday plan, or a single job. Clear today / before today / all deletes those signal rows.",
-          "Kite remains the broker's execution reality. Reconcile with broker compares the ledger to Kite and records mismatches instead of silently rewriting history.",
+          "Kite remains the broker's execution reality. Reconcile with broker compares the ledger to Kite and records mismatches instead of silently rewriting history. Square off on a position row (or on Today / Chase) sends a flatten for the open book. Clear phantom zeros a leftover ledger book after proving Kite is flat (or immediately for paper). It does not send an order and does not let you type a new qty.",
           "A signal is not an order. An order is not a fill. A fill is not a position. A position is not a completed trade. Desk keeps those records separate so a restart can reconstruct what happened.",
-          "Desk → Risk is the only place trading limits live. Strategies do not share P&L for those limits. See Risk flags below for Allow live orders vs Trading enabled, and Strategy enabled vs Not halted.",
+          "Desk → Risk is the only place trading limits live. Strategies do not share P&L for those limits. See Risk flags below for Allow live orders vs Trading enabled, and Strategy enabled vs Not halted. The Risk page also lists Chase and today's weekday-plan size next to max notional so a 2-lot Nifty future is not a surprise at punch.",
         ],
       },
       {
         id: "risk-flags",
         title: "Risk flags — live, trading, enabled, halt",
         body: [
-          "Allow live orders is the Zerodha master switch. Off means paper and mock still work (quotes and the ledger). A live punch also needs MOCK_ORDERS=false in .env and that strategy's Execution set to Live.",
+          "Allow live orders is the Zerodha master switch. Off means paper and mock still work (quotes and the ledger). A live punch also needs MOCK_ORDERS=false in .env and that strategy's Execution set to Live. Squaring off an existing live book is still allowed so you can get out.",
           "Trading enabled is desk-wide new entries. Turn it off to stop straddles, strangles, and Chase from opening. Flatten and stop-loss still go through. Halt new entries on the desk header is the same idea with a stored reason; Resume is explicit and also turns trading back on.",
           "Strategy enabled is that book's on/off. Off rejects every order for that strategy, including stop-loss and flatten. Use this when you want that book completely dark.",
-          "Not halted only blocks new entries (after a daily-loss or drawdown trip, or you halt it). Flatten and stop-loss still work. Halt never auto-clears — uncheck Not halted, or Resume on the desk header for a desk-wide halt.",
+          "Not halted only blocks new entries (you halt it from Risk, or Kill desk). Flatten and stop-loss still work. Halt never auto-clears — uncheck Not halted, or Resume on the desk header for a desk-wide halt. Max lots and max open positions stay per strategy so a new entry is sized and not stacked on an existing book. Do not switch Paper ↔ Live while that strategy still has an open book. Square off to flatten a real book; if the ledger is leftover and the broker is flat, Desk → Positions → Clear phantom zeros the app row without sending a Kite order.",
         ],
       },
       {
@@ -59,7 +59,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Trade plan stores weekday templates. Dashboard → Today's plan turns today's weekday into live jobs.",
           "Straddle / Strangle in the sidebar are for punching (or scheduling) right now, without waiting for the weekday template.",
-          "Dashboard Today has two emergency buttons: Kill intraday flattens today's straddles and strangles only. Kill all also pauses Chase and tries to flatten Chase futures. Chase is often a hedge for long ETFs — use Kill all only when you mean it.",
+          "Dashboard Today has Square off on each active job, including Chase, plus Square off all open. Those flatten the current books without halting. Kill intraday is the emergency: flatten today's straddles and strangles and halt the desk. Kill all also pauses Chase. Chase is often a hedge for long ETFs — use Kill all only when you mean it.",
         ],
       },
     ],
@@ -102,7 +102,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
           "Volatility type: short = sell both legs; long = buy both legs.",
           "Product: MIS is intraday; NRML carries overnight (unusual for this structure here).",
           "Expiry: current or next monthly/weekly (weekly UI is Nifty only).",
-          "Lots: number of option lots per leg.",
+          "Lots: number of option lots per leg. The form shows quantity and, if you type an estimated premium, rupee notional vs Desk → Risk max notional.",
         ],
       },
       {
@@ -149,6 +149,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Same name vs index split as the straddle: name is a label; index is the chain.",
           "Inverted strangle: swaps the usual OTM wings (used when you want the opposite skew treatment).",
+          "Lots: same as the straddle — the form previews quantity and notional vs the Desk cap if you type an estimated premium.",
         ],
       },
       {
@@ -192,8 +193,9 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "lots",
         title: "Lots",
         body: [
-          "How many futures lots to trade on each selected index. The Desk → Risk Chase max-lots cap can reject a save that is too large.",
+          "How many futures lots to trade on each selected index. The page shows lots × lot size × last hourly close so you can see rupee notional before an order. Desk → Risk max notional rejects the order if that size is over the cap.",
           "Pause: after the current LONG/SHORT is exited, do not enter again. Pending entry triggers are cancelled. Resume turns entries back on.",
+          "Reset to fresh signal: use this when Chase shows LONG/SHORT or HOLD but no order filled (for example a MAX_NOTIONAL reject). It returns the engine to AWAITING_SIGNAL. It does not flatten an open futures book — use Square off current on this page, Today, or Desk → Positions.",
         ],
       },
       {

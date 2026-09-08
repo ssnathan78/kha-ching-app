@@ -27,5 +27,12 @@ export default async function fetchJson<T = unknown>(
     return data as T
   }
 
-  throw new FetchJsonError(response.statusText, response, data)
+  const fromBody =
+    data &&
+    typeof data === "object" &&
+    "error" in data &&
+    typeof (data as { error: unknown }).error === "string"
+      ? (data as { error: string }).error
+      : null
+  throw new FetchJsonError(fromBody || response.statusText, response, data)
 }

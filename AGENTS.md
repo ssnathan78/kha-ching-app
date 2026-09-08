@@ -40,6 +40,30 @@ yarn live-test   # Optional; needs USER_SESSION against Kite
 
 CI runs lint, unit-test, sim-test, migrate, int-test, api-test, build, Playwright e2e-test. Do not put Kite live tests under `__tests__/unit`. Simulation must keep `SIMULATION=true` and `MOCK_ORDERS=true` — it must never call Kite.
 
+## Adversarial testing (required — this is a live desk)
+
+Treat every change as if it can lose real money. Happy-path tests are not enough. Before you finish work on **orders, risk, ledger provenance, Chase, straddle, strangle, or a new strategy**:
+
+1. List sequences of events × configs that can leave a **phantom status**, mix **paper and live books**, flatten **the wrong size**, or **open** a position while trying to exit.
+2. Encode those sequences as named scenarios in `lib/simulation/catalog.ts` with assertions that fail if the bug returns. Add outcome checks in `__tests__/simulation/` (see `chaseAdversarial.test.ts`, `strategyAdversarial.test.ts`, and CORE in `scenarios.test.ts`). Every strategy in `RISK_STRATEGY_KEYS` needs the reject-without-fill and paper↔live matrix, not only Chase.
+3. Put hermetic matrices in `__tests__/unit/` (book qty, fill decisions, risk codes). Do not rely on a one-off REPL.
+4. Run `yarn unit-test` and `yarn sim-test`. If you touched Desk Risk or ledger writes, also `yarn api-test` / `yarn int-test` when Postgres is up.
+
+**Minimum sequences to consider** (add a case if the change can hit that path):
+
+| Sequence | Must not happen |
+|---|---|
+| Entry rejected (`MAX_NOTIONAL`, `MAX_LOTS`, `MAX_POSITIONS`, `LIVE_BLOCKED`, halt, pause, lots=0) | Strategy status LONG/SHORT (or equivalent) with an empty book; later HOLD that skips a real signal |
+| SL / flatten when the **active** book is flat | Qty falling back to configured lots (that **opens** a new position) |
+| Paper ↔ Live (or MOCK ↔ live) while a book is open | Treating the other book as a fill; sending a live flatten that opens Kite size; stacking a second book |
+| New entry while the other provenance still has size | Punching the new book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) |
+| Halt / trading-disabled / strategy-disabled | Blocking flatten/SL when those roles must still work (except strategy **disabled**, which is fully dark) |
+| Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty |
+
+**New or changed strategy:** add it to `RISK_STRATEGY_KEYS` and Desk → Risk; add a sim **actor** that reuses production `evaluateOrder` (do not invent a second entry rule); add catalog cases for reject-without-phantom-status, paper↔live with an open book, flatten-empty-book, and halt vs flatten. Spec: [docs/strategies/README.md](docs/strategies/README.md). Sim how-to: [docs/TRADING_SIMULATION_GUIDE.md](docs/TRADING_SIMULATION_GUIDE.md).
+
+Replay: `yarn simulate -- --scenario chase-paper-to-live-open` or `straddle-paper-to-live-open` / `strangle-paper-to-live-open` (print seed on failure).
+
 ## Docs to update when you change behaviour
 
 Login/cookies → `docs/LOCAL.md`, `docs/TROUBLESHOOTING.md`.  

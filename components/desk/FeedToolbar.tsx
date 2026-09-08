@@ -20,7 +20,10 @@ export default function FeedToolbar({
       spacing={1}
       sx={{ px: 2, pt: 1.5, mb: 1.5, flexWrap: "wrap", alignItems: { md: "center" } }}
     >
-      <FormControl size="small" sx={{ minWidth: 140 }}>
+      <FormControl
+        size="small"
+        sx={{ minWidth: { xs: "100%", md: 140 }, width: { xs: "100%", md: "auto" } }}
+      >
         <InputLabel>When</InputLabel>
         <Select label="When" value={period} onChange={e => onPeriod(e.target.value as FeedPeriod)}>
           <MenuItem value="all">All</MenuItem>

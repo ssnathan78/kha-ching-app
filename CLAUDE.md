@@ -89,7 +89,7 @@ Health: `GET /api/health`.
 
 ## Tests
 
-`__tests__/unit/` — hermetic (pnl, EMA, Chase defaults, cookies, help). `__tests__/integration/` — Postgres. `__tests__/live/` — Kite session, not CI.
+`__tests__/unit/` — hermetic (pnl, EMA, Chase defaults, cookies, help). `__tests__/simulation/` — injected clock, no Kite; adversarial catalog is required for strategy/risk/ledger changes (see **Adversarial testing** in [AGENTS.md](AGENTS.md)). `__tests__/integration/` — Postgres. `__tests__/live/` — Kite session, not CI.
 
 Run int/api/e2e with Docker deps: [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md#running-tests-with-docker).
 

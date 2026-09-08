@@ -35,6 +35,7 @@ import {
 import { executionProvenance, inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
 import { assertOrderAllowed } from "./trading/riskGate"
 import { getRiskSettings } from "./trading/riskSettings"
+import { isSyntheticProvenance, ledgerProvenance } from "./trading/types"
 import {
   closest,
   delay,
@@ -258,6 +259,8 @@ export type RiskAwarePlaceOrder = PlaceOrderParams & {
   purpose?: string
   strategy?: string
   ltp?: number
+  ltpAt?: Date | null
+  lots?: number | null
 }
 
 function stripRiskMeta(order: RiskAwarePlaceOrder): PlaceOrderParams {
@@ -265,9 +268,34 @@ function stripRiskMeta(order: RiskAwarePlaceOrder): PlaceOrderParams {
     purpose: _purpose,
     strategy: _strategy,
     ltp: _ltp,
+    ltpAt: _ltpAt,
+    lots: _lots,
     ...rest
   } = order as RiskAwarePlaceOrder & Record<string, unknown>
   return rest as PlaceOrderParams
+}
+
+async function resolveQuoteLtp(args: {
+  kite: any
+  exchange?: string
+  tradingsymbol?: string
+  provided?: number | null
+}): Promise<{ ltp: number; at: Date } | null> {
+  const provided = Number(args.provided)
+  if (Number.isFinite(provided) && provided > 0) {
+    return { ltp: provided, at: new Date() }
+  }
+  if (!args.kite || !args.exchange || !args.tradingsymbol) return null
+  try {
+    const key = `${args.exchange}:${args.tradingsymbol}`
+    const data = await args.kite.getLTP(key)
+    const ltp = Number(data?.[key]?.last_price)
+    if (!Number.isFinite(ltp) || ltp <= 0) return null
+    return { ltp, at: new Date() }
+  } catch (e) {
+    logger.warn("[placeOrder] LTP unavailable", e)
+    return null
+  }
 }
 
 export async function placeOrder(
@@ -283,6 +311,13 @@ export async function placeOrder(
   const processMock = isMockOrder()
   const paperExecution = processMock || paperStrategy
   const provenance = executionProvenance({ processMock, settings: riskSettings, strategy })
+  const role = inferOrderRole({ purpose, orderType: kiteOrder.order_type })
+  const quote = await resolveQuoteLtp({
+    kite,
+    exchange: kiteOrder.exchange,
+    tradingsymbol: kiteOrder.tradingsymbol,
+    provided: order.ltp,
+  })
   await assertOrderAllowed({
     tradingsymbol: kiteOrder.tradingsymbol,
     exchange: kiteOrder.exchange,
@@ -295,7 +330,10 @@ export async function placeOrder(
     tag: kiteOrder.tag,
     purpose,
     strategy,
-    role: inferOrderRole({ purpose, orderType: kiteOrder.order_type }),
+    role,
+    lots: order.lots,
+    ltp: role === "ENTRY" ? quote?.ltp : undefined,
+    ltpAt: role === "ENTRY" ? quote?.at : undefined,
   })
 
   const ledgerOrderId = await safeRecordOrderFromKiteProps(
@@ -327,7 +365,11 @@ export async function placeOrder(
         provenance,
       })
       const fillPrice =
-        Number(order.ltp) || Number(kiteOrder.price) || Number(kiteOrder.trigger_price) || 0
+        quote?.ltp ||
+        Number(order.ltp) ||
+        Number(kiteOrder.price) ||
+        Number(kiteOrder.trigger_price) ||
+        0
       if (ledgerOrderId && kiteOrder.tradingsymbol && kiteOrder.quantity) {
         await applyBrokerOrderSnapshot(
           {
@@ -1065,6 +1107,16 @@ export const remoteOrderSuccessEnsurer = async (args: {
     throw Error(USER_OVERRIDE.ABORT)
   }
 
+  const kite = (_kite ?? syncGetKiteInstance(user)) as any
+  const purpose = (orderProps as { purpose?: string }).purpose
+  const role = inferOrderRole({ purpose, orderType: orderProps.order_type })
+  const quote = await resolveQuoteLtp({
+    kite,
+    exchange: orderProps.exchange,
+    tradingsymbol: orderProps.tradingsymbol,
+    provided: (orderProps as { ltp?: number }).ltp,
+  })
+
   await assertOrderAllowed({
     tradingsymbol: orderProps.tradingsymbol,
     exchange: orderProps.exchange,
@@ -1075,11 +1127,12 @@ export const remoteOrderSuccessEnsurer = async (args: {
     price: orderProps.price,
     trigger_price: orderProps.trigger_price,
     tag: orderProps.tag,
-    purpose: (orderProps as { purpose?: string }).purpose,
+    purpose,
     strategy: jobStrategy,
+    role,
+    ltp: role === "ENTRY" ? quote?.ltp : undefined,
+    ltpAt: role === "ENTRY" ? quote?.at : undefined,
   })
-
-  const kite = (_kite ?? syncGetKiteInstance(user)) as any
 
   const { freezeQty } = INSTRUMENT_DETAILS[instrument]
   if (orderProps.quantity! > freezeQty) {
@@ -1121,10 +1174,13 @@ export const remoteOrderSuccessEnsurer = async (args: {
     const orderAckResponse = await placeOrder(kite, kite.VARIETY_REGULAR, {
       ...(orderProps as PlaceOrderParams),
       strategy: jobStrategy,
-      purpose: (orderProps as { purpose?: string }).purpose,
+      purpose,
+      ltp: quote?.ltp,
+      ltpAt: quote?.at,
     } as RiskAwarePlaceOrder)
     if (paperExecution) {
-      const fillPrice = Number(orderProps.price) || Number(orderProps.trigger_price) || 0
+      const fillPrice =
+        quote?.ltp || Number(orderProps.price) || Number(orderProps.trigger_price) || 0
       return {
         successful: true,
         response: [
@@ -1415,9 +1471,12 @@ export async function placeSL(
     (p: any) => p.tradingsymbol === tradingsymbol && p.quantity !== 0
   )
   if (!position) {
-    const ledger = (await getOpenPositions()).find(
-      p => p.tradingsymbol === tradingsymbol && p.quantity !== 0
-    )
+    const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
+    const ledger = (await getOpenPositions()).find(p => {
+      if (p.tradingsymbol !== tradingsymbol || p.quantity === 0) return false
+      const paperRow = isSyntheticProvenance(ledgerProvenance(p.provenance))
+      return paperBook ? paperRow : !paperRow
+    })
     if (ledger) {
       position = { tradingsymbol, quantity: ledger.quantity, product: ledger.product }
     }
@@ -1540,14 +1599,19 @@ export async function getMultipleInstrumentPrices(
  * @param tradingsymbol - Kite trading symbol to look up (e.g. NIFTY25JUNFUT).
  * @returns Net quantity (positive for long, negative for short, 0 if no position).
  */
-export async function getNetPositionQty(kite: any, tradingsymbol: string): Promise<number> {
+export async function getNetPositionQty(
+  kite: any,
+  tradingsymbol: string,
+  opts?: { ledgerFallback?: boolean }
+): Promise<number> {
   try {
     const positions = await kite.getPositions()
     const net = (positions.net as any[]).find((p: any) => p.tradingsymbol === tradingsymbol)
-    if (net?.quantity) return net.quantity
+    return Number(net?.quantity || 0)
   } catch (e) {
     logger.warn("[getNetPositionQty] kite positions unavailable", e)
   }
+  if (opts?.ledgerFallback === false) return 0
   const ledger = (await getOpenPositions()).filter(
     p => p.tradingsymbol === tradingsymbol && p.quantity !== 0
   )

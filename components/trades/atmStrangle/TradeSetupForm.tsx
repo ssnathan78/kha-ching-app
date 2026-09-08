@@ -16,6 +16,7 @@ import {
 import { TimePicker } from "@mui/x-date-pickers/TimePicker"
 import dayjs from "dayjs"
 import React from "react"
+import useSWR from "swr"
 
 import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import {
@@ -25,6 +26,7 @@ import {
   STRATEGIES,
   STRATEGIES_DETAILS,
 } from "../../../lib/constants"
+import fetchJson from "../../../lib/fetchJson"
 import { coerceLots } from "../../../lib/planMapper"
 import {
   coerceScheduleableExitStrategy,
@@ -38,6 +40,7 @@ import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 import FormSection from "../../lib/FormSection"
 import HedgeComponent from "../../lib/HedgeComponent"
 import InstrumentPicker from "../../lib/InstrumentPicker"
+import { OptionNotionalPreview } from "../../lib/NotionalPreview"
 import ProductTypeComponent from "../../lib/ProductTypeComponent"
 import RollbackComponent from "../../lib/RollbackComponent"
 import DiscreteSlider from "../../lib/Slider"
@@ -93,6 +96,11 @@ const TradeSetupForm = ({
 
   const [lotsError, setLotsError] = React.useState<string | null>(null)
   const [instrumentError, setInstrumentError] = React.useState<string | null>(null)
+  const { data: riskData } = useSWR<{ settings?: { maxNotionalInr?: number } }>(
+    "/api/desk/risk",
+    fetchJson
+  )
+  const maxNotionalInr = Number(riskData?.settings?.maxNotionalInr) || 0
 
   const handleFormSubmit = e => {
     e.preventDefault()
@@ -171,6 +179,13 @@ const TradeSetupForm = ({
                   onChange({ lots: coerceLots(e.target.value) })
                 }}
                 label="Lots"
+              />
+            </Grid>
+            <Grid size={12}>
+              <OptionNotionalPreview
+                lots={Number(state.lots) || 0}
+                instruments={state.instruments}
+                maxNotionalInr={maxNotionalInr}
               />
             </Grid>
             <Grid size={12}>

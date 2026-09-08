@@ -71,6 +71,10 @@ AWAITING_SIGNAL
 AWAITING_SHORT ──entry SL-M @ day's low──►  SHORT
 ```
 
+**LONG/SHORT requires a fill, not the candle alone.** A risk reject (`MAX_NOTIONAL`, `MAX_LOTS`, live blocked, …) leaves Chase in `AWAITING_*`. The minute job retries MARKET only after lots come from `chase_settings` (not a same-day `job_executions` row, which Chase does not create). If status was flipped without a ledger/Kite position, the next hourly job treats it as a phantom and returns to `AWAITING_SIGNAL` so that hour can signal again.
+
+Operator escape hatch: **Chase → Reset to fresh signal** (`POST /api/chase-settings` `action: reset-signal`). That does not flatten an open book.
+
 Open LONG/SHORT: no new entries until flat. At **13:15 IST** on days **after** entry (`createdAt` date ≠ today), trail SL toward EMA (`generateSignal`). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`).
 
 EOD (~16:15 EMA job, `hour === 16`): pending AWAITING_LONG/SHORT reset to AWAITING_SIGNAL; no new signal from the 16:15 bar.
@@ -157,7 +161,7 @@ Chase is a continuous futures book:
 
 Windows: roughly 09:16–15:29 for SL updates (`OPEN_MINUTES` / `CLOSE_MINUTES`). Weekends/holidays: Kite candles / `getPreviousTradingDay`; there is no separate `holidays` Python list.
 
-Paper/mock: `MOCK_ORDERS` + Desk execution mode. Unlike chase-bot, there is no `paper_trade_allow_outside_market_hours` flag on Chase itself.
+Paper/mock: `MOCK_ORDERS` + Desk execution mode. Unlike chase-bot, there is no `paper_trade_allow_outside_market_hours` flag on Chase itself. Desk → Risk still caps lots, open positions, notional, and live vs paper. Strategy code cannot skip that. Current holdings are used to avoid a second Chase book (and to flatten instead of opening a new short/long), not as a P&L brake. Switching Paper ↔ Live is rejected while that book is still open; a leftover paper row is never treated as a live fill (and a live Kite position is never treated as a paper fill). If the ledger is leftover and the broker is flat, Desk → Positions → Clear phantom zeros the app row without sending a Kite order.
 
 ---
 

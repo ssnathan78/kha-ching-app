@@ -36,8 +36,6 @@ function ctx(overrides: Partial<RiskContext> = {}): RiskContext {
     openOrderCount: 0,
     recentOrderCount: 0,
     pendingDuplicate: false,
-    dailyLossInr: 0,
-    drawdownPct: 0,
     ...overrides,
   }
 }
@@ -92,11 +90,14 @@ describe("evaluateOrder", () => {
     expect(isPaperStrategy(live, "ATM_STRANGLE")).toBe(true)
   })
 
-  it("blocks live orders unless Desk allowLiveOrders is on", () => {
+  it("blocks live entries unless Desk allowLiveOrders is on, but still allows flatten", () => {
     const live = ctx({ isMock: false })
     const blocked = evaluateOrder(intent(), live)
     expect(blocked.ok).toBe(false)
     if (!blocked.ok) expect(blocked.code).toBe("LIVE_BLOCKED")
+
+    expect(evaluateOrder(intent({ role: "FLATTEN" }), live)).toEqual({ ok: true })
+    expect(evaluateOrder(intent({ role: "SL", orderType: "SL" }), live)).toEqual({ ok: true })
 
     const allowed = evaluateOrder(
       intent(),
@@ -143,18 +144,37 @@ describe("evaluateOrder", () => {
     expect(evaluateOrder(intent(), ctx({ recentOrderCount: 20 })).ok).toBe(false)
   })
 
-  it("enforces daily loss and drawdown, then still allows flatten", () => {
-    const loss = evaluateOrder(intent(), ctx({ dailyLossInr: -50_000 }))
-    expect(loss.ok).toBe(false)
-    if (!loss.ok) expect(loss.code).toBe("DAILY_LOSS")
-
-    const dd = evaluateOrder(intent(), ctx({ drawdownPct: 0.15 }))
-    expect(dd.ok).toBe(false)
-    if (!dd.ok) expect(dd.code).toBe("DRAWDOWN")
-
-    expect(evaluateOrder(intent({ role: "FLATTEN" }), ctx({ dailyLossInr: -80_000 }))).toEqual({
+  it("allows flatten when the open-position cap would block a new entry", () => {
+    expect(evaluateOrder(intent(), ctx({ openPositionCount: 12 })).ok).toBe(false)
+    expect(evaluateOrder(intent({ role: "FLATTEN" }), ctx({ openPositionCount: 12 }))).toEqual({
       ok: true,
     })
+  })
+
+  it("does not skip flatten/SL because of notional, lots, or a stale quote", () => {
+    const fat = intent({
+      role: "FLATTEN",
+      lots: 21,
+      ltp: 50_000,
+      ltpAt: new Date("2026-09-05T09:00:00+05:30"),
+      price: 50_000,
+    })
+    expect(evaluateOrder(fat, ctx({ now: new Date("2026-09-05T10:00:00+05:30") }))).toEqual({
+      ok: true,
+    })
+    expect(evaluateOrder(intent({ role: "SL", lots: 21, ltp: 0 }), ctx())).toEqual({ ok: true })
+    expect(evaluateOrder(intent({ role: "EXIT", ltp: 50_000, price: 50_000 }), ctx())).toEqual({
+      ok: true,
+    })
+  })
+
+  it("applies MAX_NOTIONAL to a MARKET entry when only LTP is present", () => {
+    const rejected = evaluateOrder(
+      intent({ price: null, triggerPrice: null, ltp: 50_000, quantity: 65 }),
+      ctx({ settings: { ...DEFAULT_RISK_SETTINGS, maxNotionalInr: 100 } })
+    )
+    expect(rejected.ok).toBe(false)
+    if (!rejected.ok) expect(rejected.code).toBe("MAX_NOTIONAL")
   })
 
   it("rejects a duplicate working entry", () => {

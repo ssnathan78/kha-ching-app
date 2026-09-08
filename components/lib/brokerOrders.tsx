@@ -72,7 +72,15 @@ export default function BrokerOrders({ orders, trades, dbOrders }: BrokerOrdersP
       {orders.map((order, idx) => (
         <div key={order.order_id}>
           <Divider sx={{ my: idx === 0 ? "0 0 12px 0" : "12px 0" }} />
-          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 1,
+              flexWrap: "wrap",
+              minWidth: 0,
+            }}
+          >
             <Box
               sx={{
                 display: "flex",

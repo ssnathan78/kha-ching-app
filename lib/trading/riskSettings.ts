@@ -30,12 +30,6 @@ function mergeStrategyLimits(raw: unknown): Record<RiskStrategyKey, StrategyRisk
       maxLots: Number.isFinite(Number(row.maxLots))
         ? Number(row.maxLots)
         : DEFAULT_STRATEGY_LIMITS.maxLots,
-      maxDailyLossInr: Number.isFinite(Number(row.maxDailyLossInr))
-        ? Number(row.maxDailyLossInr)
-        : DEFAULT_STRATEGY_LIMITS.maxDailyLossInr,
-      maxDrawdownPct: Number.isFinite(Number(row.maxDrawdownPct))
-        ? Number(row.maxDrawdownPct)
-        : DEFAULT_STRATEGY_LIMITS.maxDrawdownPct,
       maxOpenPositions: Number.isFinite(Number(row.maxOpenPositions))
         ? Number(row.maxOpenPositions)
         : DEFAULT_STRATEGY_LIMITS.maxOpenPositions,
@@ -103,8 +97,6 @@ export async function saveRiskSettings(patch: Partial<RiskSettings>): Promise<Ri
       maxLots: next.strategies.ATM_STRADDLE.maxLots,
       maxQtyPerOrder: next.maxQtyPerOrder,
       maxOpenPositions: next.strategies.ATM_STRADDLE.maxOpenPositions,
-      maxDailyLossInr: String(next.strategies.ATM_STRADDLE.maxDailyLossInr),
-      maxDrawdownPct: String(next.strategies.ATM_STRADDLE.maxDrawdownPct),
       disabledStrategies: RISK_STRATEGY_KEYS.filter(k => !next.strategies[k].enabled),
       maxNotionalInr: String(next.maxNotionalInr),
       maxOpenOrders: next.maxOpenOrders,
@@ -125,8 +117,6 @@ export async function saveRiskSettings(patch: Partial<RiskSettings>): Promise<Ri
         maxLots: next.strategies.ATM_STRADDLE.maxLots,
         maxQtyPerOrder: next.maxQtyPerOrder,
         maxOpenPositions: next.strategies.ATM_STRADDLE.maxOpenPositions,
-        maxDailyLossInr: String(next.strategies.ATM_STRADDLE.maxDailyLossInr),
-        maxDrawdownPct: String(next.strategies.ATM_STRADDLE.maxDrawdownPct),
         disabledStrategies: RISK_STRATEGY_KEYS.filter(k => !next.strategies[k].enabled),
         maxNotionalInr: String(next.maxNotionalInr),
         maxOpenOrders: next.maxOpenOrders,

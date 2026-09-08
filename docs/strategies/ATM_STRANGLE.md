@@ -106,6 +106,8 @@ Same machinery as the straddle:
 
 If max-profit / max-loss flags are on the job, `targetPnL` still uses **points**.
 
+Desk → Risk still caps lots, open positions, notional, and live vs paper. Strategy code cannot skip that.
+
 ---
 
 ## 7. Scheduling

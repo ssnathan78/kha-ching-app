@@ -10,8 +10,8 @@ export default function OrdersTable({ rows = [] }) {
   const safeRows = Array.isArray(rows) ? rows.filter(Boolean) : []
 
   return (
-    <TableContainer>
-      <Table size="small" sx={{ maxWidth: "100%" }}>
+    <TableContainer sx={{ overflowX: "auto", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
+      <Table size="small" sx={{ minWidth: 280 }}>
         <TableBody>
           {safeRows.map((row, idx) => {
             const cells = Array.isArray(row) ? row : [{ value: row }]

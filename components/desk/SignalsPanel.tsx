@@ -12,9 +12,9 @@ import {
   TableRow,
   Typography,
 } from "@mui/material"
-
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
 import type { SignalFilters, StrategySignal } from "../../lib/trading/signals"
+import ScrollTable from "../lib/ScrollTable"
 import FeedToolbar from "./FeedToolbar"
 
 function when(value: string | null | undefined) {
@@ -56,7 +56,7 @@ export default function SignalsPanel({
   onClear: (period: FeedPeriod) => void
 }) {
   return (
-    <Paper>
+    <Paper sx={{ overflow: "hidden" }}>
       <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
         Persisted evaluations: Chase hourly EMA vs close, straddle skew samples, strangle strike
         picks. Filter by strategy, weekday plan, or a single job/trade.
@@ -67,7 +67,10 @@ export default function SignalsPanel({
         onClear={onClear}
         extra={
           <>
-            <FormControl size="small" sx={{ minWidth: 160 }}>
+            <FormControl
+              size="small"
+              sx={{ minWidth: { xs: "100%", md: 160 }, width: { xs: "100%", md: "auto" } }}
+            >
               <InputLabel>Strategy</InputLabel>
               <Select label="Strategy" value={strategy} onChange={e => onStrategy(e.target.value)}>
                 <MenuItem value="">All strategies</MenuItem>
@@ -78,7 +81,10 @@ export default function SignalsPanel({
                 ))}
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 160 }}>
+            <FormControl
+              size="small"
+              sx={{ minWidth: { xs: "100%", md: 160 }, width: { xs: "100%", md: "auto" } }}
+            >
               <InputLabel>Plan</InputLabel>
               <Select label="Plan" value={planRef} onChange={e => onPlanRef(e.target.value)}>
                 <MenuItem value="">All plans</MenuItem>
@@ -89,7 +95,10 @@ export default function SignalsPanel({
                 ))}
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 200 }}>
+            <FormControl
+              size="small"
+              sx={{ minWidth: { xs: "100%", md: 200 }, width: { xs: "100%", md: "auto" } }}
+            >
               <InputLabel>Trade / job</InputLabel>
               <Select label="Trade / job" value={jobId} onChange={e => onJobId(e.target.value)}>
                 <MenuItem value="">All trades</MenuItem>
@@ -103,39 +112,41 @@ export default function SignalsPanel({
           </>
         }
       />
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>When (IST)</TableCell>
-            <TableCell>Outcome</TableCell>
-            <TableCell>Kind</TableCell>
-            <TableCell>What the engine saw</TableCell>
-            <TableCell>Strategy</TableCell>
-            <TableCell>Instrument</TableCell>
-            <TableCell>Trade</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {signals.map(row => (
-            <TableRow key={row.id}>
-              <TableCell>{when(row.occurredAt)}</TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  label={row.outcome}
-                  color={outcomeColor(row.outcome)}
-                  variant="outlined"
-                />
-              </TableCell>
-              <TableCell>{row.kind}</TableCell>
-              <TableCell>{row.summary}</TableCell>
-              <TableCell>{row.strategy || "—"}</TableCell>
-              <TableCell>{row.instrument || row.tradingsymbol || "—"}</TableCell>
-              <TableCell>{row.jobName || row.orderTag || row.planRef || "—"}</TableCell>
+      <ScrollTable minWidth={800}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>When (IST)</TableCell>
+              <TableCell>Outcome</TableCell>
+              <TableCell>Kind</TableCell>
+              <TableCell>What the engine saw</TableCell>
+              <TableCell>Strategy</TableCell>
+              <TableCell>Instrument</TableCell>
+              <TableCell>Trade</TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {signals.map(row => (
+              <TableRow key={row.id}>
+                <TableCell>{when(row.occurredAt)}</TableCell>
+                <TableCell>
+                  <Chip
+                    size="small"
+                    label={row.outcome}
+                    color={outcomeColor(row.outcome)}
+                    variant="outlined"
+                  />
+                </TableCell>
+                <TableCell>{row.kind}</TableCell>
+                <TableCell>{row.summary}</TableCell>
+                <TableCell>{row.strategy || "—"}</TableCell>
+                <TableCell>{row.instrument || row.tradingsymbol || "—"}</TableCell>
+                <TableCell>{row.jobName || row.orderTag || row.planRef || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollTable>
       {signals.length === 0 ? (
         <Typography sx={{ p: 2 }} color="text.secondary">
           No signals in this filter. Chase writes one row each hour (including “waiting for

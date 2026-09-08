@@ -59,6 +59,18 @@ describe("/api/chase-settings", () => {
     expect(body.config.paused).toBe(false)
   })
 
+  it("POST reset-signal returns the Chase config after clearing status", async () => {
+    const result = await invokeApi(chaseSettingsHandler, {
+      method: "POST",
+      user,
+      body: { action: "reset-signal" },
+    })
+    expect(result.status).toBe(200)
+    const body = result.body as { reset?: { ok?: boolean }; config?: { lots: number } }
+    expect(body.reset?.ok).toBe(true)
+    expect(body.config?.lots).toBeGreaterThanOrEqual(1)
+  })
+
   it("returns 405 for unsupported method", async () => {
     const result = await invokeApi(chaseSettingsHandler, { method: "DELETE", user })
     expect(result.status).toBe(405)

@@ -45,6 +45,7 @@ export default function InstrumentPicker({
       {single ? (
         <RadioGroup
           row
+          sx={{ flexWrap: "wrap" }}
           value={selected}
           onChange={e => {
             const next = e.target.value as INSTRUMENTS
@@ -67,7 +68,7 @@ export default function InstrumentPicker({
           ))}
         </RadioGroup>
       ) : (
-        <FormGroup row>
+        <FormGroup row sx={{ flexWrap: "wrap" }}>
           {enabledInstruments.map(instrument => (
             <FormControlLabel
               key={instrument}

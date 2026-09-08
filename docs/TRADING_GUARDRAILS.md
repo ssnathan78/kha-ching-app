@@ -10,11 +10,11 @@ Resume after a halt is **always manual**. Nothing in workers auto-clears `desk_h
 |--|--|
 | Protects | Strategy bugs, oversized punches, live/paper mix-up, halted desk, overtrading |
 | Enforced | `lib/trading/riskEngine.ts` `evaluateOrder` via `lib/trading/riskGate.ts` `assertOrderAllowed` **before** Kite in `placeOrder` |
-| Trigger | Throws `RiskRejectedError`; audit event; daily-loss/drawdown also call `haltDesk` |
-| Config | Desk → Risk (`risk_settings` + per-strategy limits). Env is infra only (`MOCK_ORDERS` = this process does not call Kite). |
+| Trigger | Throws `RiskRejectedError`; audit event |
+| Config | Desk → Risk (`risk_settings` + per-strategy lots / open positions / live vs paper). Env is infra only (`MOCK_ORDERS` = this process does not call Kite). |
 | Tests | `__tests__/unit/trading/riskEngine.test.ts`, `__tests__/api/desk.test.ts` |
 
-Flatten / SL / EXIT roles **skip** desk halt, trading-disabled, strategy halt, daily-loss, drawdown, duplicate, rate, and open-position caps so a kill can still reduce risk. They do **not** skip `STRATEGY_DISABLED` — turning a strategy off rejects every order for that book, including flatten.
+Flatten / SL / EXIT roles **skip** desk halt, trading-disabled, strategy halt, duplicate, rate, and open-position caps so a kill can still reduce risk. They do **not** skip `STRATEGY_DISABLED` — turning a strategy off rejects every order for that book, including flatten.
 
 ## Operator flags (Desk → Risk)
 
@@ -56,31 +56,22 @@ Live Kite still needs the triple gate: `MOCK_ORDERS=false` + Allow live orders +
 | Enforced | `maxQtyPerOrder` (1800), `maxLots` (20), `maxNotionalInr` (20 lakh) |
 | Trigger | `MAX_QTY` / `MAX_LOTS` / `MAX_NOTIONAL` |
 | Config | `risk_settings` |
-| Tests | `riskEngine.test.ts` |
+| Tests | `riskEngine.test.ts`, `notional.test.ts` |
+| UI | Chase / straddle / strangle setup and Desk → Risk show configured notional vs the cap **before** punch |
 
-Plan/job validation still caps lots at 100 (`validateLots`). The **order** cannot exceed risk max lots.
+Plan/job validation still caps lots at 100 (`validateLots`). The **order** cannot exceed risk max lots. Chase lots are `chase_settings.lots`, not a weekday `job_executions` row.
 
 ## Open position / working order / rate
 
 | | |
 |--|--|
-| Protects | Stacked jobs, retry storms, two browsers punching |
-| Enforced | `maxOpenPositions` 12, `maxOpenOrders` 40, `maxOrdersPerMinute` 20, duplicate working order (tag+symbol+side+qty) |
+| Protects | Stacked entries, retry storms, two browsers punching |
+| Enforced | `maxOpenPositions` 12 (open ledger rows for that strategy), `maxOpenOrders` 40, `maxOrdersPerMinute` 20, duplicate working order (tag+symbol+side+qty) |
 | Trigger | `MAX_POSITIONS` / `MAX_OPEN_ORDERS` / `ORDER_RATE` / `DUPLICATE` |
 | Config | `risk_settings` |
 | Tests | `riskEngine.test.ts` |
 
-## Daily loss and drawdown
-
-| | |
-|--|--|
-| Protects | Continued punching after a bad morning |
-| Enforced | Ledger `netPnl` ≤ −`maxDailyLossInr` (50k); `drawdownPct` ≥ `maxDrawdownPct` (15%) |
-| Trigger | Reject entry, persist halt. Does **not** flatten by itself — use Kill desk |
-| Config | `risk_settings` |
-| Tests | `riskEngine.test.ts` |
-
-Uses ledger P&L, not `targetPnL` points.
+Open-position count is an **execution cap** (do not open another book when this strategy already has N rows). It is not a P&L or drawdown brake. Flatten / SL still go through at the cap.
 
 ## Market hours and stale / invalid data
 
@@ -175,5 +166,5 @@ Uses ledger P&L, not `targetPnL` points.
 
 - Changing `targetPnL` from points to rupees (project rule).
 - Volatility-based sizing or “regime filters” without a testable rationale.
-- Automatic resume after daily loss.
+- Automatic resume after a halt.
 - Invented brokerage/STT in the risk notional.
