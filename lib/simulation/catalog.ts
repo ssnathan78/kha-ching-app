@@ -144,10 +144,15 @@ function optionModeSwitch(
         },
       },
     ],
-    assertions: [
-      { type: "risk_code_seen", code: "OTHER_BOOK" },
-      { type: "max_exposure", maxAbsQty: inst.lotSize },
-    ],
+    assertions: toLive
+      ? [
+          { type: "risk_code_absent", code: "OTHER_BOOK" },
+          { type: "max_exposure", maxAbsQty: inst.lotSize },
+        ]
+      : [
+          { type: "risk_code_seen", code: "OTHER_BOOK" },
+          { type: "max_exposure", maxAbsQty: inst.lotSize },
+        ],
   })
 }
 
@@ -963,7 +968,7 @@ const NAMED: Record<string, () => SimulateConfig> = {
         },
       ],
       assertions: [
-        { type: "risk_code_seen", code: "CHASE_OTHER_BOOK" },
+        { type: "risk_code_absent", code: "CHASE_OTHER_BOOK" },
         { type: "max_exposure", maxAbsQty: 65 },
       ],
     }),

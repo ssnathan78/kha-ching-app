@@ -38,13 +38,13 @@ describe("chaseFill", () => {
       name: "live ignores leftover paper ledger",
       input: { paperBook: false, kiteQty: 0, paperLedgerQty: -130, liveLedgerQty: 0 },
       netQty: 0,
-      otherBookOpen: true,
+      otherBookOpen: false,
     },
     {
       name: "live prefers Kite over paper leftover",
       input: { paperBook: false, kiteQty: -65, paperLedgerQty: -130, liveLedgerQty: 0 },
       netQty: -65,
-      otherBookOpen: true,
+      otherBookOpen: false,
     },
     {
       name: "live falls back to live ledger when Kite is flat",
@@ -80,17 +80,37 @@ describe("chaseFill", () => {
     ).toEqual({ paperLedgerQty: -100, liveLedgerQty: 65 })
   })
 
-  it("blocks a live entry while the paper book is still open", () => {
+  it("does not treat leftover paper as blocking a live Chase entry", () => {
     const book = chaseBookFromSources({
       paperBook: false,
       kiteQty: 0,
       paperLedgerQty: -130,
       liveLedgerQty: 0,
     })
+    expect(book.otherBookOpen).toBe(false)
     expect(
       decideChaseEntryAction({
         automated: true,
-        quantity: 130,
+        quantity: 65,
+        netQty: book.netQty,
+        side: "SHORT",
+        hasOpenEntryOrder: false,
+        otherBookOpen: book.otherBookOpen,
+      })
+    ).toBe("place_entry")
+  })
+
+  it("still blocks a paper entry while the live book is open", () => {
+    const book = chaseBookFromSources({
+      paperBook: true,
+      kiteQty: -65,
+      paperLedgerQty: 0,
+      liveLedgerQty: 0,
+    })
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 65,
         netQty: book.netQty,
         side: "SHORT",
         hasOpenEntryOrder: false,
@@ -108,7 +128,7 @@ describe("chaseFill", () => {
 
   it.each([
     {
-      name: "blocks paper→live with paper size",
+      name: "allows paper→live with paper size (trial is archived on save)",
       input: {
         processMock: false,
         fromMode: "PAPER" as const,
@@ -116,6 +136,18 @@ describe("chaseFill", () => {
         paperLedgerQty: -130,
         liveLedgerQty: 0,
         kiteQty: 0,
+      },
+      ok: true,
+    },
+    {
+      name: "blocks paper→live when Kite still has size",
+      input: {
+        processMock: false,
+        fromMode: "PAPER" as const,
+        toMode: "LIVE" as const,
+        paperLedgerQty: -130,
+        liveLedgerQty: 0,
+        kiteQty: -65,
       },
       ok: false,
     },

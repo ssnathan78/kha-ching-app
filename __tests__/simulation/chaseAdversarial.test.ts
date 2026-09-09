@@ -45,15 +45,16 @@ describe("Chase adversarial sequences", () => {
     expect(result.riskEvents.some(e => e.code === "MAX_NOTIONAL")).toBe(true)
   })
 
-  it("paper → live with an open paper Chase book does not punch a live flatten or a second entry", () => {
+  it("paper → live archives the paper Chase book and does not size Kite from paper qty", () => {
     const result = simulate({ scenario: "chase-paper-to-live-open", seed: 1 })
     expect(result.invariantViolations).toEqual([])
     expect(result.assertionResults.every(a => a.ok)).toBe(true)
-    expect(result.riskEvents.some(e => e.code === "CHASE_OTHER_BOOK")).toBe(true)
-    expect(qty(result, "liveQty")).toBe(0)
-    expect(qty(result, "paperQty")).not.toBe(0)
-    expect(result.orders.filter(o => o.provenance === "LIVE" && o.role === "ENTRY").length).toBe(0)
-    expect(chaseStatus(result)).toBe("AWAITING_SIGNAL")
+    expect(result.riskEvents.some(e => e.code === "CHASE_OTHER_BOOK")).toBe(false)
+    expect(qty(result, "paperQty")).toBe(0)
+    const liveEntries = result.orders.filter(o => o.provenance === "LIVE" && o.role === "ENTRY")
+    for (const order of liveEntries) {
+      expect(order.quantity).toBe(65)
+    }
   })
 
   it("live → paper with an open live Chase book does not open a paper book on top", () => {

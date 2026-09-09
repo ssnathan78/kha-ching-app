@@ -52,9 +52,9 @@ export function activeBookFromSources(input: {
   const paperLedgerQty = Number(input.paperLedgerQty) || 0
   const liveLedgerQty = Number(input.liveLedgerQty) || 0
   const netQty = input.paperBook ? paperLedgerQty : kiteQty !== 0 ? kiteQty : liveLedgerQty
-  const otherBookOpen = input.paperBook
-    ? liveLedgerQty !== 0 || kiteQty !== 0
-    : paperLedgerQty !== 0
+  // Live never treats leftover paper as an open book. Paper still refuses to punch
+  // on top of live/Kite size.
+  const otherBookOpen = input.paperBook ? liveLedgerQty !== 0 || kiteQty !== 0 : false
   return {
     paperBook: input.paperBook,
     paperLedgerQty,
@@ -75,21 +75,27 @@ export function executionModeSwitchBlocked(input: {
   kiteQty?: number
 }): { ok: true } | { ok: false; error: string } {
   if (input.processMock || input.fromMode === input.toMode) return { ok: true }
-  const fromPaper = input.fromMode !== "LIVE"
-  const book = activeBookFromSources({
-    paperBook: fromPaper,
-    kiteQty: Number(input.kiteQty) || 0,
-    paperLedgerQty: input.paperLedgerQty,
-    liveLedgerQty: input.liveLedgerQty,
-  })
-  if (book.netQty === 0) return { ok: true }
+  const kiteQty = Number(input.kiteQty) || 0
+  const liveOpen = input.liveLedgerQty !== 0 || kiteQty !== 0
   const label = input.strategy
-  return {
-    ok: false,
-    error: fromPaper
-      ? `${label} still has a paper book. Square off the real size, or Clear phantom on Desk → Positions if the ledger is leftover, then switch.`
-      : `${label} still has a live book. Square off the real size, or Clear phantom on Desk → Positions if the ledger is leftover, then switch.`,
+
+  if (input.toMode === "LIVE") {
+    if (liveOpen) {
+      return {
+        ok: false,
+        error: `${label} already has a live book. Square that off on Kite before switching to Live.`,
+      }
+    }
+    return { ok: true }
   }
+
+  if (liveOpen) {
+    return {
+      ok: false,
+      error: `${label} still has a live book. Square off the real size, then switch to Paper.`,
+    }
+  }
+  return { ok: true }
 }
 
 export function ledgerRowsForActiveBook<

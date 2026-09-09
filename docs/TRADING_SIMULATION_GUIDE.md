@@ -107,7 +107,7 @@ yarn simulate -- --scenario random --seed 12345
 
 ## Live vs paper mid-trade
 
-`riskSchedule` on a scenario can flip `paperRisk` and per-strategy `executionMode` at a timestamp. Paper fills and live fills are tracked separately. A new entry is refused (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) while the other book still has size. Flatten qty is the open book only — never configured lots on a flat book.
+`riskSchedule` on a scenario can flip `paperRisk` and per-strategy `executionMode` at a timestamp. Paper fills and live fills are tracked separately. Paper → Live archives the paper trial (no broker flatten) and resets Chase to `AWAITING_SIGNAL`. A paper entry is still refused (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) while live/Kite has size. Live ignores leftover paper. Flatten qty is the open book only — never configured lots on a flat book.
 
 Named Chase: `chase-risk-reject-no-phantom`, `chase-phantom-flatten-no-lots`, `chase-max-lots-reject-no-phantom`, `chase-max-positions-no-entry`, `chase-live-blocked`, `chase-halted-no-entry`, `chase-paper-to-live-open`, `chase-live-to-paper-open`.
 

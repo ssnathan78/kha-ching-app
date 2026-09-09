@@ -28,9 +28,9 @@ const OPTION_REJECT_EMPTY = [
 ] as const
 
 const PAPER_TO_LIVE = [
-  { name: "chase-paper-to-live-open", code: "CHASE_OTHER_BOOK", symbol: NIFTY, lot: 65 },
-  { name: "straddle-paper-to-live-open", code: "OTHER_BOOK", symbol: NIFTY, lot: 65 },
-  { name: "strangle-paper-to-live-open", code: "OTHER_BOOK", symbol: BANK, lot: 30 },
+  { name: "chase-paper-to-live-open", symbol: NIFTY, lot: 65 },
+  { name: "straddle-paper-to-live-open", symbol: NIFTY, lot: 65 },
+  { name: "strangle-paper-to-live-open", symbol: BANK, lot: 30 },
 ] as const
 
 const LIVE_TO_PAPER = [
@@ -49,15 +49,19 @@ describe("all-strategy adversarial sequences", () => {
   })
 
   it.each(PAPER_TO_LIVE)(
-    "$name does not punch live while the paper book is open",
-    ({ name, code, symbol, lot }) => {
+    "$name archives paper and never sizes live from paper leftover",
+    ({ name, symbol, lot }) => {
       const result = simulate({ scenario: name, seed: 1 })
       expect(result.invariantViolations).toEqual([])
       expect(result.assertionResults.every(a => a.ok)).toBe(true)
-      expect(result.riskEvents.some(e => e.code === code)).toBe(true)
-      expect(qty(result, "liveQty", symbol)).toBe(0)
-      expect(Math.abs(qty(result, "paperQty", symbol))).toBe(lot)
-      expect(result.orders.filter(o => o.provenance === "LIVE" && o.role === "ENTRY").length).toBe(0)
+      expect(result.riskEvents.some(e => e.code === "CHASE_OTHER_BOOK" || e.code === "OTHER_BOOK")).toBe(
+        false
+      )
+      expect(qty(result, "paperQty", symbol)).toBe(0)
+      const liveEntries = result.orders.filter(o => o.provenance === "LIVE" && o.role === "ENTRY")
+      for (const order of liveEntries) {
+        expect(order.quantity).toBe(lot)
+      }
     }
   )
 

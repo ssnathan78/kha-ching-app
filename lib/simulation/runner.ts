@@ -4,6 +4,7 @@ import utc from "dayjs/plugin/utc"
 
 import { resetClock, SimClock, setClock } from "../clock"
 import { IST_TZ, isSessionOpen, marketSessionState } from "../marketCalendar"
+import { moneyToNumber } from "../trading/money"
 import { DEFAULT_RISK_SETTINGS, RISK_STRATEGY_KEYS, type RiskSettings } from "../trading/riskEngine"
 import { createActorRuntime, runActors } from "./actors"
 import { PortfolioBook } from "./book"
@@ -85,8 +86,15 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
       for (const sched of config.riskSchedule ?? []) {
         if (sched.at !== nowIso) continue
         if (sched.paperRisk != null && sched.paperRisk !== paperRisk) {
+          const goingLive = paperRisk && sched.paperRisk === false
+          if (goingLive) {
+            archivePaperTrial(book, paperLedger, liveLedger, broker, nowMs)
+          }
           for (const actor of actors) {
             if (actor.config.kind !== "chase") actor.fired = false
+            if (goingLive && actor.config.kind === "chase") {
+              actor.chaseStatus = "AWAITING_SIGNAL"
+            }
           }
           paperRisk = sched.paperRisk
         }
@@ -271,6 +279,39 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
     elapsedMs: Date.now() - started,
     ticks,
   }
+}
+
+function archivePaperTrial(
+  combined: PortfolioBook,
+  paper: PortfolioBook,
+  live: PortfolioBook,
+  broker: SimulatedExchange,
+  nowMs: number
+): void {
+  for (const order of broker.orders.values()) {
+    if (order.provenance === "LIVE") continue
+    if (["FILLED", "CANCELLED", "REJECTED", "EXPIRED", "FAILED"].includes(order.status)) continue
+    order.status = "CANCELLED"
+    order.updatedAt = nowMs
+  }
+  const fills: FillEvent[] = []
+  for (const [symbol, pos] of paper.positions) {
+    if (!pos.quantity) continue
+    fills.push({
+      fillId: `paper-archive:${symbol}:${nowMs}`,
+      orderId: `paper-archive:${symbol}:${nowMs}`,
+      symbol,
+      side: pos.quantity > 0 ? "SELL" : "BUY",
+      quantity: Math.abs(pos.quantity),
+      price: moneyToNumber(pos.averagePrice) || 0,
+      fee: 0,
+      at: nowMs,
+      provenance: "PAPER",
+    })
+  }
+  if (fills.length === 0) return
+  broker.fills.push(...fills)
+  applySplitFills(combined, paper, live, fills)
 }
 
 function applyFills(book: PortfolioBook, fills: FillEvent[]): void {

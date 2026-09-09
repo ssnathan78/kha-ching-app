@@ -122,6 +122,7 @@ Adversarial “make it lose fast without a software bug”: a **gap through SL**
 | R18 | High | Exits without `strategy` defaulted PAPER (live flatten/SL would not hit Kite) | **Fixed** — Chase tag / job strategy inferred; `placeSL`/`placeKiteOrder` set `CHASE` |
 | R19 | Med | Recon compared paper ledger qty to Kite | **Fixed** — PAPER/MOCK excluded from broker compare |
 | R20 | Med | Portfolio chips / daily_sessions mix paper + live | Residual — Desk tabs filter; header totals do not |
+| R21 | High | Paper leftover blocked Live or sized a Kite flatten | **Fixed** — Paper → Live archives paper (no Kite), resets Chase to `AWAITING_SIGNAL`, live book ignores paper qty |
 
 ## 5. Portfolio risks
 

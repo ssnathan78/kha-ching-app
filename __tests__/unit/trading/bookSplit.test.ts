@@ -27,7 +27,20 @@ describe("bookSplit", () => {
     ).toEqual({ paperLedgerQty: -65, liveLedgerQty: 0 })
   })
 
-  it("blocks Paper↔Live for any strategy with an open from-book", () => {
+  it("allows Paper → Live when only the paper book is open", () => {
+    expect(
+      executionModeSwitchBlocked({
+        processMock: false,
+        strategy: "ATM_STRADDLE",
+        fromMode: "PAPER",
+        toMode: "LIVE",
+        paperLedgerQty: -65,
+        liveLedgerQty: 0,
+      }).ok
+    ).toBe(true)
+  })
+
+  it("blocks Paper → Live when Kite or the live ledger still has size", () => {
     const blocked = executionModeSwitchBlocked({
       processMock: false,
       strategy: "ATM_STRADDLE",
@@ -35,9 +48,36 @@ describe("bookSplit", () => {
       toMode: "LIVE",
       paperLedgerQty: -65,
       liveLedgerQty: 0,
+      kiteQty: -65,
     })
     expect(blocked.ok).toBe(false)
     if (!blocked.ok) expect(blocked.error).toMatch(/ATM_STRADDLE/)
+  })
+
+  it("blocks Live → Paper while the live book is open, even if paper is also open", () => {
+    const blocked = executionModeSwitchBlocked({
+      processMock: false,
+      strategy: "CHASE",
+      fromMode: "LIVE",
+      toMode: "PAPER",
+      paperLedgerQty: -65,
+      liveLedgerQty: -65,
+    })
+    expect(blocked.ok).toBe(false)
+  })
+
+  it("allows Live → Paper when only paper leftover remains", () => {
+    expect(
+      executionModeSwitchBlocked({
+        processMock: false,
+        strategy: "CHASE",
+        fromMode: "LIVE",
+        toMode: "PAPER",
+        paperLedgerQty: -65,
+        liveLedgerQty: 0,
+        kiteQty: 0,
+      }).ok
+    ).toBe(true)
   })
 
   it("does not block a switch when the from-book is flat", () => {

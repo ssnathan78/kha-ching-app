@@ -109,11 +109,48 @@ export default withSession(async (req, res) => {
       const { splitLedgerQty, executionModeSwitchBlocked } = await import(
         "../../../lib/trading/bookSplit"
       )
+      const { prepareStrategyGoLive } = await import("../../../lib/trading/goLive")
       const openRows = await getOpenPositions()
+      const goingLive: Array<(typeof RISK_STRATEGY_KEYS)[number]> = []
+      const token = user.session?.access_token as string | undefined
+
       for (const key of RISK_STRATEGY_KEYS) {
         const nextMode = patch.strategies?.[key]?.executionMode
         if (!nextMode || nextMode === current.strategies[key].executionMode) continue
         const { paperLedgerQty, liveLedgerQty } = splitLedgerQty(openRows, { strategy: key })
+        let kiteQty = 0
+        const touchingLive = nextMode === "LIVE" || current.strategies[key].executionMode === "LIVE"
+        if (touchingLive && !isMockOrder()) {
+          if (!token) {
+            return res.status(409).json({
+              error:
+                "Log in to Kite so we can prove the live book is empty before changing execution mode.",
+            })
+          }
+          try {
+            const { getKiteInstance, getNetPositionQty } = await import("../../../lib/kiteUtils")
+            const kite = getKiteInstance(token)
+            const symbols = new Set(
+              openRows
+                .filter(r => r.strategy === key && r.tradingsymbol)
+                .map(r => r.tradingsymbol as string)
+            )
+            if (key === "CHASE") {
+              const { getChaseStatus } = await import("../../../lib/drizzleDbUtils")
+              const chase = await getChaseStatus("NIFTY")
+              if (chase?.tradingsymbol) symbols.add(chase.tradingsymbol)
+            }
+            for (const symbol of symbols) {
+              const q = await getNetPositionQty(kite, symbol, { ledgerFallback: false })
+              if (q !== 0) kiteQty = q
+            }
+          } catch (e) {
+            logger.warn("[desk/risk] kite qty unavailable on mode switch", e)
+            return res.status(409).json({
+              error: "Kite positions unavailable — not changing execution mode.",
+            })
+          }
+        }
         const blocked = executionModeSwitchBlocked({
           processMock: isMockOrder(),
           strategy: key,
@@ -121,10 +158,19 @@ export default withSession(async (req, res) => {
           toMode: nextMode,
           paperLedgerQty,
           liveLedgerQty,
-          kiteQty: 0,
+          kiteQty,
         })
         if (!blocked.ok) return res.status(409).json({ error: blocked.error })
+        if (current.strategies[key].executionMode !== "LIVE" && nextMode === "LIVE") {
+          goingLive.push(key)
+        }
       }
+
+      for (const key of goingLive) {
+        const prepared = await prepareStrategyGoLive({ strategy: key, actor: "USER" })
+        if (!prepared.ok) return res.status(409).json({ error: prepared.error })
+      }
+
       return res.json({ settings: await saveRiskSettings(patch), mockOrders: isMockOrder() })
     }
 

@@ -292,15 +292,16 @@ export default function RiskControls({
               {row.executionMode === "LIVE" ? (
                 <Alert severity="warning">
                   Live also needs MOCK_ORDERS=false in the process and “Allow live orders” above.
-                  Flatten the open book before switching Paper ↔ Live — save is rejected if that
-                  book is still open. If the ledger is leftover and the broker is flat, use Desk →
-                  Positions → Clear phantom.
+                  Saving Paper → Live archives this strategy’s paper positions (no Kite order) and
+                  resets Chase to AWAITING_SIGNAL. Save is rejected if Kite or the live ledger still
+                  has size. Live flatten never uses paper qty. Switching Live → Paper is rejected
+                  while a live book is open.
                 </Alert>
               ) : (
                 <Typography color="text.secondary" variant="body2">
                   Paper fills the ledger at the order price / LTP. Positions and trade history keep
-                  provenance PAPER (or MOCK if the whole process is MOCK_ORDERS=true). Flatten
-                  before switching to Live; an open paper book is not a live fill.
+                  provenance PAPER (or MOCK if the whole process is MOCK_ORDERS=true). Switching to
+                  Live throws away this paper trial; it does not send those quantities to Kite.
                 </Typography>
               )}
               <FormControlLabel

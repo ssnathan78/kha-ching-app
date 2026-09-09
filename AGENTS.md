@@ -55,15 +55,15 @@ Treat every change as if it can lose real money. Happy-path tests are not enough
 |---|---|
 | Entry rejected (`MAX_NOTIONAL`, `MAX_LOTS`, `MAX_POSITIONS`, `LIVE_BLOCKED`, halt, pause, lots=0) | Strategy status LONG/SHORT (or equivalent) with an empty book; later HOLD that skips a real signal |
 | SL / flatten when the **active** book is flat | Qty falling back to configured lots (that **opens** a new position) |
-| Paper ↔ Live (or MOCK ↔ live) while a book is open | Treating the other book as a fill; sending a live flatten that opens Kite size; stacking a second book |
-| New entry while the other provenance still has size | Punching the new book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) |
+| Paper → Live with paper leftover | Using paper qty on Kite; leftover paper blocking a live book |
+| New paper entry while live/Kite still has size | Punching paper on top of a real book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) |
 | Halt / trading-disabled / strategy-disabled | Blocking flatten/SL when those roles must still work (except strategy **disabled**, which is fully dark) |
 | One-way Nifty after a 9:20 short (one wing SL) | Flattening the leftover wing because the first SL hit. That leftover until ASO **is** the strategy (`*-920-one-way-holds-other-leg`) |
 | Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty |
 
 **New or changed strategy:** add it to `RISK_STRATEGY_KEYS` and Desk → Risk; add a sim **actor** that reuses production `evaluateOrder` (do not invent a second entry rule); add catalog cases for reject-without-phantom-status, paper↔live with an open book, flatten-empty-book, and halt vs flatten. Spec: [docs/strategies/README.md](docs/strategies/README.md). Sim how-to: [docs/TRADING_SIMULATION_GUIDE.md](docs/TRADING_SIMULATION_GUIDE.md).
 
-Replay: `yarn simulate -- --scenario chase-paper-to-live-open` or `straddle-paper-to-live-open` / `strangle-paper-to-live-open` (print seed on failure). 9:20 leftover wing: `straddle-920-one-way-holds-other-leg`.
+Replay: `yarn simulate -- --scenario chase-paper-to-live-open` (paper archived, Chase reset, live sized from lots not paper) or `straddle-paper-to-live-open` / `strangle-paper-to-live-open`. Live leftover still blocks paper: `chase-live-to-paper-open`. 9:20 leftover wing: `straddle-920-one-way-holds-other-leg`.
 
 ## Docs to update when you change behaviour
 

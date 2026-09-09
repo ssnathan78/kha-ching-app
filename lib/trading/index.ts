@@ -17,6 +17,7 @@ export {
 } from "./bookSplit"
 export { clearPhantomPosition, PHANTOM_CLEAR_CONFIRM } from "./clearPhantomBook"
 export { parseFeedPeriod, periodBounds } from "./feedWindow"
+export { prepareStrategyGoLive } from "./goLive"
 export * from "./kiteMap"
 export {
   applyBrokerOrderSnapshot,

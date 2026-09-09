@@ -39,7 +39,7 @@ File: `__tests__/unit/strategyValidation.test.ts`
 - `atmStraddle.test.ts` — skew timeout reject; `takeTradeIrrespectiveSkew`; NO_SL skips exit queue; margin fail
 - `processExitJob.test.ts` — NO_SL places no exit orders
 - `chaseSignal.test.ts` — mocked Kite; does not bypass `placeOrder` in production
-- `chaseFill.test.ts` — paper vs live book qty, flatten qty, Paper↔Live switch guard, no status flip on `signal_only` / `placed` / `other_book_open`; SHORT/LONG + flat book → `reset_empty` (must not MARKET lots)
+- `chaseFill.test.ts` — paper vs live book qty, flatten qty, Paper→Live allowed with paper leftover / blocked if Kite live size, no status flip on `signal_only` / `placed` / `other_book_open`; SHORT/LONG + flat book → `reset_empty` (must not MARKET lots)
 - `chaseSep9Sequence.test.ts` — 2026-09-09 replay: untriggered paper SL must not fill; live `TRIGGER PENDING` blocks a second entry; empty SHORT after SL must not punch lots on **paper or live**
 - Ledger: `__tests__/unit/trading/{money,accounting,stateMachine,invariants}.test.ts`
 
@@ -55,10 +55,10 @@ Files: `__tests__/simulation/chaseAdversarial.test.ts`, `__tests__/simulation/st
 | `chase-max-positions-no-entry` | `MAX_POSITIONS`, empty book |
 | `chase-live-blocked` | `LIVE_BLOCKED`, empty book |
 | `chase-halted-no-entry` | `STRATEGY_HALTED`, empty book |
-| `chase-paper-to-live-open` | `CHASE_OTHER_BOOK`, live qty 0, no live ENTRY |
-| `chase-live-to-paper-open` | `CHASE_OTHER_BOOK`, paper qty 0, no paper ENTRY |
 | `straddle-*-` / `strangle-*-` (reject, lots, positions, live-blocked, halted) | Matching risk code, empty book, no flatten |
-| `straddle-paper-to-live-open` / `strangle-paper-to-live-open` | `OTHER_BOOK`, live qty 0, paper lot remains |
+| `chase-paper-to-live-open` | Paper archived, no `CHASE_OTHER_BOOK`, live ENTRY sized from lots not paper leftover |
+| `chase-live-to-paper-open` | `CHASE_OTHER_BOOK`, paper qty 0, no paper ENTRY |
+| `straddle-paper-to-live-open` / `strangle-paper-to-live-open` | Paper archived, no `OTHER_BOOK`, live ENTRY sized from lots |
 | `straddle-live-to-paper-open` / `strangle-live-to-paper-open` | `OTHER_BOOK`, paper qty 0, live book remains |
 | `straddle-920-one-way-holds-other-leg` / `strangle-920-one-way-holds-other-leg` | CE SL only; PE held until ASO; both flat at end |
 | `straddle-920-chop-stops-both-legs` / `strangle-920-chop-stops-both-legs` | SL on both wings; no invented square-off size |

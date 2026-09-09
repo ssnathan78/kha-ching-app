@@ -295,7 +295,8 @@ function maybeEnter(
   if (quantity <= 0) return false
   if (role === "ENTRY" && workingEntry(ctx, symbol, side)) return false
   const other = ctx.paperRisk ? ctx.liveLedger : ctx.paperLedger
-  if (role === "ENTRY" && other.qty(symbol) !== 0) {
+  // Live ignores leftover paper. Paper still will not punch on top of a live book.
+  if (role === "ENTRY" && ctx.paperRisk && other.qty(symbol) !== 0) {
     risk.push({
       at: ctx.nowMs,
       code: config.strategy === "CHASE" ? "CHASE_OTHER_BOOK" : "OTHER_BOOK",

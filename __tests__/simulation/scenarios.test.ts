@@ -182,10 +182,13 @@ describe("end-to-end outcome scenarios", () => {
     expect(status).toBe("AWAITING_SIGNAL")
   })
 
-  it("Scenario L — paper→live with an open Chase book does not punch live", () => {
+  it("Scenario L — paper→live archives paper Chase and does not size live from paper qty", () => {
     const result = simulate({ scenario: "chase-paper-to-live-open", seed: 1 })
     expect(result.assertionResults.every(a => a.ok)).toBe(true)
-    expect(result.orders.filter(o => o.provenance === "LIVE" && o.role === "ENTRY").length).toBe(0)
+    expect(result.riskEvents.some(e => e.code === "CHASE_OTHER_BOOK")).toBe(false)
+    const paperQty =
+      ((result.finalState.paperQty as Record<string, number> | undefined) ?? {})["NIFTY26SEPFUT"] ?? 0
+    expect(paperQty).toBe(0)
   })
 
   it("Scenario M — live→paper with an open Chase book does not open a paper book", () => {
