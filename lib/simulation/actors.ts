@@ -247,7 +247,9 @@ function stepTimeEntry(
       if (qty >= 0) continue
       const quote = ctx.market.get(symbol)
       if (!quote) continue
-      const avg = moneyToNumber(ctx.book.positions.get(symbol)?.averagePrice)
+      const averagePrice = ctx.book.positions.get(symbol)?.averagePrice
+      if (averagePrice == null) continue
+      const avg = moneyToNumber(averagePrice)
       if (!Number.isFinite(avg) || avg <= 0) continue
       if (quote.last < avg * (1 + slm / 100)) continue
       signals.push(signal(ctx.nowMs, actor.config, "BUY", "SL", "9:20 per-leg stop", symbol))

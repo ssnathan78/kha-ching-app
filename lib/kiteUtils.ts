@@ -1191,8 +1191,8 @@ export const remoteOrderSuccessEnsurer = async (args: {
       const fillPrice =
         quote?.ltp || Number(orderProps.price) || Number(orderProps.trigger_price) || 0
       const fillNow = shouldFillPaperOrderNow({
-        orderType: orderProps.order_type,
-        side: orderProps.transaction_type,
+        orderType: orderProps.order_type ?? "MARKET",
+        side: orderProps.transaction_type ?? "BUY",
         triggerPrice: orderProps.trigger_price,
         last: fillPrice,
       })
