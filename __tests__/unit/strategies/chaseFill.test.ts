@@ -7,6 +7,7 @@ import {
   chaseFlattenQty,
   chaseLotsFromConfig,
   chaseStatusHasPosition,
+  decideChaseInPositionSync,
   splitChaseLedgerQty,
 } from "../../../lib/chaseFill"
 import { decideChaseEntryAction } from "../../../lib/chaseSignal"
@@ -182,11 +183,11 @@ describe("chaseFill", () => {
     expect(chaseExecutionModeSwitchBlocked(input).ok).toBe(ok)
   })
 
-  it("does not flip LONG/SHORT on signal_only or a failed place", () => {
+  it("does not flip LONG/SHORT on signal_only, failed place, or placed-without-fill", () => {
     expect(chaseFillAllowsStatusFlip("signal_only")).toBe(false)
     expect(chaseFillAllowsStatusFlip("failed")).toBe(false)
     expect(chaseFillAllowsStatusFlip("wait")).toBe(false)
-    expect(chaseFillAllowsStatusFlip("placed")).toBe(true)
+    expect(chaseFillAllowsStatusFlip("placed")).toBe(false)
     expect(chaseFillAllowsStatusFlip("filled")).toBe(true)
     expect(chaseFillFromDecision("signal_only")).toBe("signal_only")
   })
@@ -196,5 +197,17 @@ describe("chaseFill", () => {
     expect(chaseStatusHasPosition(CHASE_STATUS.SHORT, -130)).toBe(true)
     expect(chaseStatusHasPosition(CHASE_STATUS.LONG, -130)).toBe(false)
     expect(chaseStatusHasPosition(CHASE_STATUS.AWAITING_SIGNAL, -130)).toBe(false)
+  })
+
+  it("does not re-enter when LONG/SHORT is flat", () => {
+    expect(
+      decideChaseInPositionSync({ netQty: -65, side: "SHORT", hasOpenEntryOrder: false })
+    ).toBe("hold")
+    expect(
+      decideChaseInPositionSync({ netQty: 0, side: "SHORT", hasOpenEntryOrder: true })
+    ).toBe("wait_entry")
+    expect(
+      decideChaseInPositionSync({ netQty: 0, side: "SHORT", hasOpenEntryOrder: false })
+    ).toBe("reset_empty")
   })
 })

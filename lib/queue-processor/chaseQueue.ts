@@ -6,8 +6,10 @@ import {
   chaseFillAllowsStatusFlip,
   chaseFillFromDecision,
   chaseFlattenQty,
+  chaseHasWorkingEntryOrder,
   chaseLotsFromConfig,
-  chasePendingStatusFor,
+  chaseSideHasPosition,
+  decideChaseInPositionSync,
 } from "../chaseFill"
 import { getChaseSettings } from "../chaseSettings"
 import {
@@ -38,8 +40,8 @@ import {
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
 import { getOpenOrders } from "../trading/ledger"
+import { matchPaperWorkingStops } from "../trading/paperExecution"
 import { recordStrategySignal } from "../trading/signals"
-import { isSyntheticProvenance, ledgerProvenance } from "../trading/types"
 import { ms, postToSlack, toIst, withRemoteRetry } from "../utils"
 
 const OPEN_MINUTES = 9 * 60 + 16 // 9:16 AM IST
@@ -57,19 +59,40 @@ async function ensureChaseEntryFilled(args: {
 }): Promise<ChaseEntryFillResult> {
   const book = await resolveChaseBookBreakdown(args.tradingsymbol, args.accessToken)
   const entrySide = args.side === "LONG" ? "BUY" : "SELL"
-  const open = (await getOpenOrders()).filter(o => {
-    if (o.tradingsymbol !== args.tradingsymbol || o.purpose !== "ENTRY" || o.side !== entrySide) {
-      return false
+  const ledgerOrders = await getOpenOrders()
+  let kiteOrders: Array<{
+    tradingsymbol?: string | null
+    transaction_type?: string | null
+    status?: string | null
+  }> = []
+  if (!book.paperBook) {
+    try {
+      kiteOrders = (await args.kite.getOrders()) as Array<{
+        tradingsymbol?: string | null
+        transaction_type?: string | null
+        status?: string | null
+      }>
+    } catch (e) {
+      logger.warn(
+        `[processUpdateSL] live orderbook unavailable — not placing a second ${args.side} entry`,
+        e
+      )
+      return "wait"
     }
-    const paperOrder = isSyntheticProvenance(ledgerProvenance(o.provenance))
-    return book.paperBook ? paperOrder : !paperOrder
+  }
+  const hasOpenEntryOrder = chaseHasWorkingEntryOrder({
+    paperBook: book.paperBook,
+    tradingsymbol: args.tradingsymbol,
+    side: entrySide,
+    ledgerOrders,
+    kiteOrders,
   })
   const action = decideChaseEntryAction({
     automated: args.isAutomated,
     quantity: args.quantity,
     netQty: book.netQty,
     side: args.side,
-    hasOpenEntryOrder: open.length > 0,
+    hasOpenEntryOrder,
     otherBookOpen: book.otherBookOpen,
   })
   const mapped = chaseFillFromDecision(action)
@@ -115,7 +138,8 @@ async function ensureChaseEntryFilled(args: {
       purpose: "ENTRY",
       ltp: args.ltp,
     } as any)
-    return "placed"
+    const after = await resolveChaseBookBreakdown(args.tradingsymbol, args.accessToken)
+    return chaseSideHasPosition(args.side, after.netQty) ? "filled" : "placed"
   } catch (e) {
     logger.error(`[processUpdateSL] ${args.side} entry order failed`, e)
     await recordStrategySignal({
@@ -780,6 +804,13 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       return null
     }
 
+    await matchPaperWorkingStops({
+      tradingsymbol,
+      last: candle.close,
+      high: candle.high,
+      low: candle.low,
+    })
+
     const flattenChase = async (side: "BUY" | "SELL") => {
       if (!isAutomated || quantity <= 0) return
       const netQty = (await resolveChaseBookBreakdown(tradingsymbol, accessToken)).netQty
@@ -844,7 +875,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         })
       else logger.error("[processUpdateSL] error updating chase_status:", error)
       return { signal: "TRANSACTION_ALERT", stoploss }
-    } else if (currentStatus === CHASE_STATUS.AWAITING_LONG && candle.high >= (entryPoint ?? 0)) {
+    } else if (currentStatus === CHASE_STATUS.AWAITING_LONG) {
+      const awaitingLongBook = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      const longReady =
+        chaseSideHasPosition("LONG", awaitingLongBook.netQty) || candle.high >= (entryPoint ?? 0)
+      if (!longReady) {
+        logger.info("[processUpdateSL] no action taken")
+        return null
+      }
       logger.info(`[processUpdateSL] Entry triggered AWAITING_LONG for ${tradingsymbol}`)
       const fill = await ensureChaseEntryFilled({
         side: "LONG",
@@ -895,7 +933,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         }
       } else logger.error("[processUpdateSL] error updating chase_status:", error)
       return { signal: "TRANSACTION_ALERT", stoploss }
-    } else if (currentStatus === CHASE_STATUS.AWAITING_SHORT && candle.low <= (entryPoint ?? 0)) {
+    } else if (currentStatus === CHASE_STATUS.AWAITING_SHORT) {
+      const awaitingShortBook = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      const shortReady =
+        chaseSideHasPosition("SHORT", awaitingShortBook.netQty) || candle.low <= (entryPoint ?? 0)
+      if (!shortReady) {
+        logger.info("[processUpdateSL] no action taken")
+        return null
+      }
       logger.info(`[processUpdateSL] Entry triggered AWAITING_SHORT for ${tradingsymbol}`)
       const fill = await ensureChaseEntryFilled({
         side: "SHORT",
@@ -954,26 +999,56 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       quantity > 0
     ) {
       const side = currentStatus === CHASE_STATUS.LONG ? "LONG" : "SHORT"
-      const fill = await ensureChaseEntryFilled({
-        side,
+      const book = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      const entrySide = side === "LONG" ? "BUY" : "SELL"
+      let kiteOrders: Array<{
+        tradingsymbol?: string | null
+        transaction_type?: string | null
+        status?: string | null
+      }> = []
+      if (!book.paperBook) {
+        try {
+          kiteOrders = (await kite.getOrders()) as Array<{
+            tradingsymbol?: string | null
+            transaction_type?: string | null
+            status?: string | null
+          }>
+        } catch (e) {
+          logger.warn(
+            `[processUpdateSL] live orderbook unavailable — treating ${side} as wait, not punching lots`,
+            e
+          )
+          kiteOrders = [
+            { tradingsymbol, transaction_type: entrySide, status: STATUS_TRIGGER_PENDING },
+          ]
+        }
+      }
+      const hasOpenEntryOrder = chaseHasWorkingEntryOrder({
+        paperBook: book.paperBook,
         tradingsymbol,
-        quantity,
-        isAutomated,
-        accessToken,
-        kite,
-        ltp: candle.close,
+        side: entrySide,
+        ledgerOrders: await getOpenOrders(),
+        kiteOrders,
       })
-      if (fill === "placed") {
+      const sync = decideChaseInPositionSync({
+        netQty: book.netQty,
+        side,
+        hasOpenEntryOrder,
+      })
+      if (sync === "wait_entry") {
         logger.info(
-          `[processUpdateSL] ${side} book was flat — entry retry filled for ${tradingsymbol}`
+          `[processUpdateSL] ${side} still waiting on a working entry for ${tradingsymbol}`
         )
-      } else if (!chaseFillAllowsStatusFlip(fill) && fill !== "wait") {
+      } else if (sync === "hold" && stoploss) {
+        const exitSide = side === "LONG" ? "SELL" : "BUY"
+        await placeSL(tradingsymbol, exitSide, chaseFlattenQty(book.netQty), accessToken, stoploss)
+      } else if (sync === "reset_empty") {
         logger.warn(
-          `[processUpdateSL] ${side} with no fill (${fill}) — reverting to ${chasePendingStatusFor(side)}`
+          `[processUpdateSL] ${side} with no fill — reverting to AWAITING_SIGNAL (will not punch lots)`
         )
         await updateChaseStatus({
           instrument: nfoSymbol,
-          status: chasePendingStatusFor(side),
+          status: CHASE_STATUS.AWAITING_SIGNAL,
           isSignalBreachingTolerance: false,
           updatedAt: new Date(),
         })
@@ -983,9 +1058,9 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           orderTag: "chase",
           kind: "STATE",
           outcome: "INVALID",
-          summary: `${side} with no fill — reverted to pending entry so Chase can retry`,
-          features: { status: currentStatus, fill },
-          idempotencyKey: `chase:phantom-revert:${tradingsymbol}:${new Date().toISOString().slice(0, 16)}`,
+          summary: `${side} with no fill — reset to AWAITING_SIGNAL so Chase does not open a new position`,
+          features: { status: currentStatus, netQty: book.netQty },
+          idempotencyKey: `chase:phantom-reset:${tradingsymbol}:${new Date().toISOString().slice(0, 16)}`,
         })
       }
     }

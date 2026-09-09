@@ -1022,6 +1022,30 @@ const NAMED: Record<string, () => SimulateConfig> = {
       ],
       assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
     }),
+  "chase-live-phantom-flatten-no-lots": () =>
+    day(MON, "09:20", "10:00", {
+      scenario: "chase-live-phantom-flatten-no-lots",
+      paperRisk: false,
+      pricePath: "downtrend",
+      risk: {
+        maxNotionalInr: 100,
+        allowLiveOrders: true,
+        strategies: {
+          ...DEFAULT_STRATS(),
+          CHASE: { ...DEFAULT_STRATS().CHASE, executionMode: "LIVE" },
+        },
+      },
+      actors: [
+        {
+          kind: "chase",
+          strategy: "CHASE",
+          symbol: NIFTY.symbol,
+          lots: 2,
+          ema: 24000,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
+    }),
   "chase-max-lots-reject-no-phantom": () =>
     day(MON, "09:20", "10:00", {
       scenario: "chase-max-lots-reject-no-phantom",

@@ -14,6 +14,7 @@ jest.mock("../../../lib/kiteUtils", () => ({
   placeKiteOrder: jest.fn(),
   getKiteInstance: jest.fn().mockReturnValue({
     getLTP: jest.fn().mockResolvedValue({ "NFO:NIFTY25SEPFUT": { last_price: 24900 } }),
+    getOrders: jest.fn().mockResolvedValue([]),
   }),
   cancelOrder: jest.fn(),
   placeSL: jest.fn(),
@@ -46,6 +47,7 @@ jest.mock("../../../lib/trading/riskSettings", () => ({
 jest.mock("../../../lib/trading/ledger", () => ({
   recordDecision: jest.fn().mockResolvedValue("decision-1"),
   getOpenPositions: jest.fn().mockResolvedValue([]),
+  getOpenOrders: jest.fn().mockResolvedValue([]),
 }))
 
 describe("chaseTolerances trader bands", () => {
@@ -233,6 +235,7 @@ describe("generateSignal entry order failure stays awaiting", () => {
     })
     getKiteInstance.mockReturnValue({
       getLTP: jest.fn().mockResolvedValue({ "NFO:NIFTY26SEPFUT": { last_price: 23916.8 } }),
+      getOrders: jest.fn().mockResolvedValue([]),
     })
     placeKiteOrder.mockRejectedValue(new Error("orders_provenance_chk"))
 
@@ -277,6 +280,7 @@ describe("generateSignal phantom LONG/SHORT", () => {
     })
     getKiteInstance.mockReturnValue({
       getLTP: jest.fn().mockResolvedValue({ "NFO:NIFTY26SEPFUT": { last_price: 23921 } }),
+      getOrders: jest.fn().mockResolvedValue([]),
     })
     placeKiteOrder.mockRejectedValue(new Error("MAX_NOTIONAL"))
 

@@ -39,7 +39,8 @@ File: `__tests__/unit/strategyValidation.test.ts`
 - `atmStraddle.test.ts` — skew timeout reject; `takeTradeIrrespectiveSkew`; NO_SL skips exit queue; margin fail
 - `processExitJob.test.ts` — NO_SL places no exit orders
 - `chaseSignal.test.ts` — mocked Kite; does not bypass `placeOrder` in production
-- `chaseFill.test.ts` — paper vs live book qty, flatten qty, Paper↔Live switch guard, no status flip on `signal_only` / `other_book_open`
+- `chaseFill.test.ts` — paper vs live book qty, flatten qty, Paper↔Live switch guard, no status flip on `signal_only` / `placed` / `other_book_open`; SHORT/LONG + flat book → `reset_empty` (must not MARKET lots)
+- `chaseSep9Sequence.test.ts` — 2026-09-09 replay: untriggered paper SL must not fill; live `TRIGGER PENDING` blocks a second entry; empty SHORT after SL must not punch lots on **paper or live**
 - Ledger: `__tests__/unit/trading/{money,accounting,stateMachine,invariants}.test.ts`
 
 ## Simulation — adversarial sequences (all strategies)
@@ -49,7 +50,7 @@ Files: `__tests__/simulation/chaseAdversarial.test.ts`, `__tests__/simulation/st
 | Scenario | Asserts |
 |----------|---------|
 | `chase-risk-reject-no-phantom` | `MAX_NOTIONAL`, empty book, status `AWAITING_SIGNAL` |
-| `chase-phantom-flatten-no-lots` | No flatten/SL on a rejected entry (lots are not a fallback) |
+| `chase-phantom-flatten-no-lots` / `chase-live-phantom-flatten-no-lots` | No flatten/SL on a rejected entry (lots are not a fallback); live book uses the same rule |
 | `chase-max-lots-reject-no-phantom` | `MAX_LOTS`, empty book |
 | `chase-max-positions-no-entry` | `MAX_POSITIONS`, empty book |
 | `chase-live-blocked` | `LIVE_BLOCKED`, empty book |

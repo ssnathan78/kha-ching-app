@@ -28,10 +28,12 @@ import { aggregateFillsBySymbol } from "./pnl"
 import { jobExecutions, orders as ledgerOrders } from "./schema"
 import {
   applyBrokerOrderSnapshot,
+  getOpenOrders,
   getOpenPositions,
   markOrderSubmitted,
   safeRecordOrderFromKiteProps,
 } from "./trading/ledger"
+import { cancelPaperWorkingOrders, shouldFillPaperOrderNow } from "./trading/paperExecution"
 import { executionProvenance, inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
 import { assertOrderAllowed } from "./trading/riskGate"
 import { getRiskSettings } from "./trading/riskSettings"
@@ -370,21 +372,28 @@ export async function placeOrder(
         Number(kiteOrder.price) ||
         Number(kiteOrder.trigger_price) ||
         0
+      const fillNow = shouldFillPaperOrderNow({
+        orderType: kiteOrder.order_type,
+        side: kiteOrder.transaction_type,
+        triggerPrice: kiteOrder.trigger_price,
+        last: fillPrice,
+      })
       if (ledgerOrderId && kiteOrder.tradingsymbol && kiteOrder.quantity) {
         await applyBrokerOrderSnapshot(
           {
             order_id: mockId,
-            status: "COMPLETE",
+            status: fillNow ? "COMPLETE" : STATUS_TRIGGER_PENDING,
             tradingsymbol: kiteOrder.tradingsymbol,
             exchange: kiteOrder.exchange,
             transaction_type: kiteOrder.transaction_type,
             order_type: kiteOrder.order_type,
             product: kiteOrder.product,
             quantity: kiteOrder.quantity,
-            filled_quantity: kiteOrder.quantity,
-            pending_quantity: 0,
-            average_price: fillPrice,
+            filled_quantity: fillNow ? kiteOrder.quantity : 0,
+            pending_quantity: fillNow ? 0 : kiteOrder.quantity,
+            average_price: fillNow ? fillPrice : 0,
             price: kiteOrder.price,
+            trigger_price: kiteOrder.trigger_price,
             tag: kiteOrder.tag,
           },
           { internalOrderId: ledgerOrderId, provenance, purpose: purpose as any }
@@ -1181,21 +1190,28 @@ export const remoteOrderSuccessEnsurer = async (args: {
     if (paperExecution) {
       const fillPrice =
         quote?.ltp || Number(orderProps.price) || Number(orderProps.trigger_price) || 0
+      const fillNow = shouldFillPaperOrderNow({
+        orderType: orderProps.order_type,
+        side: orderProps.transaction_type,
+        triggerPrice: orderProps.trigger_price,
+        last: fillPrice,
+      })
       return {
         successful: true,
         response: [
           {
             order_id: orderAckResponse.order_id,
-            status: "COMPLETE",
+            status: fillNow ? "COMPLETE" : STATUS_TRIGGER_PENDING,
             tradingsymbol: orderProps.tradingsymbol,
             exchange: orderProps.exchange,
             transaction_type: orderProps.transaction_type,
             order_type: orderProps.order_type,
             product: orderProps.product,
             quantity: orderProps.quantity,
-            filled_quantity: orderProps.quantity,
-            pending_quantity: 0,
-            average_price: fillPrice,
+            filled_quantity: fillNow ? orderProps.quantity : 0,
+            pending_quantity: fillNow ? 0 : orderProps.quantity,
+            average_price: fillNow ? fillPrice : 0,
+            trigger_price: orderProps.trigger_price,
             tag: orderProps.tag,
           } as KiteOrder,
         ],
@@ -1423,6 +1439,16 @@ export async function cancelOrder(
   transactionType: string,
   accessToken: string
 ): Promise<void> {
+  const paperCancelled = await cancelPaperWorkingOrders({
+    tradingsymbol,
+    side: transactionType,
+  })
+  if (paperCancelled > 0) {
+    logger.info(
+      `[cancelOrder] cancelled ${paperCancelled} paper working order(s) for ${tradingsymbol}`
+    )
+    return
+  }
   const kite = getKiteInstance(accessToken)
   const orders = (await kite.getOrders()) as Order[]
   const orderToCancel = orders.find(
@@ -1494,6 +1520,20 @@ export async function placeSL(
   }
 
   const price = transactionType === "BUY" ? stoploss + 5 : stoploss - 5
+  const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
+  if (paperBook) {
+    const paperSl = (await getOpenOrders()).find(o => {
+      if (o.tradingsymbol !== tradingsymbol || o.side !== transactionType) return false
+      if (o.purpose !== "SL") return false
+      return isSyntheticProvenance(ledgerProvenance(o.provenance))
+    })
+    if (paperSl) {
+      logger.info(
+        `[placeSL] paper SL already working for ${tradingsymbol} order=${paperSl.id} — not duplicating`
+      )
+      return
+    }
+  }
   const orders = (await kite.getOrders()) as Order[]
   const existingSL = orders.find(
     o =>

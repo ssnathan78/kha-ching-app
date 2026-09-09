@@ -17,6 +17,7 @@ function qty(
 const REJECT_NO_PHANTOM = [
   "chase-risk-reject-no-phantom",
   "chase-phantom-flatten-no-lots",
+  "chase-live-phantom-flatten-no-lots",
   "chase-max-lots-reject-no-phantom",
   "chase-max-positions-no-entry",
   "chase-live-blocked",

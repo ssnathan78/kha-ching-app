@@ -76,7 +76,7 @@ There is **no backtester** in this repo. There is no implied live edge from hist
 
 **What it does.** Nifty futures around a long EMA with a buffer. States: awaiting signal → awaiting long/short (SL-M entry) → long/short with SL → rollover near expiry.
 
-**Assumptions.** Daily/2-min closes are timely; EMA regime persists; SL-M fills; overnight gaps are acceptable for NRML futures; one Chase position.
+**Assumptions.** Daily/2-min closes are timely; EMA regime persists; SL-M fills **when the trigger is tagged** (paper resting stops now match that; they must not fill at submit); overnight gaps are acceptable for NRML futures; one Chase position.
 
 **When it fails.** Chop around EMA (whipsaw). Gap through SL overnight. SL breach previously **updated DB only and did not flatten** (now MARKET flatten). `placeKiteOrder` used to skip the ensurer — still does, but now goes through `placeOrder` + risk gate + mock short-circuit. EMA “today” filter has used UTC (residual).
 
@@ -118,7 +118,7 @@ Adversarial “make it lose fast without a software bug”: a **gap through SL**
 | R14 | Med | Chase `placeKiteOrder` skips freeze-qty split / ensurer | Residual — Chase size should stay under freeze |
 | R15 | Low | Fees/STT not in risk notional | Residual — notional uses premium/LTP only |
 | R16 | Low | No order-book depth / liquidity check | Residual — personal size assumed small vs Nifty fut/opt |
-| R17 | High | Paper ensurer skipped `placeOrder` then polled Kite for `paper:` ids | **Fixed** — paper returns a synthetic COMPLETE from `placeOrder` |
+| R17 | High | Paper ensurer skipped `placeOrder` then polled Kite for `paper:` ids | **Fixed** — paper writes the ledger. Untriggered SL rests until tagged. SHORT/LONG with a flat book resets; it does not MARKET configured lots (paper and live). |
 | R18 | High | Exits without `strategy` defaulted PAPER (live flatten/SL would not hit Kite) | **Fixed** — Chase tag / job strategy inferred; `placeSL`/`placeKiteOrder` set `CHASE` |
 | R19 | Med | Recon compared paper ledger qty to Kite | **Fixed** — PAPER/MOCK excluded from broker compare |
 | R20 | Med | Portfolio chips / daily_sessions mix paper + live | Residual — Desk tabs filter; header totals do not |
@@ -165,7 +165,7 @@ There is no automatic reduction of size in high-vol regimes. That is intentional
 ## 9. Recommended remaining work (not done)
 
 - Paper MARKET fills still use order price / trigger / LTP-if-fetched / 0 when Kite LTP is missing. Entries now fetch LTP in `placeOrder` / `remoteOrderSuccessEnsurer` so `MAX_NOTIONAL` applies; flatten/SL/EXIT do not use LTP/notional/lots so an exit cannot be skipped.
-- Route Chase entries through `remoteOrderSuccessEnsurer` (freeze split + ABORT). Chase paper now falls back to the ledger when Kite has no position.
+- Route Chase entries through `remoteOrderSuccessEnsurer` (freeze split + ABORT). Chase size should stay under freeze qty.
 - Desk portfolio chips and daily sessions still mix paper + live P&L. Trade/position/order tabs filter by book.
 - Recon-driven strategy halt on persistent **live** quantity mismatch (paper rows are excluded from Kite compare).
 - Operator runbook for “Kite down, position open”.

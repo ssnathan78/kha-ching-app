@@ -3,7 +3,9 @@ import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "
 import {
   type ChaseFillDecision,
   chaseBookFromSources,
+  chaseHasWorkingEntryOrder,
   chaseLotsFromConfig,
+  chaseSideHasPosition,
   chaseStatusHasPosition,
   splitChaseLedgerQty,
 } from "./chaseFill"
@@ -204,8 +206,52 @@ async function placeEntryTriggerOrder(
   }
   const quantity = lots * (instrument.lotSize ?? 1)
 
-  const { entryLimitOffset } = await getChaseEngineConfig()
+  const book = await resolveChaseBookBreakdown(instrument.tradingsymbol, accessToken)
+  if (chaseSideHasPosition(side === "BUY" ? "LONG" : "SHORT", book.netQty)) {
+    logger.info(
+      `[generateSignal] ${side} book already open for ${instrument.tradingsymbol} — skipping entry trigger`
+    )
+    return
+  }
+  const { getOpenOrders } = await import("./trading/ledger")
+  const ledgerOrders = await getOpenOrders()
+  let kiteOrders: Array<{
+    tradingsymbol?: string | null
+    transaction_type?: string | null
+    status?: string | null
+  }> = []
   const kite = getKiteInstance(accessToken)
+  if (!book.paperBook) {
+    try {
+      kiteOrders = (await kite.getOrders()) as Array<{
+        tradingsymbol?: string | null
+        transaction_type?: string | null
+        status?: string | null
+      }>
+    } catch (e) {
+      logger.warn(
+        `[generateSignal] live orderbook unavailable — not duplicating ${side} entry for ${instrument.tradingsymbol}`,
+        e
+      )
+      return
+    }
+  }
+  if (
+    chaseHasWorkingEntryOrder({
+      paperBook: book.paperBook,
+      tradingsymbol: instrument.tradingsymbol,
+      side,
+      ledgerOrders,
+      kiteOrders,
+    })
+  ) {
+    logger.info(
+      `[generateSignal] working ${side} entry already exists for ${instrument.tradingsymbol} — not duplicating`
+    )
+    return
+  }
+
+  const { entryLimitOffset } = await getChaseEngineConfig()
   const ltpData = await kite.getLTP(`NFO:${instrument.tradingsymbol}`)
   const ltp: number = (ltpData as any)[`NFO:${instrument.tradingsymbol}`]?.last_price ?? 0
   const alreadyBreached = side === "BUY" ? ltp >= triggerPrice : ltp <= triggerPrice
@@ -593,6 +639,39 @@ export const generateSignal = async (
   ) {
     instrument = instruments.find(i => i.tradingsymbol === tradingsymbol) ?? instrument
     logger.info(`[generateSignal] validating signal for ${instrument.tradingsymbol}`)
+    const pendingSide = currentStatus === CHASE_STATUS.AWAITING_LONG ? "LONG" : "SHORT"
+    const pendingQty = (await resolveChaseBookBreakdown(tradingsymbol, accessToken)).netQty
+    if (chaseSideHasPosition(pendingSide, pendingQty)) {
+      logger.info(
+        `[generateSignal] ${currentStatus} already filled (qty=${pendingQty}) — marking ${pendingSide}`
+      )
+      await persistChaseSignal({
+        outcome: "HOLD",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `Entry already filled — marking ${pendingSide}`,
+        features: { status: currentStatus, netQty: pendingQty },
+        key: `chase:promote:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
+      const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
+        status: pendingSide === "LONG" ? CHASE_STATUS.LONG : CHASE_STATUS.SHORT,
+        isSignalBreachingTolerance: false,
+        updatedAt: new Date(),
+      })
+      if (!success) {
+        logger.error("[generateSignal] error promoting filled pending entry:", error)
+        return
+      }
+      const lots = chaseLotsFromConfig((await getChaseSettings()).lots)
+      const quantity = lots * (instrument.lotSize ?? 1)
+      if (quantity > 0 && stoploss) {
+        const exitSide = pendingSide === "LONG" ? "SELL" : "BUY"
+        await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
+      }
+      return
+    }
     const { bufferPercent } = await getChaseEngineConfig()
     const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
 
