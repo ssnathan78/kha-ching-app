@@ -63,8 +63,10 @@ async function fetchChaseOpenSessionBars(
     .set("millisecond", 0)
     .toDate()
   const to = nowIst.toDate()
+  // KiteConnect typings omit 2-minute; the historical API accepts it (Chase PDF / chase_supabase).
   const twoMin = (await withRemoteRetry(
-    async () => kite.getHistoricalData(instrumentToken, "2minute", from, to),
+    async () =>
+      kite.getHistoricalData(instrumentToken, "2minute" as "minute", from, to),
     ms(40)
   )) as HistoricalData[]
   if (Array.isArray(twoMin) && twoMin.length) {
