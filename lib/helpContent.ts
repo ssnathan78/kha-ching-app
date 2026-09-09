@@ -226,6 +226,14 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
           "This is not the strategy stop. The strategy stop is the EMA / day high-low logic in the Chase worker.",
         ],
       },
+      {
+        id: "open-classify",
+        title: "09:16 morning classify",
+        body: [
+          "Default is PDF: at 09:16 IST, compare the 09:16 candle close (2-minute, or 1-minute if that is missing) to the overnight hourly EMA. Day's high/low till 09:16 come from those session bars. T+1 still uses the four T1 buckets; later days still trail the stop to EMA.",
+          "Legacy is the older 60-minute bar that also steps 40-EMA on that stub hour. Keep it only to compare against the Anil kha-ching port.",
+        ],
+      },
     ],
   },
 }

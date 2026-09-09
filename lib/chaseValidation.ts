@@ -1,4 +1,5 @@
 import type { ChaseEngineConfig } from "./chaseDefaults"
+import { isChaseOpenClassify } from "./chaseOpenClassify"
 import { INSTRUMENTS } from "./constants"
 
 const CHASE_INDEXES = new Set<string>([
@@ -58,6 +59,9 @@ export function validateChaseSettings(
     if (!Number.isFinite(n) || n < 0 || n > 100) {
       return { ok: false, error: "entryLimitOffset must be between 0 and 100" }
     }
+  }
+  if (patch.openClassify != null && !isChaseOpenClassify(patch.openClassify)) {
+    return { ok: false, error: "openClassify must be pdf_0916 or legacy_60m" }
   }
 
   return { ok: true, config: patch as ChaseEngineConfig }

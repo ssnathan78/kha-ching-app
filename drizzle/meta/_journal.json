@@ -99,6 +99,13 @@
       "when": 1756980000013,
       "tag": "0012_drop_daily_loss_drawdown",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1756980000014,
+      "tag": "0013_chase_open_classify",
+      "breakpoints": true
     }
   ]
 }

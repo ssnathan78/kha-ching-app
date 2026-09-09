@@ -1,4 +1,4 @@
-import { Alert, Button, Chip, Paper, Stack, TextField, Typography } from "@mui/material"
+import { Alert, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 
@@ -6,7 +6,12 @@ import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import InstrumentPicker from "../components/lib/InstrumentPicker"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
-import { CHASE_MASTER_DEFAULTS, type ChaseEngineConfig } from "../lib/chaseDefaults"
+import {
+  CHASE_MASTER_DEFAULTS,
+  CHASE_OPEN_CLASSIFY,
+  type ChaseEngineConfig,
+} from "../lib/chaseDefaults"
+import { normalizeChaseOpenClassify } from "../lib/chaseOpenClassify"
 import { INSTRUMENTS } from "../lib/constants"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
@@ -173,6 +178,23 @@ const ChasePlanPage = () => {
             value={state.entryLimitOffset}
             onChange={e => setState({ ...state, entryLimitOffset: Number(e.target.value) })}
           />
+          <TextField
+            select
+            label="09:16 morning classify"
+            size="small"
+            fullWidth
+            value={state.openClassify}
+            onChange={e =>
+              setState({
+                ...state,
+                openClassify: normalizeChaseOpenClassify(e.target.value),
+              })
+            }
+            helperText="PDF uses the 09:16 candle close vs overnight hourly EMA. Legacy steps 40-EMA on a 60-minute bar (Anil port)."
+          >
+            <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF — 09:16 candle (default)</MenuItem>
+            <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy — 60-minute bar</MenuItem>
+          </TextField>
         </Stack>
 
         <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>

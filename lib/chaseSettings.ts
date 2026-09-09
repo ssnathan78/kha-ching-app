@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm"
 
 import { CHASE_MASTER_DEFAULTS, type ChaseEngineConfig } from "./chaseDefaults"
+import { normalizeChaseOpenClassify } from "./chaseOpenClassify"
 import { normalizeChaseInstruments, validateChaseSettings } from "./chaseValidation"
 import { db } from "./drizzle"
 import { chaseSettings } from "./schema"
@@ -18,6 +19,7 @@ function toConfig(row: {
   entryLimitOffset: string | number
   paused: boolean
   instruments?: unknown
+  openClassify?: unknown
 }): ChaseEngineConfig {
   return {
     lots: Number(row.lots) || CHASE_MASTER_DEFAULTS.lots,
@@ -26,6 +28,7 @@ function toConfig(row: {
     entryLimitOffset: Number(row.entryLimitOffset),
     paused: Boolean(row.paused),
     instruments: normalizeChaseInstruments(row.instruments ?? CHASE_MASTER_DEFAULTS.instruments),
+    openClassify: normalizeChaseOpenClassify(row.openClassify),
   }
 }
 
@@ -63,6 +66,7 @@ export async function saveChaseSettings(
         : Math.min(100, Math.max(0, Number(patch.entryLimitOffset))),
     paused: patch.paused == null ? current.paused : Boolean(patch.paused),
     instruments: normalizeChaseInstruments(patch.instruments ?? current.instruments),
+    openClassify: normalizeChaseOpenClassify(patch.openClassify ?? current.openClassify),
   }
 
   await db
@@ -75,6 +79,7 @@ export async function saveChaseSettings(
       entryLimitOffset: String(next.entryLimitOffset),
       paused: next.paused,
       instruments: next.instruments,
+      openClassify: next.openClassify,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -86,6 +91,7 @@ export async function saveChaseSettings(
         entryLimitOffset: String(next.entryLimitOffset),
         paused: next.paused,
         instruments: next.instruments,
+        openClassify: next.openClassify,
         updatedAt: new Date(),
       },
     })

@@ -64,7 +64,7 @@ flowchart TB
 | Invalidate pending if close beyond that SL | Yes | OK |
 | Invalidate if 2 hours on the wrong 0.2% side | Flag `isSignalBreachingTolerance` then cancel next hour | **Minor**: needs two successful hourly jobs, not wall-clock 120 minutes |
 | Do not move SL with T1 logic on **T-day** | 09:16 matrix keyed off `createdAt` vs previous trading day; 13:15 skipped if `createdAt` is today | OK |
-| T+1 09:16 four buckets + CMP exit | Implemented in `processUpdateSL` | OK (see short-side PDF typos below) |
+| T+1 09:16 four buckets + CMP exit | Implemented in `processUpdateSL` | Default `pdf_0916` uses 09:16 session close; `legacy_60m` is the 60-minute stub |
 | Also adjust at **13:15** | EMA job at `:15` of hour 13 | OK |
 | T1 0.4% only for that morning (and charts) | Hard-coded 1.004 / 0.996 in `updateSL` | OK |
 | Expiry 15:00 roll to next month, SL = new EMA | Yes | OK |

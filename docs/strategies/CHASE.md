@@ -41,6 +41,7 @@ Shipped engine (`CHASE_MASTER_DEFAULTS` / `/chase`):
 | HLC3 | — | `(high + low + close) / 3` |
 | Buffer (signal) | 0.2 | Stored as **percent**. `longTol = ema * (1 + buffer/100)` → 1.002× |
 | T1 | 0.4% hard-coded | `longT1 = round(ema * 1.004)`, `shortT1 = round(ema * 0.996)` |
+| 09:16 classify | `openClassify` on Chase settings (DB) | Default `pdf_0916`: overnight 16:15 EMA + 09:16 session close/H-L. `legacy_60m`: step 40-EMA on the last 60-minute bar. |
 | Entry limit offset | 5 ₹ | SL **limit** = trigger ± 5 on the pending entry order |
 | Lots | 1 | Per selected index |
 
@@ -120,7 +121,9 @@ Do **not** run the 09:16 T1 matrix on the entry day. Intraday risk is the signal
 
 ### T+1 at 09:16 (`updateSL`, `OPEN_MINUTES = 9*60+16`)
 
-Uses last close vs EMA and T1 bands. **Long** (code in `processUpdateSL`):
+Default **`openClassify = pdf_0916`**: last completed hourly EMA (yesterday 16:15), **09:16 candle close** (2-minute bars from 09:15, else 1-minute), day’s high/low from those session bars. **`legacy_60m`** keeps the Anil port: last 60-minute bar plus a 40-EMA step.
+
+Uses that close vs EMA and T1 bands. **Long** (code in `processUpdateSL`):
 
 | 09:16 close | New SL / action |
 |---|---|
@@ -170,6 +173,7 @@ Paper/mock: `MOCK_ORDERS` + Desk execution mode. Unlike chase-bot, there is no `
 | Piece | File |
 |---|---|
 | Hourly signal + pending invalidation | `lib/chaseSignal.ts` |
+| 09:16 snapshot (PDF vs legacy) | `lib/chaseOpenClassify.ts` |
 | Minute SL, 09:16 T1, rollover | `lib/queue-processor/chaseQueue.ts` |
 | EMA | `lib/ema.ts`, `calculateEma` in `kiteUtils.ts` |
 | Defaults / pause helpers | `lib/chaseDefaults.ts`, `lib/chaseSettings.ts` |

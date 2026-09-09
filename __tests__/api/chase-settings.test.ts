@@ -42,6 +42,26 @@ describe("/api/chase-settings", () => {
     expect(body.config.instruments).toEqual(["NIFTY", "BANKNIFTY"])
   })
 
+  it("PUT saves 09:16 classify mode", async () => {
+    const result = await invokeApi(chaseSettingsHandler, {
+      method: "PUT",
+      user,
+      body: { config: { openClassify: "legacy_60m" } },
+    })
+    expect(result.status).toBe(200)
+    const body = result.body as { config: { openClassify: string } }
+    expect(body.config.openClassify).toBe("legacy_60m")
+  })
+
+  it("PUT rejects an unknown 09:16 classify mode", async () => {
+    const result = await invokeApi(chaseSettingsHandler, {
+      method: "PUT",
+      user,
+      body: { config: { openClassify: "hourly_close" } },
+    })
+    expect(result.status).toBe(400)
+  })
+
   it("POST reset restores master defaults", async () => {
     await invokeApi(chaseSettingsHandler, {
       method: "PUT",

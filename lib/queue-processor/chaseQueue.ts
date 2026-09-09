@@ -1,6 +1,7 @@
 import { type Job, Worker } from "bullmq"
 import dayjs from "dayjs"
 import type { HistoricalData, Order } from "kiteconnect"
+import { CHASE_OPEN_CLASSIFY } from "../chaseDefaults"
 import {
   type ChaseEntryFillResult,
   chaseFillAllowsStatusFlip,
@@ -11,6 +12,7 @@ import {
   chaseSideHasPosition,
   decideChaseInPositionSync,
 } from "../chaseFill"
+import { normalizeChaseOpenClassify, resolveChaseMorningSnapshot } from "../chaseOpenClassify"
 import { getChaseSettings } from "../chaseSettings"
 import {
   decideChaseEntryAction,
@@ -47,6 +49,36 @@ import { ms, postToSlack, toIst, withRemoteRetry } from "../utils"
 const OPEN_MINUTES = 9 * 60 + 16 // 9:16 AM IST
 const CLOSE_MINUTES = 15 * 60 + 29 // 3:29 PM IST
 const ROLLOVER_MINUTES = 15 * 60 // 3:00 PM IST
+
+async function fetchChaseOpenSessionBars(
+  kite: ReturnType<typeof getKiteInstance>,
+  instrumentToken: number,
+  nowIst: dayjs.Dayjs
+): Promise<{ bars: HistoricalData[]; interval: "2minute" | "minute" }> {
+  const from = nowIst
+    .startOf("day")
+    .set("hour", 9)
+    .set("minute", 15)
+    .set("second", 0)
+    .set("millisecond", 0)
+    .toDate()
+  const to = nowIst.toDate()
+  const twoMin = (await withRemoteRetry(
+    async () => kite.getHistoricalData(instrumentToken, "2minute", from, to),
+    ms(40)
+  )) as HistoricalData[]
+  if (Array.isArray(twoMin) && twoMin.length) {
+    return { bars: twoMin, interval: "2minute" }
+  }
+  const oneMin = (await withRemoteRetry(
+    async () => kite.getHistoricalData(instrumentToken, "minute", from, to),
+    ms(40)
+  )) as HistoricalData[]
+  if (Array.isArray(oneMin) && oneMin.length) {
+    return { bars: oneMin, interval: "minute" }
+  }
+  return { bars: [], interval: "2minute" }
+}
 
 async function ensureChaseEntryFilled(args: {
   side: "LONG" | "SHORT"
@@ -350,7 +382,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
   const lotSize: number = (activeInstrumentData as any)?.lot_size ?? 1
   const quantity = lots * lotSize
 
-  // At open: recalculate EMA on first 2-min candle and update SL
+  // At 09:16: T+1 matrix / later-day EMA trail (classifier is Chase openClassify).
   if (
     (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
     (currentMinutes === OPEN_MINUTES ||
@@ -370,33 +402,82 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       .set("millisecond", 0)
     const prevRowCreatedAt = prevRow?.createdAt ? toIst(prevRow.createdAt).startOf("minute") : null
     const isValidPrevRow = prevRowCreatedAt?.isSame(prevEmaTarget) ?? false
+    const openClassify = normalizeChaseOpenClassify(chaseConfig.openClassify)
+    logger.info(`[processUpdateSL] openClassify=${openClassify}`)
 
     let result: { ema: number; lastClose: number; lowestLow: number; highestHigh: number } | null
 
-    if (!isValidPrevRow) {
-      logger.info(
-        `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, calculating EMA freshly`
-      )
-      result = await withRemoteRetry(
-        async () => calculateEma(activeInstrumentData as any, null, accessToken),
-        ms(40)
-      )
+    if (openClassify === CHASE_OPEN_CLASSIFY.LEGACY_60M) {
+      let stepped: typeof result
+      if (!isValidPrevRow) {
+        logger.info(
+          `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, calculating EMA freshly`
+        )
+        stepped = await withRemoteRetry(
+          async () => calculateEma(activeInstrumentData as any, null, accessToken),
+          ms(40)
+        )
+      } else {
+        const candles = (await withRemoteRetry(
+          async () =>
+            kite.getHistoricalData(
+              instrumentToken,
+              "60minute",
+              nowIst.subtract(1, "hour").toDate(),
+              nowIst.toDate()
+            ),
+          ms(40)
+        )) as HistoricalData[]
+        if (!Array.isArray(candles) || !candles.length) {
+          logger.error(`[processUpdateSL] no candles for ${tradingsymbol}`)
+          return null
+        }
+        const prevEma = Number(prevRow?.ema)
+        if (!Number.isFinite(prevEma)) {
+          logger.error("[processUpdateSL] overnight EMA missing for legacy 09:16 classify")
+          return null
+        }
+        stepped = calculate40EMA(candles, prevEma)
+      }
+      result = resolveChaseMorningSnapshot({
+        openClassify,
+        overnightEma: Number(prevRow?.ema ?? stepped?.ema ?? 0),
+        steppedHourly: stepped,
+        sessionBars: [],
+      })
     } else {
-      const candles = (await withRemoteRetry(
-        async () =>
-          kite.getHistoricalData(
-            instrumentToken,
-            "60minute",
-            nowIst.subtract(1, "hour").toDate(),
-            nowIst.toDate()
-          ),
-        ms(40)
-      )) as HistoricalData[]
-      if (!Array.isArray(candles) || !candles.length) {
-        logger.error(`[processUpdateSL] no candles for ${tradingsymbol}`)
+      let overnightEma: number | null = null
+      if (!isValidPrevRow) {
+        logger.info(
+          `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, seeding EMA for 09:16 classify`
+        )
+        const seeded = await withRemoteRetry(
+          async () => calculateEma(activeInstrumentData as any, null, accessToken),
+          ms(40)
+        )
+        overnightEma = seeded?.ema ?? null
+      } else {
+        const prevEma = Number(prevRow?.ema)
+        overnightEma = Number.isFinite(prevEma) ? prevEma : null
+      }
+      if (overnightEma == null || !Number.isFinite(overnightEma)) {
+        logger.error("[processUpdateSL] EMA unavailable for 09:16 classify")
         return null
       }
-      result = calculate40EMA(candles, prevRow!.ema)
+      const session = await fetchChaseOpenSessionBars(kite, instrumentToken, nowIst)
+      if (!session.bars.length) {
+        logger.error(`[processUpdateSL] no 09:16 session candles for ${tradingsymbol}`)
+        return null
+      }
+      logger.info(
+        `[processUpdateSL] pdf_0916 session interval=${session.interval} bars=${session.bars.length}`
+      )
+      result = resolveChaseMorningSnapshot({
+        openClassify,
+        overnightEma,
+        steppedHourly: null,
+        sessionBars: session.bars,
+      })
     }
 
     if (!result) {

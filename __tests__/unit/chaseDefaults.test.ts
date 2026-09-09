@@ -29,6 +29,7 @@ describe("CHASE_MASTER_DEFAULTS", () => {
       entryLimitOffset: 5,
       paused: false,
       instruments: ["NIFTY"],
+      openClassify: "pdf_0916",
     })
   })
 })

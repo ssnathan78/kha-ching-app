@@ -18,6 +18,13 @@ describe("schema guardrails", () => {
     expect(sql).toContain("DELETE FROM trade_plans WHERE strategy = 'SUBSCRIBE_CHASE'")
   })
 
+  it("persists Chase 09:16 classifier with PDF as the default", () => {
+    const sql = readFileSync(resolve(__dirname, "../../drizzle/0013_chase_open_classify.sql"), "utf8")
+    expect(sql).toContain("open_classify")
+    expect(sql).toContain("pdf_0916")
+    expect(sql).toContain("legacy_60m")
+  })
+
   it("adds extras jsonb for strangle entry fields", () => {
     const sql = readFileSync(resolve(__dirname, "../../drizzle/0003_plan_extras.sql"), "utf8")
     expect(sql).toContain("extras jsonb")

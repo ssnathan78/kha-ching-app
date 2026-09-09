@@ -174,6 +174,7 @@ export const chaseSettings = pgTable("chase_settings", {
   entryLimitOffset: numeric("entry_limit_offset").notNull().default("5"),
   paused: boolean("paused").notNull().default(false),
   instruments: jsonb("instruments").notNull().default(["NIFTY"]),
+  openClassify: text("open_classify").notNull().default("pdf_0916"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
 
