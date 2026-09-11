@@ -25,7 +25,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@bull-board/api": "^9.8.0",
+    "@bull-board/api": "^9.9.0",
     "@bull-board/express": "^9.8.0",
     "@bull-board/ui": "^9.8.0",
     "@emotion/react": "^11.14.0",
