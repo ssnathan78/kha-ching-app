@@ -529,7 +529,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@bull-board/api@npm:9.8.0, @bull-board/api@npm:^9.8.0":
+"@bull-board/api@npm:9.8.0":
   version: 9.8.0
   resolution: "@bull-board/api@npm:9.8.0"
   dependencies:
@@ -544,6 +544,24 @@ __metadata:
     bullmq:
       optional: true
   checksum: 10c0/e90a5e057596d5ddcc02cf34f211c811529bc9b78b16c307fe88f09d9acf5dc5d7b5cfdeeb0f4daa1c6b0ba059a059df94fff0332ac60ee21ef750e69e4aff38
+  languageName: node
+  linkType: hard
+
+"@bull-board/api@npm:^9.9.0":
+  version: 9.9.0
+  resolution: "@bull-board/api@npm:9.9.0"
+  dependencies:
+    redis-info: "npm:^3.1.0"
+  peerDependencies:
+    "@bull-board/ui": 9.9.0
+    bull: ^4.16.5
+    bullmq: ^5.56.0 || ^6.0.0
+  peerDependenciesMeta:
+    bull:
+      optional: true
+    bullmq:
+      optional: true
+  checksum: 10c0/3e810ec2c8ba028b8d431575ea57cc7a36cc48482edd5396d780ba65ea43d1a74c28b072a29a48c544d19c69fbf3cb8bce572889e58e2eb533f7373f783c4f5e
   languageName: node
   linkType: hard
 
@@ -6490,7 +6508,7 @@ __metadata:
     "@axe-core/playwright": "npm:^4.13.0"
     "@babel/core": "npm:^7.27.1"
     "@biomejs/biome": "npm:^2.5.12"
-    "@bull-board/api": "npm:^9.8.0"
+    "@bull-board/api": "npm:^9.9.0"
     "@bull-board/express": "npm:^9.8.0"
     "@bull-board/ui": "npm:^9.8.0"
     "@emotion/react": "npm:^11.14.0"
