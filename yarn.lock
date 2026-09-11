@@ -547,6 +547,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@bull-board/api@npm:9.9.0":
+  version: 9.9.0
+  resolution: "@bull-board/api@npm:9.9.0"
+  dependencies:
+    redis-info: "npm:^3.1.0"
+  peerDependencies:
+    "@bull-board/ui": 9.9.0
+    bull: ^4.16.5
+    bullmq: ^5.56.0 || ^6.0.0
+  peerDependenciesMeta:
+    bull:
+      optional: true
+    bullmq:
+      optional: true
+  checksum: 10c0/3e810ec2c8ba028b8d431575ea57cc7a36cc48482edd5396d780ba65ea43d1a74c28b072a29a48c544d19c69fbf3cb8bce572889e58e2eb533f7373f783c4f5e
+  languageName: node
+  linkType: hard
+
 "@bull-board/express@npm:^9.8.0":
   version: 9.8.0
   resolution: "@bull-board/express@npm:9.8.0"
@@ -559,12 +577,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@bull-board/ui@npm:9.8.0, @bull-board/ui@npm:^9.8.0":
+"@bull-board/ui@npm:9.8.0":
   version: 9.8.0
   resolution: "@bull-board/ui@npm:9.8.0"
   dependencies:
     "@bull-board/api": "npm:9.8.0"
   checksum: 10c0/4844c2393c8783e1282605271188f92eda7cf2d6df000414e7dc8c86f4d67aff1d8ec20ccec811889f423ab10bb4a649ffd73d5d827c6470324dd1c84ccb2663
+  languageName: node
+  linkType: hard
+
+"@bull-board/ui@npm:^9.9.0":
+  version: 9.9.0
+  resolution: "@bull-board/ui@npm:9.9.0"
+  dependencies:
+    "@bull-board/api": "npm:9.9.0"
+  checksum: 10c0/118d21fe8f0e8f7a4800fcddd7eb6c3f862d779ae62b3d83b481bd349d8c8f4abd9b3c966525c4fa984660a0e24b11451725035f76107e20020203f707d4598f
   languageName: node
   linkType: hard
 
@@ -6492,7 +6519,7 @@ __metadata:
     "@biomejs/biome": "npm:^2.5.12"
     "@bull-board/api": "npm:^9.8.0"
     "@bull-board/express": "npm:^9.8.0"
-    "@bull-board/ui": "npm:^9.8.0"
+    "@bull-board/ui": "npm:^9.9.0"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.0"
     "@mui/icons-material": "npm:^9.4.0"
