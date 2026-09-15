@@ -1,4 +1,5 @@
 import dayjs from "dayjs"
+import { chaseHourlyHoldSummary, chaseSlTrailSlack, chaseSlTrailSummary } from "./chaseCopy"
 import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "./chaseDefaults"
 import {
   type ChaseFillDecision,
@@ -432,7 +433,11 @@ export const generateSignal = async (
       kind: "STATE",
       instrument: nfoSymbol,
       tradingsymbol: instrument.tradingsymbol,
-      summary: `Already ${currentStatus} — hourly EMA stored, no new entry`,
+      summary: chaseHourlyHoldSummary({
+        status: currentStatus,
+        ema: instrument.ema,
+        lastClose: instrument.lastClose,
+      }),
       features: {
         status: currentStatus,
         ema: instrument.ema,
@@ -458,7 +463,12 @@ export const generateSignal = async (
       kind: "SL_UPDATE",
       instrument: nfoSymbol,
       tradingsymbol: instrument.tradingsymbol,
-      summary: `13:00 IST trail — SL to ${stoploss}`,
+      summary: chaseSlTrailSummary({
+        status: currentStatus,
+        stoploss,
+        tradingsymbol: instrument.tradingsymbol,
+        whenLabel: "13:15 IST trail",
+      }),
       features: {
         status: currentStatus,
         ema: instrument.ema,
@@ -468,7 +478,11 @@ export const generateSignal = async (
       key: `chase:sl13:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
     })
     await postToSlack(
-      `:shield: Action $chase: Chase is currently ${currentStatus}, update the stoploss to ${stoploss} for symbol:${instrument.tradingsymbol}`
+      `:shield: Action $chase: ${chaseSlTrailSlack({
+        status: currentStatus,
+        stoploss,
+        tradingsymbol: instrument.tradingsymbol,
+      })}`
     )
     const { success, error } = await updateChaseStatus({
       instrument: nfoSymbol,

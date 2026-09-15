@@ -11,6 +11,7 @@ import { type HistoricalData, KiteConnect } from "kiteconnect"
 import memoizer from "memoizee"
 import type { KiteOrder } from "../types/kite"
 import type { KiteUser } from "../types/misc"
+import { chaseSlLimitPrice, chaseStopNeedsAmend } from "./chaseCopy"
 import { getChaseEngineConfig } from "./chaseSettings"
 import type { COMPLETED_BY_TAG } from "./constants"
 import {
@@ -27,6 +28,7 @@ import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
 import { jobExecutions, orders as ledgerOrders } from "./schema"
 import {
+  amendWorkingStopPrices,
   applyBrokerOrderSnapshot,
   getOpenOrders,
   getOpenPositions,
@@ -1519,7 +1521,7 @@ export async function placeSL(
     return
   }
 
-  const price = transactionType === "BUY" ? stoploss + 5 : stoploss - 5
+  const price = chaseSlLimitPrice(transactionType, stoploss)
   const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
   if (paperBook) {
     const paperSl = (await getOpenOrders()).find(o => {
@@ -1528,8 +1530,24 @@ export async function placeSL(
       return isSyntheticProvenance(ledgerProvenance(o.provenance))
     })
     if (paperSl) {
+      if (
+        !chaseStopNeedsAmend(
+          { stopPrice: paperSl.stopPrice, limitPrice: paperSl.limitPrice },
+          { stop: stoploss, limit: price }
+        )
+      ) {
+        logger.info(
+          `[placeSL] paper SL already at ${stoploss} for ${tradingsymbol} order=${paperSl.id}`
+        )
+        return
+      }
+      const amended = await amendWorkingStopPrices({
+        orderId: paperSl.id,
+        stopPrice: stoploss,
+        limitPrice: price,
+      })
       logger.info(
-        `[placeSL] paper SL already working for ${tradingsymbol} order=${paperSl.id} — not duplicating`
+        `[placeSL] ${amended ? "Modified" : "failed to modify"} paper SL ${paperSl.id} to ${stoploss} for ${tradingsymbol}`
       )
       return
     }
@@ -1543,13 +1561,32 @@ export async function placeSL(
   )
 
   if (existingSL) {
-    await kite.modifyOrder("regular", existingSL.order_id, {
-      trigger_price: stoploss,
-      price,
-    } as any)
-    logger.info(
-      `[placeSL] Modified SL order ${existingSL.order_id} to ${stoploss} for ${tradingsymbol}`
-    )
+    if (
+      chaseStopNeedsAmend(
+        { trigger_price: existingSL.trigger_price, price: existingSL.price },
+        { stop: stoploss, limit: price }
+      )
+    ) {
+      await kite.modifyOrder("regular", existingSL.order_id, {
+        trigger_price: stoploss,
+        price,
+      } as any)
+      logger.info(
+        `[placeSL] Modified SL order ${existingSL.order_id} to ${stoploss} for ${tradingsymbol}`
+      )
+    } else {
+      logger.info(
+        `[placeSL] live SL already at ${stoploss} for ${tradingsymbol} order=${existingSL.order_id}`
+      )
+    }
+    await amendWorkingStopPrices({
+      brokerOrderId: existingSL.order_id,
+      tradingsymbol,
+      side: transactionType,
+      purpose: "SL",
+      stopPrice: stoploss,
+      limitPrice: price,
+    })
     return
   }
 

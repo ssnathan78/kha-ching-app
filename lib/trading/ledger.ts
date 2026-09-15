@@ -1161,6 +1161,68 @@ export async function getOpenOrders() {
     .orderBy(desc(orders.createdAt))
 }
 
+const WORKING_ORDER_STATUSES: OrderStatus[] = [
+  "PENDING",
+  "SUBMITTED",
+  "ACCEPTED",
+  "PARTIALLY_FILLED",
+  "CANCEL_REQUESTED",
+  "UNKNOWN",
+]
+
+/** Trail a working SL's trigger/limit in the ledger (paper amend or live Kite modify). */
+export async function amendWorkingStopPrices(input: {
+  orderId?: string | null
+  brokerOrderId?: string | null
+  tradingsymbol?: string
+  side?: string
+  purpose?: OrderPurpose
+  stopPrice: number
+  limitPrice: number
+}): Promise<boolean> {
+  let row =
+    (input.orderId
+      ? (await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1))[0]
+      : undefined) ??
+    (input.brokerOrderId
+      ? (
+          await db
+            .select()
+            .from(orders)
+            .where(eq(orders.brokerOrderId, input.brokerOrderId))
+            .limit(1)
+        )[0]
+      : undefined)
+
+  if (!row && input.tradingsymbol && input.side) {
+    const open = await getOpenOrders()
+    row = open.find(o => {
+      if (o.tradingsymbol !== input.tradingsymbol || o.side !== input.side) return false
+      if (input.purpose && o.purpose !== input.purpose) return false
+      const type = (o.orderType || "").toUpperCase()
+      return type === "SL" || type === "SL-M" || type === "SL-L"
+    })
+  }
+
+  if (!row) return false
+  if (!WORKING_ORDER_STATUSES.includes(row.status as OrderStatus)) return false
+
+  const stopPrice = String(input.stopPrice)
+  const limitPrice = String(input.limitPrice)
+  await db
+    .update(orders)
+    .set({ stopPrice, limitPrice, updatedAt: new Date() })
+    .where(eq(orders.id, row.id))
+  await appendOrderEvent({
+    orderId: row.id,
+    fromStatus: row.status as OrderStatus,
+    toStatus: row.status as OrderStatus,
+    eventType: "AMEND",
+    message: `SL amended to trigger ${stopPrice} limit ${limitPrice}`,
+  })
+  return true
+}
+
 export async function getOpenPositions() {
   return db
     .select()

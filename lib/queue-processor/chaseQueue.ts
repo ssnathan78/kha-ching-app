@@ -1,6 +1,7 @@
 import { type Job, Worker } from "bullmq"
 import dayjs from "dayjs"
 import type { HistoricalData, Order } from "kiteconnect"
+import { chaseSlTrailSlack, chaseSlTrailSummary } from "../chaseCopy"
 import { CHASE_OPEN_CLASSIFY } from "../chaseDefaults"
 import {
   type ChaseEntryFillResult,
@@ -50,6 +51,45 @@ const OPEN_MINUTES = 9 * 60 + 16 // 9:16 AM IST
 const CLOSE_MINUTES = 15 * 60 + 29 // 3:29 PM IST
 const ROLLOVER_MINUTES = 15 * 60 // 3:00 PM IST
 
+async function persistChaseMorningSlTrail(args: {
+  nfoSymbol: string
+  tradingsymbol: string | null | undefined
+  status: string
+  stoploss: number
+  ema: number
+  lastClose: number
+}) {
+  const symbol = args.tradingsymbol ?? ""
+  await postToSlack(
+    `:zap: Action $chase: ${chaseSlTrailSlack({
+      status: args.status,
+      stoploss: args.stoploss,
+      tradingsymbol: symbol,
+    })}`
+  )
+  await recordStrategySignal({
+    strategy: "CHASE",
+    instrument: args.nfoSymbol,
+    tradingsymbol: args.tradingsymbol ?? undefined,
+    orderTag: "chase",
+    kind: "SL_UPDATE",
+    outcome: "ADJUST",
+    summary: chaseSlTrailSummary({
+      status: args.status,
+      stoploss: args.stoploss,
+      tradingsymbol: symbol,
+      whenLabel: "09:16 IST trail",
+    }),
+    features: {
+      status: args.status,
+      ema: args.ema,
+      lastClose: args.lastClose,
+      stoploss: args.stoploss,
+    },
+    idempotencyKey: `chase:sl0916:${args.nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
+  })
+}
+
 async function fetchChaseOpenSessionBars(
   kite: ReturnType<typeof getKiteInstance>,
   instrumentToken: number,
@@ -65,8 +105,7 @@ async function fetchChaseOpenSessionBars(
   const to = nowIst.toDate()
   // KiteConnect typings omit 2-minute; the historical API accepts it (Chase PDF / chase_supabase).
   const twoMin = (await withRemoteRetry(
-    async () =>
-      kite.getHistoricalData(instrumentToken, "2minute" as "minute", from, to),
+    async () => kite.getHistoricalData(instrumentToken, "2minute" as "minute", from, to),
     ms(40)
   )) as HistoricalData[]
   if (Array.isArray(twoMin) && twoMin.length) {
@@ -511,7 +550,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         logger.info(
           `[processUpdateSL] Update SL to ${newStoploss} as lastClose>=longSignalT1Tolerance`
         )
-        await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+        await persistChaseMorningSlTrail({
+          nfoSymbol,
+          tradingsymbol,
+          status: currentStatus,
+          stoploss: newStoploss,
+          ema,
+          lastClose,
+        })
         await updateChaseStatus({
           instrument: nfoSymbol,
           stoploss: newStoploss,
@@ -533,7 +579,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           `[processUpdateSL] previousDayLow: ${previousDayLow}, ema: ${ema}, as chase is long and lastClose is less than longT1`
         )
         newStoploss = Math.max(newStoploss, Math.round((previousDayLow + ema) / 2))
-        await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+        await persistChaseMorningSlTrail({
+          nfoSymbol,
+          tradingsymbol,
+          status: currentStatus,
+          stoploss: newStoploss,
+          ema,
+          lastClose,
+        })
         await updateChaseStatus({
           instrument: nfoSymbol,
           stoploss: newStoploss,
@@ -583,7 +636,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         } else logger.error("[processUpdateSL] error updating chase_status:", error)
       } else if (shortT1 <= lastClose && lastClose <= ema) {
         newStoploss = Math.max(newStoploss, lowestLow)
-        await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+        await persistChaseMorningSlTrail({
+          nfoSymbol,
+          tradingsymbol,
+          status: currentStatus,
+          stoploss: newStoploss,
+          ema,
+          lastClose,
+        })
         await updateChaseStatus({
           instrument: nfoSymbol,
           stoploss: newStoploss,
@@ -602,7 +662,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
     } else if (currentStatus === CHASE_STATUS.SHORT && previousTradingDay === createdAtDate) {
       if (lastClose <= shortT1) {
         newStoploss = Math.min(newStoploss, ema)
-        await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+        await persistChaseMorningSlTrail({
+          nfoSymbol,
+          tradingsymbol,
+          status: currentStatus,
+          stoploss: newStoploss,
+          ema,
+          lastClose,
+        })
         await updateChaseStatus({
           instrument: nfoSymbol,
           stoploss: newStoploss,
@@ -622,7 +689,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         const previousDayHigh = prevDayEma?.highestHigh ?? highestHigh
         logger.info("[processUpdateSL] previousDayHigh:", previousDayHigh, "ema:", ema)
         newStoploss = Math.min(newStoploss, Math.round((previousDayHigh + ema) / 2)) // Previous day high
-        await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+        await persistChaseMorningSlTrail({
+          nfoSymbol,
+          tradingsymbol,
+          status: currentStatus,
+          stoploss: newStoploss,
+          ema,
+          lastClose,
+        })
         await updateChaseStatus({
           instrument: nfoSymbol,
           stoploss: newStoploss,
@@ -639,7 +713,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         }
       } else if (longT1 >= lastClose && lastClose >= ema) {
         newStoploss = Math.min(newStoploss, highestHigh)
-        await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+        await persistChaseMorningSlTrail({
+          nfoSymbol,
+          tradingsymbol,
+          status: currentStatus,
+          stoploss: newStoploss,
+          ema,
+          lastClose,
+        })
         await updateChaseStatus({
           instrument: nfoSymbol,
           stoploss: newStoploss,
@@ -694,7 +775,14 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         currentStatus === CHASE_STATUS.LONG
           ? Math.max(newStoploss, ema)
           : Math.min(newStoploss, ema)
-      await postToSlack(`:zap: Action $chase: Update SL for ${tradingsymbol} to ${newStoploss}`)
+      await persistChaseMorningSlTrail({
+        nfoSymbol,
+        tradingsymbol,
+        status: currentStatus,
+        stoploss: newStoploss,
+        ema,
+        lastClose,
+      })
       const { success, error } = await updateChaseStatus({
         instrument: nfoSymbol,
         stoploss: newStoploss,

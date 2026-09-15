@@ -20,6 +20,7 @@ export { parseFeedPeriod, periodBounds } from "./feedWindow"
 export { prepareStrategyGoLive } from "./goLive"
 export * from "./kiteMap"
 export {
+  amendWorkingStopPrices,
   applyBrokerOrderSnapshot,
   applyFillById,
   applyUnappliedFills,

@@ -43,6 +43,17 @@ function money(value: string | number | null | undefined) {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 })
 }
 
+function orderPriceLabel(row: Record<string, unknown>) {
+  const bits: string[] = []
+  const avg = Number(row.averageFillPrice)
+  const stop = Number(row.stopPrice)
+  const limit = Number(row.limitPrice)
+  if (Number.isFinite(avg) && avg > 0) bits.push(`Avg ${money(row.averageFillPrice as string)}`)
+  if (Number.isFinite(stop) && stop > 0) bits.push(`SL ${money(row.stopPrice as string)}`)
+  if (Number.isFinite(limit) && limit > 0) bits.push(`Lmt ${money(row.limitPrice as string)}`)
+  return bits.length ? bits.join(" · ") : "—"
+}
+
 const filterFieldSx = {
   minWidth: { xs: "100%", sm: 160 },
   width: { xs: "100%", sm: "auto" },
@@ -621,6 +632,7 @@ export default function DeskPage() {
                   <TableCell>Side</TableCell>
                   <TableCell>Symbol</TableCell>
                   <TableCell align="right">Filled / Qty</TableCell>
+                  <TableCell>Price</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>Purpose</TableCell>
                   <TableCell>Book</TableCell>
@@ -639,6 +651,7 @@ export default function DeskPage() {
                     <TableCell align="right">
                       {String(row.filledQty)} / {String(row.requestedQty)}
                     </TableCell>
+                    <TableCell>{orderPriceLabel(row)}</TableCell>
                     <TableCell>{String(row.orderType || "—")}</TableCell>
                     <TableCell>{String(row.purpose)}</TableCell>
                     <TableCell>{String(row.provenance || "—")}</TableCell>

@@ -76,7 +76,7 @@ AWAITING_SHORT ──entry SL-M @ day's low──►  SHORT
 
 Operator escape hatch: **Chase → Reset to fresh signal** (`POST /api/chase-settings` `action: reset-signal`). That does not flatten an open book.
 
-Open LONG/SHORT: no new entries until flat. At **13:15 IST** on days **after** entry (`createdAt` date ≠ today), trail SL toward EMA (`generateSignal`). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`).
+Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit) instead of leaving the old trigger in place.
 
 EOD (~16:15 EMA job, `hour === 16`): pending AWAITING_LONG/SHORT reset to AWAITING_SIGNAL; no new signal from the 16:15 bar.
 
@@ -142,7 +142,7 @@ If the position’s `createdAt` date is not the previous trading day, morning up
 
 ### 13:15 trail
 
-Hourly EMA job at **13:15** (`hour === 13`) on a **later calendar day** than entry: SL = `max(ema, sl)` (long) or `min(ema, sl)` (short), and replace the broker SL.
+Hourly EMA job at **13:15** (`hour === 13`) on a **later calendar day** than entry: SL = `max(ema, sl)` (long) or `min(ema, sl)` (short), and replace the broker SL. Signal summary matches Slack (`Chase is currently SHORT. Update the stoploss to … for symbol:…`), labelled **13:15 IST trail**.
 
 Rule book: adjust at **09:16 and 13:15**, not on T-day. This app’s 13:15 path skips T-day via `createdAt` date.
 
